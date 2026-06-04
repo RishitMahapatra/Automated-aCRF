@@ -1,0 +1,73 @@
+@"
+# --------------------------------------------------
+# Sensitive / local project data
+# --------------------------------------------------
+Assets/
+assets/
+outputs/
+components/
+*.pdf
+
+# If your mapping Excel is sensitive, keep these ignored.
+# Remove these lines if you intentionally want a non-sensitive sample Excel in the repo.
+*.xlsx
+*.xls
+
+# --------------------------------------------------
+# Python
+# --------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Packaging / build
+build/
+dist/
+.eggs/
+*.egg-info/
+
+# Test / coverage / cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# --------------------------------------------------
+# Environment / secrets
+# --------------------------------------------------
+.env
+.env.*
+*.env
+*.key
+*.pem
+
+# --------------------------------------------------
+# OS / editor files
+# --------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+.vscode/
+.idea/
+
+# --------------------------------------------------
+# Logs / temp
+# --------------------------------------------------
+*.log
+*.tmp
+*.temp
+"@ | Set-Content .gitignore
