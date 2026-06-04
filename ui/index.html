@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CRF Annotation Editor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles/main.css" />
+
+  <style>
+  /* ── Canvas area scrollbar — must be inline for pywebview ── */
+  #canvas-area {
+    overflow-x : hidden;
+    overflow-y : auto;
+    flex       : 1;
+    min-height : 0;
+    position   : relative;
+  }
+
+  #canvas-area::-webkit-scrollbar {
+    width : 14px;
+  }
+
+  #canvas-area::-webkit-scrollbar-track {
+    background    : #0D0A24;
+    border-left   : 1px solid rgba(142, 84, 255, 0.20);
+  }
+
+  #canvas-area::-webkit-scrollbar-thumb {
+    background    : rgba(142, 84, 255, 0.55);
+    border-radius : 7px;
+    border        : 3px solid #0D0A24;
+    min-height    : 48px;
+  }
+
+  #canvas-area::-webkit-scrollbar-thumb:hover {
+    background : rgba(142, 84, 255, 0.85);
+  }
+
+  #canvas-area::-webkit-scrollbar-thumb:active {
+    background : rgba(142, 84, 255, 1.0);
+  }
+
+  /* ── Sidebar scrollbar ───────────────────────────────────── */
+  .sidebar::-webkit-scrollbar,
+  .edit-panel::-webkit-scrollbar {
+    width : 7px;
+  }
+
+  .sidebar::-webkit-scrollbar-track,
+  .edit-panel::-webkit-scrollbar-track {
+    background : transparent;
+  }
+
+  .sidebar::-webkit-scrollbar-thumb,
+  .edit-panel::-webkit-scrollbar-thumb {
+    background    : rgba(142, 84, 255, 0.35);
+    border-radius : 4px;
+    min-height    : 32px;
+  }
+
+  .sidebar::-webkit-scrollbar-thumb:hover,
+  .edit-panel::-webkit-scrollbar-thumb:hover {
+    background : rgba(142, 84, 255, 0.65);
+  }
+
+  /* ── PDF container — natural width, no transform ─────────── */
+  #pdf-container {
+    position   : relative;
+    width      : 100%;
+    display    : block;
+  }
+
+  #pdf-img {
+    display    : block;
+    width      : 100%;
+    height     : auto;
+  }
+
+ 
+
+  #annotation-layer {
+    position       : absolute;
+    top            : 0;
+    left           : 0;
+    width          : 100%;
+    height         : 100%;
+    pointer-events : none;
+  }
+
+  #annotation-layer .ann-box,
+  #annotation-layer .component-band {
+    pointer-events : all;
+  }
+
+  #annotation-layer .ann-chip {
+    pointer-events : none;
+  }
+</style>
+
+</head>
+<body>
+
+  <!-- ── Atmospheric glows ─────────────────────────────────── -->
+  <div class="atm-glow-bottom"></div>
+  <div class="atm-glow-top"></div>
+
+  <!-- ── App shell ─────────────────────────────────────────── -->
+  <div id="app">
+
+    <!-- NAV BAR -->
+    <nav id="navbar">
+      <div class="nav-left">
+        <!-- Logo mark -->
+        <div class="logo-mark">
+          <div class="logo-line logo-line-top"></div>
+          <div class="logo-line logo-line-bottom"></div>
+        </div>
+        <span class="nav-title">CRF Annotator</span>
+        <div class="nav-divider"></div>
+        <span class="nav-session mono" id="nav-session">
+          No session
+        </span>
+      </div>
+      <div class="nav-right">
+        <span class="badge badge-form" id="nav-page-type">
+          FORM
+        </span>
+        <div class="nav-divider"></div>
+        <span class="nav-page-count" id="nav-page-count">
+          — / —
+        </span>
+        <div class="nav-divider"></div>
+        <button class="nav-export-btn" id="btn-export-pdf">
+          Export ↗
+        </button>
+      </div>
+    </nav>
+
+    <!-- THREE COLUMN LAYOUT -->
+    <div id="layout">
+
+      <!-- ── SIDEBAR ──────────────────────────────────────── -->
+      <aside id="sidebar">
+
+        <!-- Upload -->
+        <div class="section-label">Upload</div>
+        <div id="drop-zone" class="drop-zone">
+          <div class="drop-icon">↑</div>
+          <div class="drop-text">Drop PDF here</div>
+          <div class="drop-sub">or click to browse</div>
+        </div>
+        <div id="file-loaded" class="file-loaded hidden">
+          <span class="file-icon">📄</span>
+          <span class="file-name mono" id="file-name-label">
+            —
+          </span>
+          <span class="file-pages" id="file-pages-label">
+            — pages
+          </span>
+          <button class="file-clear" id="btn-clear-file">
+            ×
+          </button>
+        </div>
+
+        <!-- Session -->
+        <div class="section-label">Session</div>
+        <input
+          type="text"
+          id="session-input"
+          class="input"
+          placeholder="Session ID"
+          value=""
+        />
+
+        <!-- Pipeline -->
+        <div class="section-label">Pipeline</div>
+        <button class="btn btn-primary btn-full" id="btn-run">
+          <span class="btn-icon">▶</span>
+          Run Pipeline
+        </button>
+        <div id="pipeline-steps" class="pipeline-steps">
+          <div class="pipeline-step" data-step="0">
+            <div class="step-dot" id="step-dot-0"></div>
+            <div class="step-line" id="step-line-0"></div>
+            <span class="step-name">Extract components</span>
+            <span class="step-status" id="step-status-0">
+              Waiting
+            </span>
+          </div>
+          <div class="pipeline-step" data-step="1">
+            <div class="step-dot" id="step-dot-1"></div>
+            <div class="step-line" id="step-line-1"></div>
+            <span class="step-name">Match SDTM</span>
+            <span class="step-status" id="step-status-1">
+              Waiting
+            </span>
+          </div>
+          <div class="pipeline-step" data-step="2">
+            <div class="step-dot" id="step-dot-2"></div>
+            <div class="step-line" id="step-line-2"></div>
+            <span class="step-name">Draw annotations</span>
+            <span class="step-status" id="step-status-2">
+              Waiting
+            </span>
+          </div>
+        </div>
+
+        <!-- Navigation -->
+        <div class="section-label">Navigation</div>
+        <div class="nav-controls">
+          <button class="btn nav-btn" id="btn-prev">‹</button>
+          <span class="page-display" id="page-display">
+            — / —
+          </span>
+          <button class="btn nav-btn" id="btn-next">›</button>
+        </div>
+        <div class="goto-row">
+          <span class="goto-label">Go to</span>
+          <input
+            type="number"
+            id="goto-input"
+            class="input goto-input"
+            min="1"
+            placeholder="1"
+          />
+        </div>
+
+        <!-- Zoom -->
+        
+
+        <!-- Progress -->
+        <div class="section-label">Progress</div>
+        <div class="progress-ring-wrap">
+          <svg class="progress-ring" viewBox="0 0 68 68">
+            <circle
+              class="ring-track"
+              cx="34" cy="34" r="28"
+              fill="none"
+              stroke="#1C1F3A"
+              stroke-width="5"
+            />
+            <circle
+              class="ring-fill"
+              id="ring-fill"
+              cx="34" cy="34" r="28"
+              fill="none"
+              stroke="#8E54FF"
+              stroke-width="5"
+              stroke-linecap="round"
+              stroke-dasharray="175.9"
+              stroke-dashoffset="175.9"
+              transform="rotate(-90 34 34)"
+            />
+          </svg>
+          <div class="ring-center">
+            <span class="ring-pct" id="ring-pct">0%</span>
+            <span class="ring-label">resolved</span>
+          </div>
+        </div>
+
+        <div class="stat-grid" id="stat-grid">
+          <div class="stat-cell">
+            <span class="stat-num blue" id="stat-resolved">0</span>
+            <span class="stat-label">Resolved</span>
+          </div>
+          <div class="stat-cell">
+            <span class="stat-num orange" id="stat-unmapped">0</span>
+            <span class="stat-label">Unmapped</span>
+          </div>
+          <div class="stat-cell">
+            <span class="stat-num violet" id="stat-corrected">0</span>
+            <span class="stat-label">Corrected</span>
+          </div>
+          <div class="stat-cell">
+            <span class="stat-num muted" id="stat-removed">0</span>
+            <span class="stat-label">Removed</span>
+          </div>
+        </div>
+
+        <!-- Legend -->
+        <div class="section-label">Legend</div>
+        <div class="legend">
+          <div class="legend-row">
+            <div class="legend-sq sq-resolved"></div>
+            <span>Resolved</span>
+          </div>
+          <div class="legend-row">
+            <div class="legend-sq sq-corrected"></div>
+            <span>Corrected</span>
+          </div>
+          <div class="legend-row">
+            <div class="legend-sq sq-unmapped"></div>
+            <span>Unmapped</span>
+          </div>
+          <div class="legend-row">
+            <div class="legend-sq sq-notsub"></div>
+            <span>Not Submitted</span>
+          </div>
+          <div class="legend-row">
+            <div class="legend-sq sq-removed"></div>
+            <span>Removed</span>
+          </div>
+        </div>
+
+      </aside>
+
+      <!-- ── PDF CANVAS ────────────────────────────────────── -->
+      <main id="canvas-area" class="dot-grid">
+
+        <!-- Canvas toolbar -->
+        <div id="canvas-toolbar">
+          <div class="toolbar-left">
+            <span class="mono orange" id="toolbar-form-code">
+              —
+            </span>
+            <div class="nav-divider"></div>
+            <span class="muted small" id="toolbar-dpi">
+              150 DPI
+            </span>
+          </div>
+          <div class="toolbar-right">
+            <span class="muted small" id="toolbar-zoom">
+              100%
+            </span>
+          </div>
+        </div>
+
+        <!-- TABLE page banner -->
+        <div id="table-banner" class="table-banner hidden">
+          <span class="muted">ℹ</span>
+          <span class="muted small">
+            TABLE PAGE — Reference only.
+            No annotations on this page.
+          </span>
+        </div>
+
+        <!-- Empty state -->
+        <div id="empty-state" class="empty-state">
+          <div class="empty-lines">
+            <div class="empty-line" style="width:120px"></div>
+            <div class="empty-line" style="width:80px"></div>
+            <div class="empty-line" style="width:48px"></div>
+          </div>
+          <div class="empty-title">No PDF loaded</div>
+          <div class="empty-sub">
+            Upload a CRF PDF and run the pipeline
+          </div>
+        </div>
+
+        <!-- PDF page container -->
+        <div id="pdf-container" class="pdf-container hidden">
+          <div id="pdf-page-wrap" class="pdf-page-wrap">
+            <img
+              id="pdf-img"
+              class="pdf-img"
+              src=""
+              alt="PDF page"
+            />
+            <!-- Annotation overlay -->
+            <div id="annotation-layer" class="annotation-layer">
+            </div>
+          </div>
+        </div>
+
+      </main>
+
+      <!-- ── EDIT PANEL ────────────────────────────────────── -->
+      <aside id="edit-panel" class="edit-panel">
+
+        <!-- Empty state -->
+        <div id="panel-empty" class="panel-empty">
+          <div class="panel-empty-lines">
+            <div class="panel-empty-line" style="width:100px">
+            </div>
+            <div class="panel-empty-line" style="width:68px">
+            </div>
+            <div class="panel-empty-line" style="width:40px">
+            </div>
+          </div>
+          <div class="panel-empty-title">
+            Select an annotation
+          </div>
+          <div class="panel-empty-sub">
+            Click any box on the PDF
+          </div>
+        </div>
+
+        <!-- Active state -->
+        <div id="panel-active" class="panel-active hidden">
+
+          <!-- Header -->
+          <div class="panel-header">
+            <div class="panel-header-left">
+              <div class="status-dot" id="panel-status-dot">
+              </div>
+              <span class="panel-title">Edit Annotation</span>
+            </div>
+            <button class="panel-close" id="btn-panel-close">
+              ×
+            </button>
+          </div>
+
+          <!-- Identity -->
+          <div class="panel-identity">
+            <span class="code-chip" id="panel-raw-var">—</span>
+            <span class="muted small" id="panel-component">
+              —
+            </span>
+            <span class="muted small" id="panel-form-code">
+              —
+            </span>
+          </div>
+
+          <!-- Current mapping -->
+          <div class="panel-mapping">
+            <div class="mapping-value mono" id="panel-mapping">
+              No mapping
+            </div>
+            <div class="mapping-label muted small"
+              id="panel-mapping-label">
+              —
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <!-- Suggestions -->
+          <div class="section-label" style="padding:0;margin-top:12px">
+            Suggestions
+          </div>
+          <div id="suggestions-list" class="suggestions-list">
+            <div class="suggestions-loading muted small">
+              Loading suggestions...
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <!-- Manual override -->
+<!-- Manual override -->
+          <div class="expander" id="expander-manual">
+            <div class="expander-header" id="expander-manual-hdr">
+              <span class="expander-chevron">›</span>
+              <span class="expander-label">Manual override</span>
+            </div>
+            <div class="expander-body hidden" id="expander-manual-body">
+              <div class="manual-row">
+                <input
+                  type="text"
+                  id="manual-dataset"
+                  class="input"
+                  placeholder="Dataset"
+                  style="width:90px"
+                />
+                <input
+                  type="text"
+                  id="manual-variable"
+                  class="input"
+                  placeholder="Variable"
+                  style="flex:1"
+                />
+              </div>
+              <input
+                type="text"
+                id="manual-label"
+                class="input"
+                placeholder="Label (optional)"
+                style="margin-top:6px"
+              />
+              <button
+                class="btn btn-primary btn-full"
+                id="btn-manual-confirm"
+                style="margin-top:8px;height:32px"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <!-- Change Dataset Colour -->
+          <div class="expander" id="expander-colour">
+            <div class="expander-header" id="expander-colour-hdr">
+              <span class="expander-chevron">›</span>
+              <span class="expander-label">Change Dataset Colour</span>
+            </div>
+            <div id="expander-colour-body" class="expander-body hidden">
+              <div class="colour-picker-label">
+                Select colour for this dataset across all variables in the same form
+              </div>
+              <div class="colour-swatches-row">
+
+                <button
+                  class="colour-swatch"
+                  data-colour-key="yellow"
+                  title="Yellow (Wong)"
+                  style="background: rgba(240,228,66,0.7); border: 2px solid #000;">
+                </button>
+
+                <button
+                  class="colour-swatch"
+                  data-colour-key="blue"
+                  title="Sky Blue (Wong)"
+                  style="background: rgba(86,180,233,0.7); border: 2px solid #000;">
+                </button>
+
+                <button
+                  class="colour-swatch"
+                  data-colour-key="teal"
+                  title="Bluish Green (Wong)"
+                  style="background: rgba(0,158,115,0.6); border: 2px solid #000;">
+                </button>
+
+                <button
+                  class="colour-swatch"
+                  data-colour-key="vermillion"
+                  title="Vermillion (Wong)"
+                  style="background: rgba(213,94,0,0.6); border: 2px solid #000;">
+                </button>
+
+                <button
+                  class="colour-swatch"
+                  data-colour-key="cobalt"
+                  title="Cobalt Blue (Wong)"
+                  style="background: rgba(0,114,178,0.6); border: 2px solid #000;">
+                </button>
+
+                <button
+                  class="colour-swatch"
+                  data-colour-key="orange"
+                  title="Orange (Wong)"
+                  style="background: rgba(230,159,0,0.7); border: 2px solid #000;">
+                </button>
+
+                <button
+                  class="colour-swatch"
+                  data-colour-key="purple"
+                  title="Reddish Purple (Wong)"
+                  style="background: rgba(204,121,167,0.7); border: 2px solid #000;">
+                </button>
+
+              </div>
+            </div>
+          </div>
+          <div class="divider"></div>
+
+          <!-- Action buttons -->
+          <div class="action-grid">
+            <button class="btn" id="btn-not-submitted">
+              Not Submitted
+            </button>
+            <button class="btn" id="btn-clear">
+              Clear Mapping
+            </button>
+            <button class="btn btn-danger" id="btn-remove">
+              Remove
+            </button>
+            <button class="btn" id="btn-close-panel">
+              Close
+            </button>
+          </div>
+
+          <!-- Remove confirm -->
+          <div id="remove-confirm" class="remove-confirm hidden">
+            <span class="orange small">
+              Remove permanently?
+            </span>
+            <div class="remove-confirm-btns">
+              <button class="btn btn-danger-solid"
+                id="btn-remove-confirm">
+                Confirm
+              </button>
+              <button class="btn" id="btn-remove-cancel">
+                Cancel
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </aside>
+
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/store.js"></script>
+  <script src="js/sidebar.js"></script>
+  <script src="js/canvas.js"></script>
+  <script src="js/editpanel.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>

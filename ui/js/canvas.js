@@ -1,0 +1,559 @@
+/**
+ * ui/js/canvas.js
+ * ----------------
+ * Live editor overlay rendering.
+ *
+ * Implements:
+ * - clickable full component bands
+ * - purple hover for components
+ * - clickable annotation boxes
+ * - header dataset chips
+ * - dataset-specific colours per form
+ * - consistent colours across pages of same form
+ * - full annotation labels
+ * - unmapped red styling
+ * - selected annotation remains highlighted
+ */
+
+const Canvas = (() => {
+  'use strict';
+
+  const DEFAULT_DPI = 150;
+
+  const PALETTE = [
+    '#F0E442', // Yellow
+    '#56B4E9', // Sky Blue
+    '#009E73', // Bluish Green
+    '#D55E00', // Vermillion
+    '#0072B2', // Blue
+    '#E69F00', // Orange
+    '#CC79A7', // Reddish Purple
+  ];
+
+  const COLOUR_KEY_TO_HEX = {
+    yellow: '#F0E442',
+    blue: '#56B4E9',
+    teal: '#009E73',
+    vermillion: '#D55E00',
+    cobalt: '#0072B2',
+    orange: '#E69F00',
+    purple: '#CC79A7',
+  };
+
+  const DATASET_LABELS = {
+    DM: 'DM=Demographics',
+    CM: 'CM=Concomitant Medications',
+    AE: 'AE=Adverse Events',
+    EX: 'EX=Exposure',
+    MH: 'MH=Medical History',
+    VS: 'VS=Vital Signs',
+    LB: 'LB=Laboratory',
+    DS: 'DS=Disposition',
+    PE: 'PE=Physical Examination',
+    EG: 'EG=ECG',
+    QS: 'QS=Questionnaires',
+    SC: 'SC=Subject Characteristics',
+    SU: 'SU=Substance Use',
+    FA: 'FA=Findings About',
+    PR: 'PR=Procedures',
+    SUPPCM: 'SUPPCM=Supplemental Qualifiers for CM',
+    SUPPAE: 'SUPPAE=Supplemental Qualifiers for AE',
+    SUPPDM: 'SUPPDM=Supplemental Qualifiers for DM',
+    SUPPEX: 'SUPPEX=Supplemental Qualifiers for EX',
+    SUPPMH: 'SUPPMH=Supplemental Qualifiers for MH',
+    SUPPVS: 'SUPPVS=Supplemental Qualifiers for VS',
+    SUPPLB: 'SUPPLB=Supplemental Qualifiers for LB',
+    SUPPDS: 'SUPPDS=Supplemental Qualifiers for DS',
+  };
+
+  let formColourRegistry = {};
+
+  async function loadPage(pageNumber) {
+    try {
+      if (!pageNumber || pageNumber < 1) return;
+      if (!Store.pdfLoaded) return;
+
+      const imgRes = await window.pywebview.api.get_page_image(pageNumber, DEFAULT_DPI);
+      if (!imgRes || !imgRes.ok) {
+        console.error('[canvas] failed to load page image:', imgRes?.error);
+        showEmpty(true);
+        return;
+      }
+
+      Store.currentPage = pageNumber;
+      Store.setPageImage(
+        imgRes.image,
+        imgRes.page_width_pts,
+        imgRes.page_height_pts,
+        imgRes.width,
+        imgRes.height
+      );
+
+      const annRes = await window.pywebview.api.get_page_annotations(pageNumber);
+      if (!annRes || !annRes.ok) {
+        console.error('[canvas] failed to load annotations:', annRes?.error);
+        Store.setAnnotations([]);
+      } else {
+        Store.setAnnotations(annRes.records || []);
+      }
+
+      await _ensureColourRegistry();
+
+      renderPage();
+      renderComponentBands();
+      renderAnnotations();
+      renderHeaderChips();
+      updatePageMeta();
+
+    } catch (e) {
+      console.error('[canvas] loadPage error:', e);
+      showEmpty(true);
+    }
+  }
+
+  async function _ensureColourRegistry() {
+    try {
+      const allRes = await window.pywebview.api.get_annotations();
+      if (!allRes || !allRes.ok || !Array.isArray(allRes.records)) return;
+
+      const colourRes = await window.pywebview.api.get_dataset_colours();
+      const savedColours = (colourRes && colourRes.ok && colourRes.colours) ? colourRes.colours : {};
+
+      formColourRegistry = {};
+      const seenByForm = {};
+
+      for (const rec of allRes.records) {
+        if ((rec.page_type || 'FORM') !== 'FORM') continue;
+        if ((rec.status || '') === 'REMOVED') continue;
+
+        const formCode = (rec.form_code || '').toUpperCase();
+        const ds = (rec.sdtm_dataset || '').toUpperCase();
+        if (!formCode || !ds) continue;
+
+        if (!formColourRegistry[formCode]) formColourRegistry[formCode] = {};
+        if (!seenByForm[formCode]) seenByForm[formCode] = [];
+
+        if (!seenByForm[formCode].includes(ds)) {
+          seenByForm[formCode].push(ds);
+
+          const savedKey = `${formCode}::${ds}`;
+          const savedColourName = String(savedColours[savedKey] || '').trim().toLowerCase();
+
+          if (savedColourName && COLOUR_KEY_TO_HEX[savedColourName]) {
+            formColourRegistry[formCode][ds] = COLOUR_KEY_TO_HEX[savedColourName];
+          } else {
+            const idx = seenByForm[formCode].length - 1;
+            formColourRegistry[formCode][ds] = PALETTE[idx % PALETTE.length];
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[canvas] colour registry error:', e);
+    }
+  }
+
+  function renderPage() {
+    const emptyState = document.getElementById('empty-state');
+    const pdfContainer = document.getElementById('pdf-container');
+    const pdfImg = document.getElementById('pdf-img');
+    const annotationLayer = document.getElementById('annotation-layer');
+
+    if (!Store.pageImage || !pdfImg || !pdfContainer || !annotationLayer) {
+      showEmpty(true);
+      return;
+    }
+
+    if (emptyState) emptyState.classList.add('hidden');
+    pdfContainer.classList.remove('hidden');
+    pdfImg.src = Store.pageImage;
+    annotationLayer.innerHTML = '';
+  }
+
+  function renderComponentBands() {
+    const annotationLayer = document.getElementById('annotation-layer');
+    if (!annotationLayer) return;
+
+    const records = Store.annotations || [];
+    if (!records.length) return;
+
+    const first = records[0] || {};
+    if ((first.page_type || 'FORM') !== 'FORM') return;
+
+    const pageW = Store.pageWidthPts;
+    const pageH = Store.pageHeightPts;
+    if (!pageW || !pageH) return;
+
+    const groups = [];
+    const seen = new Set();
+
+    for (const rec of records) {
+      if ((rec.page_type || 'FORM') !== 'FORM') continue;
+      if ((rec.status || '') === 'REMOVED') continue;
+
+      const id = rec.annotation_id;
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      groups.push(rec);
+    }
+
+    for (const rec of groups) {
+      const y0 = parseFloat(rec.y0_pts) || 0;
+      const y1 = parseFloat(rec.y1_pts) || 0;
+      if (y0 === 0 && y1 === 0) continue;
+
+      const band = document.createElement('div');
+      band.className = 'component-band';
+      band.dataset.id = rec.annotation_id;
+
+      const topPct = ((y0 / pageH) * 100).toFixed(3);
+      const heightPct = (((y1 - y0) / pageH) * 100).toFixed(3);
+
+      band.style.position = 'absolute';
+      band.style.left = '0.8%';
+      band.style.width = '98.4%';
+      band.style.top = `${topPct}%`;
+      band.style.height = `${heightPct}%`;
+      band.style.background = 'transparent';
+      band.style.border = '1px solid transparent';
+      band.style.pointerEvents = 'all';
+      band.style.cursor = 'pointer';
+      band.style.zIndex = '4';
+      band.style.boxSizing = 'border-box';
+      band.style.transition = 'background 0.08s ease, border-color 0.08s ease, box-shadow 0.08s ease';
+
+      band.addEventListener('mouseenter', () => {
+        if (Store.selectedId === rec.annotation_id) return;
+        band.style.background = 'rgba(142, 84, 255, 0.16)';
+        band.style.border = '1px solid rgba(74, 0, 130, 0.85)';
+        band.style.boxShadow = 'inset 0 0 0 1px rgba(74, 0, 130, 0.25)';
+      });
+
+      band.addEventListener('mouseleave', () => {
+        if (Store.selectedId === rec.annotation_id) return;
+        band.style.background = 'transparent';
+        band.style.border = '1px solid transparent';
+        band.style.boxShadow = 'none';
+      });
+
+      band.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        Store.setSelectedAnnotation(rec);
+        highlightSelected();
+
+        if (typeof EditPanel !== 'undefined' && EditPanel.open) {
+          await EditPanel.open(rec.annotation_id);
+        }
+      });
+
+      annotationLayer.appendChild(band);
+    }
+  }
+
+  function renderAnnotations() {
+    const annotationLayer = document.getElementById('annotation-layer');
+    if (!annotationLayer) return;
+
+    const records = Store.annotations || [];
+    if (!records.length) return;
+
+    const first = records[0] || {};
+    const pageType = first.page_type || 'FORM';
+
+    const tableBanner = document.getElementById('table-banner');
+    if (tableBanner) {
+      if (pageType === 'TABLE') tableBanner.classList.remove('hidden');
+      else tableBanner.classList.add('hidden');
+    }
+
+    if (pageType === 'TABLE') return;
+
+    const pageW = Store.pageWidthPts;
+    const pageH = Store.pageHeightPts;
+    if (!pageW || !pageH) return;
+
+    records
+      .filter(r => (r.page_type || 'FORM') === 'FORM' && (r.status || '') !== 'REMOVED')
+      .forEach(rec => {
+        const y0 = parseFloat(rec.y0_pts) || 0;
+        const y1 = parseFloat(rec.y1_pts) || 0;
+        if (y0 === 0 && y1 === 0) return;
+
+        const box = buildAnnotationBox(rec, pageW, pageH);
+        annotationLayer.appendChild(box);
+      });
+
+    highlightSelected();
+  }
+
+  function buildAnnotationBox(rec, pageW, pageH) {
+    const box = document.createElement('div');
+    box.className = `ann-box ${statusClass(rec.status)}`;
+    box.dataset.id = rec.annotation_id;
+
+    const label = getAnnotationLabel(rec);
+    const geom = computeBoxGeometry(rec, pageW, pageH, label);
+
+    box.style.position = 'absolute';
+    box.style.left = `${geom.leftPct}%`;
+    box.style.top = `${geom.topPct}%`;
+    box.style.width = `${geom.widthPct}%`;
+    box.style.height = `${geom.heightPct}%`;
+    box.style.pointerEvents = 'all';
+    box.style.cursor = 'pointer';
+    box.style.zIndex = '10';
+
+    applyBoxVisualStyle(box, rec);
+
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'ann-box-label';
+    labelSpan.textContent = label;
+    labelSpan.title = label;
+    labelSpan.style.whiteSpace = 'nowrap';
+    labelSpan.style.overflow = 'visible';
+    labelSpan.style.textOverflow = 'clip';
+    labelSpan.style.pointerEvents = 'none';
+    box.appendChild(labelSpan);
+
+    box.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      Store.setSelectedAnnotation(rec);
+      highlightSelected();
+
+      if (typeof EditPanel !== 'undefined' && EditPanel.open) {
+        await EditPanel.open(rec.annotation_id);
+      }
+    });
+
+    return box;
+  }
+
+  function computeBoxGeometry(rec, pageW, pageH, label) {
+    const y0 = parseFloat(rec.y0_pts) || 0;
+    const y1 = parseFloat(rec.y1_pts) || 0;
+
+    const fontSizePts = 7.0;
+    const padX = 4.0;
+    const padY = 2.0;
+    const textWidthPts = Math.max(20, 0.58 * fontSizePts * (label || '').length + 2.0);
+
+    const boxW = textWidthPts + padX * 2;
+    const boxH = fontSizePts + padY * 2;
+
+    const centreX = pageW / 2.0;
+    const pdfX0 = Math.max(centreX - boxW / 2.0, 4.0);
+    const pdfX1 = Math.min(centreX + boxW / 2.0, pageW - 4.0);
+
+    const compCy = (y0 + y1) / 2.0;
+    const pdfY0 = Math.max(compCy - boxH / 2.0, y0 + 1.0);
+    const pdfY1 = Math.min(compCy + boxH / 2.0, y1 - 1.0);
+
+    return {
+      leftPct: ((pdfX0 / pageW) * 100).toFixed(3),
+      topPct: ((pdfY0 / pageH) * 100).toFixed(3),
+      widthPct: (((pdfX1 - pdfX0) / pageW) * 100).toFixed(3),
+      heightPct: (((pdfY1 - pdfY0) / pageH) * 100).toFixed(3),
+    };
+  }
+
+  function getAnnotationLabel(rec) {
+    if ((rec.status || '') === 'NOT_SUBMITTED') {
+      return 'Not Submitted';
+    }
+
+    if (rec.sdtm_dataset && rec.sdtm_variable) {
+      return `${rec.sdtm_dataset}.${rec.sdtm_variable}`;
+    }
+
+    return 'UNMAPPED';
+  }
+
+  function applyBoxVisualStyle(box, rec) {
+    const status = (rec.status || 'UNMAPPED').toUpperCase();
+
+    if (status === 'NOT_SUBMITTED') {
+      box.style.background = '#B4B4B4';
+      box.style.border = '1.5px solid #000000';
+      box.style.color = '#000000';
+      return;
+    }
+
+    if (status === 'UNMAPPED' || !rec.sdtm_dataset || !rec.sdtm_variable) {
+      box.style.background = '#FDECEC';
+      box.style.border = '1.5px solid #CC0000';
+      box.style.color = '#CC0000';
+      return;
+    }
+
+    const formCode = (rec.form_code || '').toUpperCase();
+    const ds = (rec.sdtm_dataset || '').toUpperCase();
+    const bg = formColourRegistry?.[formCode]?.[ds] || PALETTE[0];
+
+    box.style.background = bg;
+    box.style.border = status === 'USER_CORRECTED'
+      ? '1.5px solid #00B4D8'
+      : '1.5px solid #0072B2';
+    box.style.color = '#0050A0';
+  }
+
+  function renderHeaderChips() {
+    const annotationLayer = document.getElementById('annotation-layer');
+    if (!annotationLayer) return;
+
+    const records = Store.annotations || [];
+    if (!records.length) return;
+
+    const first = records[0] || {};
+    if ((first.page_type || 'FORM') !== 'FORM') return;
+
+    const formCode = (first.form_code || '').toUpperCase();
+    const datasets = [];
+    const seen = new Set();
+
+    for (const rec of records) {
+      if ((rec.status || '') === 'REMOVED') continue;
+      const ds = (rec.sdtm_dataset || '').toUpperCase();
+      if (!ds || seen.has(ds)) continue;
+      seen.add(ds);
+      datasets.push(ds);
+    }
+
+    if (!datasets.length) return;
+
+    let topPct = 1.0;
+    for (const ds of datasets) {
+      const chip = document.createElement('div');
+      chip.className = 'ann-box ann-chip';
+
+      const label = DATASET_LABELS[ds] || `${ds}=${ds}`;
+      const bg = formColourRegistry?.[formCode]?.[ds] || PALETTE[0];
+
+      chip.textContent = label;
+      chip.title = label;
+
+      chip.style.position = 'absolute';
+      chip.style.left = '50%';
+      chip.style.top = `${topPct}%`;
+      chip.style.background = bg;
+      chip.style.border = '1.5px solid #000000';
+      chip.style.color = '#000000';
+      chip.style.fontSize = '11px';
+      chip.style.fontWeight = '600';
+      chip.style.padding = '2px 6px';
+      chip.style.borderRadius = '2px';
+      chip.style.pointerEvents = 'none';
+      chip.style.whiteSpace = 'nowrap';
+      chip.style.zIndex = '12';
+
+      annotationLayer.appendChild(chip);
+      topPct += 3.8;
+    }
+  }
+
+  function statusClass(status) {
+    return (status || 'UNMAPPED').toLowerCase().replace(/_/g, '-');
+  }
+
+  function highlightSelected() {
+    document.querySelectorAll('.ann-box').forEach(box => {
+      if (box.classList.contains('ann-chip')) return;
+      const selected = box.dataset.id === Store.selectedId;
+      box.classList.toggle('selected', selected);
+    });
+
+    document.querySelectorAll('.component-band').forEach(band => {
+      const selected = band.dataset.id === Store.selectedId;
+      if (selected) {
+        band.style.background = 'rgba(142, 84, 255, 0.20)';
+        band.style.border = '1px solid rgba(74, 0, 130, 0.95)';
+        band.style.boxShadow = 'inset 0 0 0 1px rgba(74, 0, 130, 0.30)';
+      } else {
+        band.style.background = 'transparent';
+        band.style.border = '1px solid transparent';
+        band.style.boxShadow = 'none';
+      }
+    });
+  }
+
+  function updatePageMeta() {
+    const records = Store.annotations || [];
+    const first = records[0] || {};
+
+    const formCode = first.form_code || '—';
+    const pageType = first.page_type || 'FORM';
+
+    const toolbarFormCode = document.getElementById('toolbar-form-code');
+    if (toolbarFormCode) {
+      toolbarFormCode.textContent = formCode;
+    }
+
+    const navPageType = document.getElementById('nav-page-type');
+    if (navPageType) {
+      navPageType.textContent = pageType;
+      navPageType.classList.remove('badge-form', 'badge-table');
+      navPageType.classList.add(pageType === 'TABLE' ? 'badge-table' : 'badge-form');
+    }
+
+    const toolbarDpi = document.getElementById('toolbar-dpi');
+    if (toolbarDpi) {
+      toolbarDpi.textContent = `${DEFAULT_DPI} DPI`;
+    }
+
+    const toolbarZoom = document.getElementById('toolbar-zoom');
+    if (toolbarZoom) {
+      toolbarZoom.textContent = '100%';
+    }
+  }
+
+  function showEmpty(show = true) {
+    const emptyState = document.getElementById('empty-state');
+    const pdfContainer = document.getElementById('pdf-container');
+    const tableBanner = document.getElementById('table-banner');
+
+    if (show) {
+      if (emptyState) emptyState.classList.remove('hidden');
+      if (pdfContainer) pdfContainer.classList.add('hidden');
+      if (tableBanner) tableBanner.classList.add('hidden');
+    } else {
+      if (emptyState) emptyState.classList.add('hidden');
+      if (pdfContainer) pdfContainer.classList.remove('hidden');
+    }
+  }
+
+  function init() {
+    const annotationLayer = document.getElementById('annotation-layer');
+    const pdfImg = document.getElementById('pdf-img');
+
+    if (annotationLayer) {
+      annotationLayer.addEventListener('click', (e) => {
+        if (e.target === annotationLayer) {
+          Store.clearSelectedAnnotation();
+          highlightSelected();
+
+          if (typeof EditPanel !== 'undefined' && EditPanel.close) {
+            EditPanel.close();
+          }
+        }
+      });
+    }
+
+    if (pdfImg) {
+      pdfImg.addEventListener('click', () => {
+        Store.clearSelectedAnnotation();
+        highlightSelected();
+
+        if (typeof EditPanel !== 'undefined' && EditPanel.close) {
+          EditPanel.close();
+        }
+      });
+    }
+  }
+
+  return {
+    init,
+    loadPage,
+    renderPage,
+    renderAnnotations,
+    showEmpty,
+    highlightSelected,
+  };
+})();

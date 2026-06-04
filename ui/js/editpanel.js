@@ -1,0 +1,515 @@
+/**
+ * ui/js/editpanel.js
+ * ------------------
+ * Right-side annotation edit panel with undo/redo support.
+ *
+ * Changes:
+ * - Dataset colour control is treated as a separate component
+ * - Suggestions are loaded only when opening/selecting an annotation
+ * - Suggestions are NOT re-triggered after manual override or colour change
+ * - Manual override inputs are always blank on open
+ */
+
+const EditPanel = (() => {
+  'use strict';
+
+  function init() {
+    _bindButtons();
+    _bindExpanders();
+    _bindUndoRedo();
+  }
+
+  async function open(annotationId) {
+    try {
+      if (!annotationId) return;
+
+      Store.selectedId = annotationId;
+
+      const res = await window.pywebview.api.get_annotation(annotationId);
+      if (!res || !res.ok || !res.record) {
+        console.error('[editpanel] get_annotation failed:', res?.error);
+        return;
+      }
+
+      const rec = res.record;
+      Store.setSelectedAnnotation(rec);
+
+      _showActivePanel();
+      _populateRecord(rec);
+
+      // Manual override fields should NOT carry over current mapping values
+      _clearManualFields();
+
+      // Suggestions should load only on initial open/select
+      await _loadSuggestions(annotationId);
+
+      if (typeof Canvas !== 'undefined' && Canvas.highlightSelected) {
+        Canvas.highlightSelected();
+      }
+
+    } catch (e) {
+      console.error('[editpanel] open error:', e);
+    }
+  }
+
+  function close() {
+    Store.clearSelectedAnnotation();
+
+    const panelEmpty = document.getElementById('panel-empty');
+    const panelActive = document.getElementById('panel-active');
+    const removeConfirm = document.getElementById('remove-confirm');
+
+    if (panelEmpty) panelEmpty.classList.remove('hidden');
+    if (panelActive) panelActive.classList.add('hidden');
+    if (removeConfirm) removeConfirm.classList.add('hidden');
+
+    _clearSuggestions();
+    _clearManualFields();
+
+    if (typeof Canvas !== 'undefined' && Canvas.highlightSelected) {
+      Canvas.highlightSelected();
+    }
+  }
+
+  function _showActivePanel() {
+    const panelEmpty = document.getElementById('panel-empty');
+    const panelActive = document.getElementById('panel-active');
+
+    if (panelEmpty) panelEmpty.classList.add('hidden');
+    if (panelActive) panelActive.classList.remove('hidden');
+  }
+
+  function _populateRecord(rec) {
+    const rawVar = document.getElementById('panel-raw-var');
+    const component = document.getElementById('panel-component');
+    const formCode = document.getElementById('panel-form-code');
+    const mapping = document.getElementById('panel-mapping');
+    const mappingLabel = document.getElementById('panel-mapping-label');
+    const statusDot = document.getElementById('panel-status-dot');
+    const currentDataset = document.getElementById('current-dataset-colour-target');
+
+    if (rawVar) rawVar.textContent = rec.raw_variable || 'PENDING';
+    if (component) component.textContent = rec.component || '—';
+    if (formCode) formCode.textContent = rec.form_code || '—';
+
+    if (mapping) {
+      if (rec.sdtm_dataset && rec.sdtm_variable) {
+        mapping.textContent = `${rec.sdtm_dataset}.${rec.sdtm_variable}`;
+      } else if (rec.status === 'NOT_SUBMITTED') {
+        mapping.textContent = 'Not Submitted';
+      } else {
+        mapping.textContent = 'No mapping';
+      }
+    }
+
+    if (mappingLabel) {
+      mappingLabel.textContent = rec.sdtm_label || rec.status || '—';
+    }
+
+    if (statusDot) {
+      statusDot.style.background = _statusColour(rec.status);
+    }
+
+    // Separate dataset-colour component display
+    if (currentDataset) {
+      currentDataset.textContent = rec.sdtm_dataset || 'No dataset selected';
+    }
+  }
+
+  function _clearManualFields() {
+    const ds = document.getElementById('manual-dataset');
+    const variable = document.getElementById('manual-variable');
+    const label = document.getElementById('manual-label');
+
+    if (ds) ds.value = '';
+    if (variable) variable.value = '';
+    if (label) label.value = '';
+  }
+
+  async function _loadSuggestions(annotationId) {
+    const list = document.getElementById('suggestions-list');
+    if (!list) return;
+
+    list.innerHTML = '<div class="suggestions-loading muted small">Loading suggestions...</div>';
+
+    try {
+      const res = await window.pywebview.api.get_suggestions(annotationId);
+
+      if (!res || !res.ok || !Array.isArray(res.suggestions) || !res.suggestions.length) {
+        list.innerHTML = '<div class="suggestions-loading muted small">No suggestions</div>';
+        return;
+      }
+
+      list.innerHTML = '';
+
+      res.suggestions.forEach((s, i) => {
+        const card = document.createElement('div');
+        card.className = `suggestion-card${i === 0 ? ' top-card' : ''}`;
+
+        const scoreClass =
+          s.score_pct >= 70 ? 'high' :
+          s.score_pct >= 40 ? 'mid' : 'low';
+
+        card.innerHTML = `
+          <div class="suggestion-top-row">
+            <span class="suggestion-var">${escapeHtml(`${s.sdtm_dataset}.${s.sdtm_variable}`)}</span>
+            <span class="suggestion-score ${scoreClass}">${s.score_pct}%</span>
+          </div>
+          <div class="suggestion-label">${escapeHtml(s.sdtm_label || '—')}</div>
+        `;
+
+        // Clicking suggestion copies values into manual override fields
+        // but does not auto-submit
+        card.addEventListener('click', () => {
+          const ds = document.getElementById('manual-dataset');
+          const variable = document.getElementById('manual-variable');
+          const label = document.getElementById('manual-label');
+
+          if (ds) ds.value = s.sdtm_dataset || '';
+          if (variable) variable.value = s.sdtm_variable || '';
+          if (label) label.value = s.sdtm_label || '';
+        });
+
+        list.appendChild(card);
+      });
+
+    } catch (e) {
+      console.error('[editpanel] suggestion load error:', e);
+      list.innerHTML = '<div class="suggestions-loading muted small">No suggestions</div>';
+    }
+  }
+
+  function _clearSuggestions() {
+    const list = document.getElementById('suggestions-list');
+    if (list) {
+      list.innerHTML = '<div class="suggestions-loading muted small">Select an annotation to load suggestions</div>';
+    }
+  }
+
+  function _bindButtons() {
+    const btnPanelClose = document.getElementById('btn-panel-close');
+    const btnClosePanel = document.getElementById('btn-close-panel');
+    const btnNotSubmitted = document.getElementById('btn-not-submitted');
+    const btnClear = document.getElementById('btn-clear');
+    const btnRemove = document.getElementById('btn-remove');
+    const btnRemoveConfirm = document.getElementById('btn-remove-confirm');
+    const btnRemoveCancel = document.getElementById('btn-remove-cancel');
+    const btnManualConfirm = document.getElementById('btn-manual-confirm');
+
+    if (btnPanelClose) btnPanelClose.addEventListener('click', () => close());
+    if (btnClosePanel) btnClosePanel.addEventListener('click', () => close());
+
+    if (btnNotSubmitted) {
+      btnNotSubmitted.addEventListener('click', async () => {
+        if (!Store.selectedRecord) return;
+
+        await _applyAndTrack({
+          before: _snapshotFromRecord(Store.selectedRecord),
+          after: {
+            annotation_id: Store.selectedId,
+            status: 'NOT_SUBMITTED',
+            sdtm_dataset: '',
+            sdtm_variable: '',
+            sdtm_label: 'Not Submitted',
+          },
+        });
+      });
+    }
+
+    if (btnClear) {
+      btnClear.addEventListener('click', async () => {
+        if (!Store.selectedRecord) return;
+
+        await _applyAndTrack({
+          before: _snapshotFromRecord(Store.selectedRecord),
+          after: {
+            annotation_id: Store.selectedId,
+            status: 'UNMAPPED',
+            sdtm_dataset: '',
+            sdtm_variable: '',
+            sdtm_label: '',
+          },
+        });
+      });
+    }
+
+    if (btnRemove) {
+      btnRemove.addEventListener('click', () => {
+        const removeConfirm = document.getElementById('remove-confirm');
+        if (removeConfirm) removeConfirm.classList.remove('hidden');
+      });
+    }
+
+    if (btnRemoveConfirm) {
+      btnRemoveConfirm.addEventListener('click', async () => {
+        if (!Store.selectedRecord) return;
+
+        const removeConfirm = document.getElementById('remove-confirm');
+        if (removeConfirm) removeConfirm.classList.add('hidden');
+
+        await _applyAndTrack({
+          before: _snapshotFromRecord(Store.selectedRecord),
+          after: {
+            annotation_id: Store.selectedId,
+            status: 'REMOVED',
+            sdtm_dataset: '',
+            sdtm_variable: '',
+            sdtm_label: '',
+          },
+        }, false);
+
+        close();
+      });
+    }
+
+    if (btnRemoveCancel) {
+      btnRemoveCancel.addEventListener('click', () => {
+        const removeConfirm = document.getElementById('remove-confirm');
+        if (removeConfirm) removeConfirm.classList.add('hidden');
+      });
+    }
+
+    if (btnManualConfirm) {
+      btnManualConfirm.addEventListener('click', async () => {
+        if (!Store.selectedRecord) return;
+
+        const ds = (document.getElementById('manual-dataset')?.value || '').trim().toUpperCase();
+        const variable = (document.getElementById('manual-variable')?.value || '').trim().toUpperCase();
+        const label = (document.getElementById('manual-label')?.value || '').trim();
+
+        if (!ds || !variable) {
+          alert('Dataset and Variable are required.');
+          return;
+        }
+
+        await _applyAndTrack({
+          before: _snapshotFromRecord(Store.selectedRecord),
+          after: {
+            annotation_id: Store.selectedId,
+            status: 'USER_CORRECTED',
+            sdtm_dataset: ds,
+            sdtm_variable: variable,
+            sdtm_label: label,
+          },
+        });
+      });
+    }
+  }
+
+  function _bindExpanders() {
+    const manualHdr = document.getElementById('expander-manual-hdr');
+    const manualBody = document.getElementById('expander-manual-body');
+    const manualChevron = manualHdr?.querySelector('.expander-chevron');
+
+    if (manualHdr && manualBody) {
+      manualHdr.addEventListener('click', () => {
+        manualBody.classList.toggle('hidden');
+        if (manualChevron) manualChevron.classList.toggle('open');
+      });
+    }
+
+    // Dataset colour is now treated as its own separate component section
+    const colourHdr = document.getElementById('expander-colour-hdr');
+    const colourBody = document.getElementById('expander-colour-body');
+
+    if (colourHdr && colourBody) {
+      colourHdr.addEventListener('click', () => {
+        colourBody.classList.toggle('hidden');
+      });
+    }
+
+    document.querySelectorAll('.colour-swatch').forEach((swatch) => {
+      swatch.addEventListener('click', async () => {
+        if (!Store.selectedRecord) return;
+        if (!Store.selectedRecord.sdtm_dataset) return;
+
+        const colourKey = swatch.dataset.colourKey;
+        const dataset = Store.selectedRecord.sdtm_dataset;
+
+        const res = await window.pywebview.api.set_dataset_colour(dataset, colourKey);
+        if (!res || !res.ok) {
+          console.error('[editpanel] set_dataset_colour failed:', res?.error);
+          return;
+        }
+
+        // Do NOT reload suggestions on colour changes
+        await _refreshAfterUpdate({
+          reopenPanel: true,
+          reloadSuggestions: false,
+          keepManualBlank: true,
+          preserveSelection: true,
+        });
+      });
+    });
+  }
+
+  function _bindUndoRedo() {
+    document.addEventListener('keydown', async (e) => {
+      const isMac = navigator.platform.toUpperCase().includes('MAC');
+      const ctrl = isMac ? e.metaKey : e.ctrlKey;
+
+      if (!ctrl) return;
+
+      if (e.key.toLowerCase() === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        await undo();
+      } else if (
+        (e.key.toLowerCase() === 'y') ||
+        (e.key.toLowerCase() === 'z' && e.shiftKey)
+      ) {
+        e.preventDefault();
+        await redo();
+      }
+    });
+  }
+
+  async function _applyAndTrack(action, reopenPanel = true) {
+    const ok = await _applySnapshot(action.after);
+    if (!ok) return;
+
+    Store.pushHistory(action);
+
+    // Do NOT reload suggestions after manual override / status changes
+    await _refreshAfterUpdate({
+      reopenPanel,
+      reloadSuggestions: false,
+      keepManualBlank: true,
+    });
+  }
+
+  async function _applySnapshot(snapshot) {
+    const res = await window.pywebview.api.update_annotation(
+      snapshot.annotation_id,
+      snapshot.status,
+      snapshot.sdtm_dataset || '',
+      snapshot.sdtm_variable || '',
+      snapshot.sdtm_label || ''
+    );
+
+    if (!res || !res.ok) {
+      console.error('[editpanel] update failed:', res?.error);
+      return false;
+    }
+    return true;
+  }
+
+  async function undo() {
+    const action = Store.popUndo();
+    if (!action) return;
+
+    const ok = await _applySnapshot(action.before);
+    if (!ok) return;
+
+    Store.pushRedo(action);
+    Store.selectedId = action.before.annotation_id;
+
+    await _refreshAfterUpdate({
+      reopenPanel: true,
+      reloadSuggestions: false,
+      keepManualBlank: true,
+    });
+  }
+
+  async function redo() {
+    const action = Store.popRedo();
+    if (!action) return;
+
+    const ok = await _applySnapshot(action.after);
+    if (!ok) return;
+
+    Store.pushHistory(action);
+    Store.selectedId = action.after.annotation_id;
+
+    await _refreshAfterUpdate({
+      reopenPanel: true,
+      reloadSuggestions: false,
+      keepManualBlank: true,
+    });
+  }
+
+  function _snapshotFromRecord(rec) {
+    return {
+      annotation_id: rec.annotation_id,
+      status: rec.status || 'UNMAPPED',
+      sdtm_dataset: rec.sdtm_dataset || '',
+      sdtm_variable: rec.sdtm_variable || '',
+      sdtm_label: rec.sdtm_label || '',
+    };
+  }
+
+  async function _refreshAfterUpdate(opts = {}) {
+    const {
+      reopenPanel = true,
+      reloadSuggestions = false,
+      keepManualBlank = true,
+      preserveSelection = true,
+    } = opts;
+
+    if (typeof Sidebar !== 'undefined' && Sidebar.refreshStats) {
+      await Sidebar.refreshStats();
+    }
+
+    const selectedId = Store.selectedId;
+
+    if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
+      await Canvas.loadPage(Store.currentPage);
+    }
+
+    if (preserveSelection && selectedId) {
+      Store.selectedId = selectedId;
+    }
+
+    let freshRecord = null;
+    if (selectedId) {
+      const fresh = await window.pywebview.api.get_annotation(selectedId);
+      if (fresh && fresh.ok && fresh.record) {
+        freshRecord = fresh.record;
+        Store.setSelectedAnnotation(fresh.record);
+      }
+    }
+
+    if (reopenPanel && freshRecord) {
+      _showActivePanel();
+      _populateRecord(freshRecord);
+
+      if (keepManualBlank) {
+        _clearManualFields();
+      }
+
+      if (reloadSuggestions) {
+        await _loadSuggestions(selectedId);
+      }
+
+      if (typeof Canvas !== 'undefined' && Canvas.highlightSelected) {
+        Canvas.highlightSelected();
+      }
+    } else if (typeof Canvas !== 'undefined' && Canvas.highlightSelected) {
+      Canvas.highlightSelected();
+    }
+  }
+
+  function _statusColour(status) {
+    switch (status) {
+      case 'RESOLVED': return '#3DB7FF';
+      case 'USER_CORRECTED': return '#00E676';
+      case 'UNMAPPED': return '#FF8A00';
+      case 'NOT_SUBMITTED': return '#8B8D99';
+      case 'REMOVED': return '#2A2D4A';
+      default: return '#8B8D99';
+    }
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text ?? '';
+    return div.innerHTML;
+  }
+
+  return {
+    init,
+    open,
+    close,
+    undo,
+    redo,
+  };
+})();
