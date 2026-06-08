@@ -3,15 +3,16 @@
  * ------------------
  * Right-side annotation edit panel with undo/redo support.
  *
- * Changes:
- * - Dataset colour control is treated as a separate component
- * - Suggestions are loaded only when opening/selecting an annotation
- * - Suggestions are NOT re-triggered after manual override or colour change
- * - Manual override inputs are always blank on open
+ * Supports:
+ * - variable annotation editing
+ * - dataset-chip editing mode
+ * - dataset colour history for undo/redo
  */
 
 const EditPanel = (() => {
   'use strict';
+
+  let currentMode = 'annotation'; // 'annotation' | 'dataset-chip'
 
   function init() {
     _bindButtons();
@@ -23,6 +24,7 @@ const EditPanel = (() => {
     try {
       if (!annotationId) return;
 
+      currentMode = 'annotation';
       Store.selectedId = annotationId;
 
       const res = await window.pywebview.api.get_annotation(annotationId);
@@ -36,11 +38,11 @@ const EditPanel = (() => {
 
       _showActivePanel();
       _populateRecord(rec);
-
-      // Manual override fields should NOT carry over current mapping values
       _clearManualFields();
-
-      // Suggestions should load only on initial open/select
+      _setSuggestionsVisible(true);
+      _showVariableField(true);
+      _resetManualLabels();
+      _updatePrimaryActionLabels();
       await _loadSuggestions(annotationId);
 
       if (typeof Canvas !== 'undefined' && Canvas.highlightSelected) {
@@ -52,7 +54,40 @@ const EditPanel = (() => {
     }
   }
 
+  async function openDatasetChip(datasetRecord) {
+    try {
+      if (!datasetRecord) return;
+
+      currentMode = 'dataset-chip';
+      Store.setSelectedAnnotation(datasetRecord);
+
+      _showActivePanel();
+      _populateDatasetRecord(datasetRecord);
+      _clearManualFields();
+
+      const dsInput = document.getElementById('manual-dataset');
+      const labelInput = document.getElementById('manual-label');
+      if (dsInput) dsInput.value = datasetRecord.sdtm_dataset || '';
+      if (labelInput) labelInput.value = datasetRecord.sdtm_label || '';
+
+      _setSuggestionsVisible(false);
+      _clearSuggestions();
+      _showVariableField(false);
+      _setManualLabelsForDatasetMode();
+      _updatePrimaryActionLabels();
+      await _updateColourSwatchAvailability(datasetRecord);
+
+      if (typeof Canvas !== 'undefined' && Canvas.highlightSelected) {
+        Canvas.highlightSelected();
+      }
+
+    } catch (e) {
+      console.error('[editpanel] openDatasetChip error:', e);
+    }
+  }
+
   function close() {
+    currentMode = 'annotation';
     Store.clearSelectedAnnotation();
 
     const panelEmpty = document.getElementById('panel-empty');
@@ -65,6 +100,10 @@ const EditPanel = (() => {
 
     _clearSuggestions();
     _clearManualFields();
+    _setSuggestionsVisible(true);
+    _showVariableField(true);
+    _resetManualLabels();
+    _updatePrimaryActionLabels();
 
     if (typeof Canvas !== 'undefined' && Canvas.highlightSelected) {
       Canvas.highlightSelected();
@@ -110,9 +149,156 @@ const EditPanel = (() => {
       statusDot.style.background = _statusColour(rec.status);
     }
 
-    // Separate dataset-colour component display
     if (currentDataset) {
       currentDataset.textContent = rec.sdtm_dataset || 'No dataset selected';
+    }
+
+    _setManualOverrideEnabled(true);
+    _setActionButtonsEnabled(true);
+  }
+
+  function _populateDatasetRecord(rec) {
+    const rawVar = document.getElementById('panel-raw-var');
+    const component = document.getElementById('panel-component');
+    const formCode = document.getElementById('panel-form-code');
+    const mapping = document.getElementById('panel-mapping');
+    const mappingLabel = document.getElementById('panel-mapping-label');
+    const statusDot = document.getElementById('panel-status-dot');
+    const currentDataset = document.getElementById('current-dataset-colour-target');
+
+    if (rawVar) rawVar.textContent = rec.sdtm_dataset || 'DATASET';
+    if (component) component.textContent = 'DATASET_HEADER';
+    if (formCode) formCode.textContent = rec.form_code || '—';
+
+    if (mapping) {
+      mapping.textContent = rec.sdtm_dataset || 'Dataset';
+    }
+
+    if (mappingLabel) {
+      mappingLabel.textContent = rec.sdtm_label || 'Dataset annotation';
+    }
+
+    if (statusDot) {
+      statusDot.style.background = '#652BDA';
+    }
+
+    if (currentDataset) {
+      currentDataset.textContent = rec.sdtm_dataset || 'No dataset selected';
+    }
+
+    _setManualOverrideEnabled(true);
+    _setActionButtonsEnabled(false);
+  }
+
+  function _setManualOverrideEnabled(enabled) {
+    const ds = document.getElementById('manual-dataset');
+    const variable = document.getElementById('manual-variable');
+    const label = document.getElementById('manual-label');
+    const btnManualConfirm = document.getElementById('btn-manual-confirm');
+
+    [ds, variable, label, btnManualConfirm].forEach(el => {
+      if (!el) return;
+      el.disabled = !enabled;
+      el.style.opacity = enabled ? '' : '0.55';
+      el.style.pointerEvents = enabled ? '' : 'none';
+    });
+  }
+
+  function _setActionButtonsEnabled(enabled) {
+    const btnNotSubmitted = document.getElementById('btn-not-submitted');
+    const btnClear = document.getElementById('btn-clear');
+    const btnRemove = document.getElementById('btn-remove');
+
+    [btnNotSubmitted, btnClear, btnRemove].forEach(el => {
+      if (!el) return;
+      el.disabled = !enabled;
+      el.style.opacity = enabled ? '' : '0.55';
+      el.style.pointerEvents = enabled ? '' : 'none';
+    });
+  }
+  function _showVariableField(show) {
+    const variableInput = document.getElementById('manual-variable');
+    if (!variableInput) return;
+
+    const variableRow =
+      variableInput.closest('.manual-row') ||
+      variableInput.parentElement;
+
+    if (!variableRow) return;
+
+    if (show) {
+      variableInput.disabled = false;
+      variableRow.classList.remove('hidden');
+    } else {
+      variableInput.value = '';
+      variableInput.disabled = true;
+      variableRow.classList.add('hidden');
+    }
+  }
+
+  function _setSuggestionsVisible(show) {
+    const list = document.getElementById('suggestions-list');
+    if (!list) return;
+
+    const section =
+      list.closest('.section-card') ||
+      list.parentElement;
+
+    if (!section) return;
+
+    if (show) {
+      section.classList.remove('hidden');
+    } else {
+      section.classList.add('hidden');
+    }
+  }
+
+  function _setManualLabelsForDatasetMode() {
+    const datasetInput = document.getElementById('manual-dataset');
+    const labelInput = document.getElementById('manual-label');
+
+    const datasetLabel = datasetInput
+      ? document.querySelector(`label[for="${datasetInput.id}"]`)
+      : null;
+    const labelLabel = labelInput
+      ? document.querySelector(`label[for="${labelInput.id}"]`)
+      : null;
+
+    if (datasetLabel) datasetLabel.textContent = 'Dataset';
+    if (labelLabel) labelLabel.textContent = 'Label (optional)';
+
+    if (datasetInput) datasetInput.placeholder = 'Dataset';
+    if (labelInput) labelInput.placeholder = 'Label (optional)';
+  }
+
+  function _resetManualLabels() {
+    const datasetInput = document.getElementById('manual-dataset');
+    const variableInput = document.getElementById('manual-variable');
+    const labelInput = document.getElementById('manual-label');
+
+    const datasetLabel = datasetInput
+      ? document.querySelector(`label[for="${datasetInput.id}"]`)
+      : null;
+    const variableLabel = variableInput
+      ? document.querySelector(`label[for="${variableInput.id}"]`)
+      : null;
+    const labelLabel = labelInput
+      ? document.querySelector(`label[for="${labelInput.id}"]`)
+      : null;
+
+    if (datasetLabel) datasetLabel.textContent = 'Dataset';
+    if (variableLabel) variableLabel.textContent = 'Variable';
+    if (labelLabel) labelLabel.textContent = 'Label';
+
+    if (datasetInput) datasetInput.placeholder = 'e.g. CM';
+    if (variableInput) variableInput.placeholder = 'e.g. CMTRT';
+    if (labelInput) labelInput.placeholder = 'Optional SDTM label';
+  }
+
+  function _updatePrimaryActionLabels() {
+    const btnClear = document.getElementById('btn-clear');
+    if (btnClear) {
+      btnClear.textContent = currentMode === 'annotation' ? 'Unmap' : 'Clear Mapping';
     }
   }
 
@@ -158,8 +344,6 @@ const EditPanel = (() => {
           <div class="suggestion-label">${escapeHtml(s.sdtm_label || '—')}</div>
         `;
 
-        // Clicking suggestion copies values into manual override fields
-        // but does not auto-submit
         card.addEventListener('click', () => {
           const ds = document.getElementById('manual-dataset');
           const variable = document.getElementById('manual-variable');
@@ -179,10 +363,12 @@ const EditPanel = (() => {
     }
   }
 
+  
+
   function _clearSuggestions() {
     const list = document.getElementById('suggestions-list');
     if (list) {
-      list.innerHTML = '<div class="suggestions-loading muted small">Select an annotation to load suggestions</div>';
+      list.innerHTML = '';
     }
   }
 
@@ -201,6 +387,7 @@ const EditPanel = (() => {
 
     if (btnNotSubmitted) {
       btnNotSubmitted.addEventListener('click', async () => {
+        if (currentMode !== 'annotation') return;
         if (!Store.selectedRecord) return;
 
         await _applyAndTrack({
@@ -218,6 +405,7 @@ const EditPanel = (() => {
 
     if (btnClear) {
       btnClear.addEventListener('click', async () => {
+        if (currentMode !== 'annotation') return;
         if (!Store.selectedRecord) return;
 
         await _applyAndTrack({
@@ -235,6 +423,7 @@ const EditPanel = (() => {
 
     if (btnRemove) {
       btnRemove.addEventListener('click', () => {
+        if (currentMode !== 'annotation') return;
         const removeConfirm = document.getElementById('remove-confirm');
         if (removeConfirm) removeConfirm.classList.remove('hidden');
       });
@@ -242,6 +431,7 @@ const EditPanel = (() => {
 
     if (btnRemoveConfirm) {
       btnRemoveConfirm.addEventListener('click', async () => {
+        if (currentMode !== 'annotation') return;
         if (!Store.selectedRecord) return;
 
         const removeConfirm = document.getElementById('remove-confirm');
@@ -272,6 +462,21 @@ const EditPanel = (() => {
     if (btnManualConfirm) {
       btnManualConfirm.addEventListener('click', async () => {
         if (!Store.selectedRecord) return;
+
+        if (currentMode === 'dataset-chip') {
+          const ds = (document.getElementById('manual-dataset')?.value || '').trim().toUpperCase();
+          const label = (document.getElementById('manual-label')?.value || '').trim();
+
+          if (!ds) {
+            alert('Dataset is required.');
+            return;
+          }
+
+          Store.selectedRecord.sdtm_dataset = ds;
+          Store.selectedRecord.sdtm_label = label;
+          _populateDatasetRecord(Store.selectedRecord);
+          return;
+        }
 
         const ds = (document.getElementById('manual-dataset')?.value || '').trim().toUpperCase();
         const variable = (document.getElementById('manual-variable')?.value || '').trim().toUpperCase();
@@ -308,23 +513,86 @@ const EditPanel = (() => {
       });
     }
 
-    // Dataset colour is now treated as its own separate component section
     const colourHdr = document.getElementById('expander-colour-hdr');
     const colourBody = document.getElementById('expander-colour-body');
+    const colourChevron = colourHdr?.querySelector('.expander-chevron');
 
     if (colourHdr && colourBody) {
       colourHdr.addEventListener('click', () => {
         colourBody.classList.toggle('hidden');
+        if (colourChevron) colourChevron.classList.toggle('open');
       });
     }
 
     document.querySelectorAll('.colour-swatch').forEach((swatch) => {
       swatch.addEventListener('click', async () => {
         if (!Store.selectedRecord) return;
+
+        // Dataset-chip mode: colour action applies directly to dataset in selected form
+        if (currentMode === 'dataset-chip' && Store.selectedRecord._isDatasetChip) {
+          const colourKey = swatch.dataset.colourKey;
+          const dataset = Store.selectedRecord._datasetCode;
+          const formCode = Store.selectedRecord._formCode;
+
+          const beforeKey = `${formCode}::${dataset}`;
+
+          let beforeColour = '';
+          try {
+            const prev = await window.pywebview.api.get_dataset_colours();
+            if (prev && prev.ok && prev.colours) {
+              beforeColour = prev.colours[beforeKey] || '';
+            }
+          } catch (_) {}
+
+          const res = await window.pywebview.api.set_dataset_colour(dataset, colourKey);
+          if (!res || !res.ok) {
+            console.error('[editpanel] set_dataset_colour failed:', res?.error);
+            return;
+          }
+
+          Store.pushHistory({
+            type: 'dataset-colour',
+            before: {
+              form_code: formCode,
+              dataset: dataset,
+              colour: beforeColour,
+              mode: 'dataset-chip',
+            },
+            after: {
+              form_code: formCode,
+              dataset: dataset,
+              colour: colourKey,
+              mode: 'dataset-chip',
+            },
+          });
+
+          await _refreshAfterUpdate({
+            reopenPanel: true,
+            reloadSuggestions: false,
+            keepManualBlank: true,
+            preserveSelection: true,
+            reopenDatasetChip: true,
+          });
+
+          return;
+        }
+
+        // Annotation mode: colour applies to selected annotation's dataset
         if (!Store.selectedRecord.sdtm_dataset) return;
 
         const colourKey = swatch.dataset.colourKey;
         const dataset = Store.selectedRecord.sdtm_dataset;
+        const formCode = Store.selectedRecord.form_code || '';
+
+        const beforeKey = `${String(formCode).toUpperCase()}::${String(dataset).toUpperCase()}`;
+
+        let beforeColour = '';
+        try {
+          const prev = await window.pywebview.api.get_dataset_colours();
+          if (prev && prev.ok && prev.colours) {
+            beforeColour = prev.colours[beforeKey] || '';
+          }
+        } catch (_) {}
 
         const res = await window.pywebview.api.set_dataset_colour(dataset, colourKey);
         if (!res || !res.ok) {
@@ -332,12 +600,30 @@ const EditPanel = (() => {
           return;
         }
 
-        // Do NOT reload suggestions on colour changes
+        Store.pushHistory({
+          type: 'dataset-colour',
+          before: {
+            form_code: formCode,
+            dataset: dataset,
+            colour: beforeColour,
+            mode: 'annotation',
+            annotation_id: Store.selectedId,
+          },
+          after: {
+            form_code: formCode,
+            dataset: dataset,
+            colour: colourKey,
+            mode: 'annotation',
+            annotation_id: Store.selectedId,
+          },
+        });
+
         await _refreshAfterUpdate({
           reopenPanel: true,
           reloadSuggestions: false,
           keepManualBlank: true,
           preserveSelection: true,
+          reopenDatasetChip: false,
         });
       });
     });
@@ -369,11 +655,12 @@ const EditPanel = (() => {
 
     Store.pushHistory(action);
 
-    // Do NOT reload suggestions after manual override / status changes
     await _refreshAfterUpdate({
       reopenPanel,
       reloadSuggestions: false,
       keepManualBlank: true,
+      preserveSelection: true,
+      reopenDatasetChip: false,
     });
   }
 
@@ -393,9 +680,52 @@ const EditPanel = (() => {
     return true;
   }
 
+  async function _applyDatasetColourSnapshot(snapshot) {
+    try {
+      if (!snapshot?.dataset) return false;
+
+      const res = await window.pywebview.api.set_dataset_colour(
+        snapshot.dataset,
+        snapshot.colour || ''
+      );
+
+      if (!res || !res.ok) {
+        console.error('[editpanel] dataset colour restore failed:', res?.error);
+        return false;
+      }
+
+      return true;
+    } catch (e) {
+      console.error('[editpanel] _applyDatasetColourSnapshot error:', e);
+      return false;
+    }
+  }
+
   async function undo() {
     const action = Store.popUndo();
     if (!action) return;
+
+    if (action.type === 'dataset-colour') {
+      const ok = await _applyDatasetColourSnapshot(action.before);
+      if (!ok) return;
+
+      Store.pushRedo(action);
+
+      if (action.before.mode === 'dataset-chip') {
+        Store.selectedId = `datasetchip::${String(action.before.form_code).toUpperCase()}::${String(action.before.dataset).toUpperCase()}`;
+      } else if (action.before.annotation_id) {
+        Store.selectedId = action.before.annotation_id;
+      }
+
+      await _refreshAfterUpdate({
+        reopenPanel: true,
+        reloadSuggestions: false,
+        keepManualBlank: true,
+        preserveSelection: true,
+        reopenDatasetChip: action.before.mode === 'dataset-chip',
+      });
+      return;
+    }
 
     const ok = await _applySnapshot(action.before);
     if (!ok) return;
@@ -407,12 +737,36 @@ const EditPanel = (() => {
       reopenPanel: true,
       reloadSuggestions: false,
       keepManualBlank: true,
+      preserveSelection: true,
+      reopenDatasetChip: false,
     });
   }
 
   async function redo() {
     const action = Store.popRedo();
     if (!action) return;
+
+    if (action.type === 'dataset-colour') {
+      const ok = await _applyDatasetColourSnapshot(action.after);
+      if (!ok) return;
+
+      Store.pushHistory(action);
+
+      if (action.after.mode === 'dataset-chip') {
+        Store.selectedId = `datasetchip::${String(action.after.form_code).toUpperCase()}::${String(action.after.dataset).toUpperCase()}`;
+      } else if (action.after.annotation_id) {
+        Store.selectedId = action.after.annotation_id;
+      }
+
+      await _refreshAfterUpdate({
+        reopenPanel: true,
+        reloadSuggestions: false,
+        keepManualBlank: true,
+        preserveSelection: true,
+        reopenDatasetChip: action.after.mode === 'dataset-chip',
+      });
+      return;
+    }
 
     const ok = await _applySnapshot(action.after);
     if (!ok) return;
@@ -424,6 +778,8 @@ const EditPanel = (() => {
       reopenPanel: true,
       reloadSuggestions: false,
       keepManualBlank: true,
+      preserveSelection: true,
+      reopenDatasetChip: false,
     });
   }
 
@@ -443,6 +799,7 @@ const EditPanel = (() => {
       reloadSuggestions = false,
       keepManualBlank = true,
       preserveSelection = true,
+      reopenDatasetChip = false,
     } = opts;
 
     if (typeof Sidebar !== 'undefined' && Sidebar.refreshStats) {
@@ -450,6 +807,7 @@ const EditPanel = (() => {
     }
 
     const selectedId = Store.selectedId;
+    const selectedRecord = Store.selectedRecord;
 
     if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
       await Canvas.loadPage(Store.currentPage);
@@ -459,8 +817,14 @@ const EditPanel = (() => {
       Store.selectedId = selectedId;
     }
 
+    // Dataset-chip reopen path
+    if (reopenPanel && reopenDatasetChip && selectedRecord?._isDatasetChip) {
+      await openDatasetChip(selectedRecord);
+      return;
+    }
+
     let freshRecord = null;
-    if (selectedId) {
+    if (selectedId && !String(selectedId).startsWith('datasetchip::')) {
       const fresh = await window.pywebview.api.get_annotation(selectedId);
       if (fresh && fresh.ok && fresh.record) {
         freshRecord = fresh.record;
@@ -475,6 +839,11 @@ const EditPanel = (() => {
       if (keepManualBlank) {
         _clearManualFields();
       }
+
+      _setSuggestionsVisible(true);
+      _showVariableField(true);
+      _resetManualLabels();
+      _updatePrimaryActionLabels();
 
       if (reloadSuggestions) {
         await _loadSuggestions(selectedId);
@@ -508,6 +877,7 @@ const EditPanel = (() => {
   return {
     init,
     open,
+    openDatasetChip,
     close,
     undo,
     redo,

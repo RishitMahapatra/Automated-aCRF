@@ -20,6 +20,8 @@ async function initApp() {
       EditPanel.init();
     }
 
+    _restoreThemePreference();
+    _bindThemeToggle();
     _bindExportButton();
     await _restoreStateIfAny();
 
@@ -125,4 +127,45 @@ if (window.pywebview && window.pywebview.api) {
   initApp();
 } else {
   window.addEventListener('pywebviewready', initApp);
+}
+
+function _bindThemeToggle() {
+  const btn = document.getElementById('btn-theme-toggle');
+  if (!btn) return;
+
+  btn.addEventListener('click', () => {
+    const isLight = document.body.classList.toggle('theme-light');
+    try {
+      localStorage.setItem('crf_theme', isLight ? 'light' : 'dark');
+    } catch (e) {
+      console.warn('[app] could not persist theme:', e);
+    }
+    _syncThemeToggleTooltip();
+  });
+
+  _syncThemeToggleTooltip();
+}
+
+function _restoreThemePreference() {
+  try {
+    const saved = localStorage.getItem('crf_theme');
+    if (saved === 'light') {
+      document.body.classList.add('theme-light');
+    } else {
+      document.body.classList.remove('theme-light');
+    }
+  } catch (e) {
+    document.body.classList.remove('theme-light');
+  }
+
+  _syncThemeToggleTooltip();
+}
+
+function _syncThemeToggleTooltip() {
+  const btn = document.getElementById('btn-theme-toggle');
+  if (!btn) return;
+
+  const isLight = document.body.classList.contains('theme-light');
+  btn.title = isLight ? 'Switch to dark mode' : 'Switch to light mode';
+  btn.setAttribute('aria-label', btn.title);
 }

@@ -7,6 +7,7 @@
  * - clickable full component bands
  * - purple hover for components
  * - clickable annotation boxes
+ * - clickable dataset chips
  * - header dataset chips
  * - dataset-specific colours per form
  * - consistent colours across pages of same form
@@ -423,6 +424,10 @@ const Canvas = (() => {
     for (const ds of datasets) {
       const chip = document.createElement('div');
       chip.className = 'ann-box ann-chip';
+      chip.dataset.datasetCode = ds;
+      chip.dataset.formCode = formCode;
+      chip.dataset.kind = 'dataset-chip';
+      chip.dataset.id = `datasetchip::${formCode}::${ds}`;
 
       const label = DATASET_LABELS[ds] || `${ds}=${ds}`;
       const bg = formColourRegistry?.[formCode]?.[ds] || PALETTE[0];
@@ -440,13 +445,66 @@ const Canvas = (() => {
       chip.style.fontWeight = '600';
       chip.style.padding = '2px 6px';
       chip.style.borderRadius = '2px';
-      chip.style.pointerEvents = 'none';
+      chip.style.pointerEvents = 'all';
+      chip.style.cursor = 'pointer';
       chip.style.whiteSpace = 'nowrap';
       chip.style.zIndex = '12';
+      chip.style.boxShadow = '0 1px 3px rgba(0,0,0,0.18)';
+
+      chip.addEventListener('click', async (e) => {
+        e.stopPropagation();
+
+        const datasetRecord = buildDatasetSelectionRecord(ds, formCode, records);
+        Store.setSelectedAnnotation(datasetRecord);
+        highlightSelected();
+
+        if (typeof EditPanel !== 'undefined' && EditPanel.openDatasetChip) {
+          await EditPanel.openDatasetChip(datasetRecord);
+        } else if (typeof EditPanel !== 'undefined' && EditPanel.open) {
+          // fallback: open the first annotation record for that dataset
+          const fallback = records.find(r =>
+            (r.form_code || '').toUpperCase() === formCode &&
+            (r.sdtm_dataset || '').toUpperCase() === ds &&
+            (r.status || '') !== 'REMOVED'
+          );
+          if (fallback) {
+            await EditPanel.open(fallback.annotation_id);
+          }
+        }
+      });
 
       annotationLayer.appendChild(chip);
       topPct += 3.8;
     }
+  }
+
+  function buildDatasetSelectionRecord(datasetCode, formCode, records) {
+    const formUpper = (formCode || '').toUpperCase();
+    const dsUpper = (datasetCode || '').toUpperCase();
+
+    const matched = (records || []).filter(r =>
+      (r.form_code || '').toUpperCase() === formUpper &&
+      (r.sdtm_dataset || '').toUpperCase() === dsUpper &&
+      (r.status || '') !== 'REMOVED'
+    );
+
+    const first = matched[0] || {};
+
+    return {
+      annotation_id: `datasetchip::${formUpper}::${dsUpper}`,
+      raw_variable: DATASET_LABELS[dsUpper] || dsUpper,
+      component: 'DATASET_HEADER',
+      form_code: formUpper,
+      page_type: 'FORM',
+      page: first.page || Store.currentPage,
+      status: 'RESOLVED',
+      sdtm_dataset: dsUpper,
+      sdtm_variable: '',
+      sdtm_label: DATASET_LABELS[dsUpper] || dsUpper,
+      _isDatasetChip: true,
+      _datasetCode: dsUpper,
+      _formCode: formUpper,
+    };
   }
 
   function statusClass(status) {
@@ -455,7 +513,6 @@ const Canvas = (() => {
 
   function highlightSelected() {
     document.querySelectorAll('.ann-box').forEach(box => {
-      if (box.classList.contains('ann-chip')) return;
       const selected = box.dataset.id === Store.selectedId;
       box.classList.toggle('selected', selected);
     });
