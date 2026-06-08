@@ -181,6 +181,9 @@
           <span class="btn-icon">▶</span>
           Run Pipeline
         </button>
+        <button class="btn btn-full" id="btn-restart-session" style="margin-top:8px;">
+          Restart Session
+        </button>
         <div id="pipeline-steps" class="pipeline-steps">
           <div class="pipeline-step" data-step="0">
             <div class="step-dot" id="step-dot-0"></div>
@@ -367,6 +370,16 @@
 
       </main>
 
+      <!-- ── STICKY BOTTOM NAVIGATION ─────────────────────── -->
+      <div id="sticky-nav" class="sticky-nav">
+        <button class="btn nav-btn sticky-nav-btn" id="btn-prev-sticky">‹</button>
+        <span class="page-display sticky-page-display" id="page-display-sticky">
+          — / —
+        </span>
+        <button class="btn nav-btn sticky-nav-btn" id="btn-next-sticky">›</button>
+      </div>
+
+      
       <!-- ── EDIT PANEL ────────────────────────────────────── -->
       <aside id="edit-panel" class="edit-panel">
 

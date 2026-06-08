@@ -112,6 +112,8 @@ class ExportBridge:
     def export_annotated_pdf(self, pdf_path: str | Path, session_id: str, annotations=None) -> dict:
         """
         Export the final annotated PDF using the current saved annotation JSON.
+        This regenerates the annotated PDF from the latest current state so the
+        exported file preserves the latest mapping changes, measurements, and padding.
         """
         try:
             from pipeline.crf_annotator import run_annotator

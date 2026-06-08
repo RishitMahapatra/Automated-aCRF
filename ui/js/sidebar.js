@@ -3,11 +3,16 @@
 const Sidebar = (() => {
   'use strict';
 
+  let pipelineRunning = false;
+
   function init() {
     console.log('[sidebar] init');
     _bindUpload();
     _bindPipeline();
     _bindNavigation();
+    _bindKeyboardNavigation();
+    _bindClearFile();
+    _bindRestartSession();
   }
 
   // ===========================================================================
@@ -20,12 +25,37 @@ const Sidebar = (() => {
 
     dropZone.addEventListener('click', async () => {
       try {
+        if (pipelineRunning) {
+          return;
+        }
+
         const result = await window.pywebview.api.select_pdf();
         if (!result || !result.ok) {
           return;
         }
 
         Store.sessionId = result.session_id || result.filename.replace('.pdf', '').replace(/\s+/g, '_');
+        // Clear old session/page visuals before loading the new file state
+        const pdfImg = document.getElementById('pdf-img');
+        const annotationLayer = document.getElementById('annotation-layer');
+        const tableBanner = document.getElementById('table-banner');
+
+        if (pdfImg) {
+          pdfImg.removeAttribute('src');
+          pdfImg.src = '';
+        }
+
+        if (annotationLayer) {
+          annotationLayer.innerHTML = '';
+        }
+
+        if (tableBanner) {
+          tableBanner.classList.add('hidden');
+        }
+
+        if (typeof EditPanel !== 'undefined' && EditPanel.close) {
+          EditPanel.close();
+        }
         Store.pdfLoaded = true;
         Store.pdfName = result.filename;
         Store.currentPage = 1;
@@ -34,7 +64,6 @@ const Sidebar = (() => {
         _setSessionInput(Store.sessionId);
         _setNavSession(Store.sessionId);
 
-        // Get page count immediately after selecting PDF
         const pageRes = await window.pywebview.api.get_page_count();
         if (pageRes && pageRes.ok) {
           Store.pageCount = pageRes.count || 0;
@@ -43,7 +72,6 @@ const Sidebar = (() => {
           _updateNavPageCount();
         }
 
-        // Hide empty state if needed
         if (typeof Canvas !== 'undefined' && Canvas.showEmpty) {
           Canvas.showEmpty(false);
         }
@@ -52,6 +80,143 @@ const Sidebar = (() => {
         console.error('[sidebar] select_pdf error:', e);
       }
     });
+  }
+
+  function _bindClearFile() {
+    const btnClearFile = document.getElementById('btn-clear-file');
+    if (!btnClearFile) return;
+
+    btnClearFile.addEventListener('click', async (e) => {
+      e.stopPropagation();
+
+      if (pipelineRunning) {
+        return;
+      }
+
+      _resetUiToInitialState();
+    });
+  }
+  function _bindRestartSession() {
+    const btnRestart = document.getElementById('btn-restart-session');
+    if (!btnRestart) return;
+
+    btnRestart.addEventListener('click', async () => {
+      try {
+        if (pipelineRunning) {
+          return;
+        }
+
+        const res = await window.pywebview.api.restart_session();
+        if (!res || !res.ok) {
+          console.error('[sidebar] restart_session failed:', res?.error);
+          return;
+        }
+
+        Store.resetSession();
+
+        const dropZone = document.getElementById('drop-zone');
+        const fileLoaded = document.getElementById('file-loaded');
+        const sessionInput = document.getElementById('session-input');
+        const navSession = document.getElementById('nav-session');
+        const fileNameLabel = document.getElementById('file-name-label');
+        const filePagesLabel = document.getElementById('file-pages-label');
+        const pageDisplay = document.getElementById('page-display');
+        const pageDisplaySticky = document.getElementById('page-display-sticky');
+        const navPageCount = document.getElementById('nav-page-count');
+
+        if (dropZone) dropZone.classList.remove('hidden');
+        if (fileLoaded) fileLoaded.classList.add('hidden');
+        if (sessionInput) sessionInput.value = '';
+        if (navSession) navSession.textContent = 'No session';
+        if (fileNameLabel) fileNameLabel.textContent = '—';
+        if (filePagesLabel) filePagesLabel.textContent = '— pages';
+        if (pageDisplay) pageDisplay.textContent = '— / —';
+        if (pageDisplaySticky) pageDisplaySticky.textContent = '— / —';
+        if (navPageCount) navPageCount.textContent = '— / —';
+
+        _resetPipelineSteps();
+        _resetStatsDisplay();
+
+        if (typeof Canvas !== 'undefined' && Canvas.showEmpty) {
+          Canvas.showEmpty(true);
+        }
+
+        if (typeof EditPanel !== 'undefined' && EditPanel.close) {
+          EditPanel.close();
+        }
+
+      } catch (e) {
+        console.error('[sidebar] restart_session error:', e);
+      }
+    });
+  }
+
+  function _resetUiToInitialState() {
+    Store.resetSession();
+
+    const dropZone = document.getElementById('drop-zone');
+    const fileLoaded = document.getElementById('file-loaded');
+    const sessionInput = document.getElementById('session-input');
+    const navSession = document.getElementById('nav-session');
+    const fileNameLabel = document.getElementById('file-name-label');
+    const filePagesLabel = document.getElementById('file-pages-label');
+    const pageDisplay = document.getElementById('page-display');
+    const pageDisplaySticky = document.getElementById('page-display-sticky');
+    const navPageCount = document.getElementById('nav-page-count');
+    const toolbarFormCode = document.getElementById('toolbar-form-code');
+    const toolbarDpi = document.getElementById('toolbar-dpi');
+    const toolbarZoom = document.getElementById('toolbar-zoom');
+    const navPageType = document.getElementById('nav-page-type');
+    const pdfImg = document.getElementById('pdf-img');
+    const annotationLayer = document.getElementById('annotation-layer');
+    const tableBanner = document.getElementById('table-banner');
+
+    if (dropZone) dropZone.classList.remove('hidden');
+    if (fileLoaded) fileLoaded.classList.add('hidden');
+
+    if (sessionInput) sessionInput.value = '';
+    if (navSession) navSession.textContent = 'No session';
+
+    if (fileNameLabel) fileNameLabel.textContent = '—';
+    if (filePagesLabel) filePagesLabel.textContent = '— pages';
+
+    if (pageDisplay) pageDisplay.textContent = '— / —';
+    if (pageDisplaySticky) pageDisplaySticky.textContent = '— / —';
+    if (navPageCount) navPageCount.textContent = '— / —';
+
+    if (toolbarFormCode) toolbarFormCode.textContent = '—';
+    if (toolbarDpi) toolbarDpi.textContent = '150 DPI';
+    if (toolbarZoom) toolbarZoom.textContent = '100%';
+
+    if (navPageType) {
+      navPageType.textContent = 'FORM';
+      navPageType.classList.remove('badge-table');
+      navPageType.classList.add('badge-form');
+    }
+
+    if (pdfImg) {
+      pdfImg.removeAttribute('src');
+      pdfImg.src = '';
+    }
+
+    if (annotationLayer) {
+      annotationLayer.innerHTML = '';
+    }
+
+    if (tableBanner) {
+      tableBanner.classList.add('hidden');
+    }
+
+    _resetPipelineSteps();
+    _resetStatsDisplay();
+
+    if (typeof Canvas !== 'undefined' && Canvas.showEmpty) {
+      Canvas.showEmpty(true);
+    }
+
+    if (typeof EditPanel !== 'undefined' && EditPanel.close) {
+      EditPanel.close();
+    }
   }
 
   function _showFileLoaded(filename) {
@@ -102,6 +267,10 @@ const Sidebar = (() => {
 
     btnRun.addEventListener('click', async () => {
       try {
+        if (pipelineRunning) {
+          return;
+        }
+
         if (!Store.pdfLoaded) {
           alert('Upload a PDF first.');
           return;
@@ -116,9 +285,10 @@ const Sidebar = (() => {
         }
 
         Store.sessionId = sessionId;
-
-        // Push session to backend
         await window.pywebview.api.set_session_id(sessionId);
+
+        pipelineRunning = true;
+        _setPipelineControlsLocked(true);
 
         _resetPipelineSteps();
         _setPipelineStepRunning(0);
@@ -126,8 +296,6 @@ const Sidebar = (() => {
         btnRun.disabled = true;
         btnRun.innerHTML = '<span class="btn-icon">⏳</span> Running...';
 
-        // Since backend currently runs everything in one shot,
-        // we simulate step progression in UI.
         const result = await window.pywebview.api.run_pipeline();
 
         _setPipelineStepDone(0);
@@ -143,7 +311,6 @@ const Sidebar = (() => {
 
         _setPipelineStepDone(2);
 
-        // Refresh page count after pipeline
         const pageRes = await window.pywebview.api.get_page_count();
         if (pageRes && pageRes.ok) {
           Store.pageCount = pageRes.count || 0;
@@ -165,10 +332,34 @@ const Sidebar = (() => {
         console.error('[sidebar] run_pipeline error:', e);
         alert('Pipeline failed: ' + e);
       } finally {
+        pipelineRunning = false;
+        _setPipelineControlsLocked(false);
+
         btnRun.disabled = false;
         btnRun.innerHTML = '<span class="btn-icon">▶</span> Run Pipeline';
       }
     });
+  }
+
+  function _setPipelineControlsLocked(locked) {
+    const btnClearFile = document.getElementById('btn-clear-file');
+    const dropZone = document.getElementById('drop-zone');
+    const sessionInput = document.getElementById('session-input');
+
+    if (btnClearFile) {
+      btnClearFile.disabled = !!locked;
+      btnClearFile.style.opacity = locked ? '0.45' : '';
+      btnClearFile.style.pointerEvents = locked ? 'none' : '';
+    }
+
+    if (dropZone) {
+      dropZone.style.pointerEvents = locked ? 'none' : '';
+      dropZone.style.opacity = locked ? '0.65' : '';
+    }
+
+    if (sessionInput) {
+      sessionInput.disabled = !!locked;
+    }
   }
 
   function _resetPipelineSteps() {
@@ -235,38 +426,32 @@ const Sidebar = (() => {
   function _bindNavigation() {
     const btnPrev = document.getElementById('btn-prev');
     const btnNext = document.getElementById('btn-next');
+    const btnPrevSticky = document.getElementById('btn-prev-sticky');
+    const btnNextSticky = document.getElementById('btn-next-sticky');
     const gotoInput = document.getElementById('goto-input');
 
     if (btnPrev) {
       btnPrev.addEventListener('click', async () => {
-        if (!Store.pipelineRan) return;
-        if (Store.currentPage <= 1) return;
-
-        Store.currentPage -= 1;
-        _updatePageDisplay();
-        _updateNavPageCount();
-
-        if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
-          await Canvas.loadPage(Store.currentPage);
-        }
+        await goPrev();
       });
     }
 
     if (btnNext) {
       btnNext.addEventListener('click', async () => {
-        if (!Store.pipelineRan) return;
-        if (Store.currentPage >= Store.pageCount) return;
-
-        Store.currentPage += 1;
-        _updatePageDisplay();
-        _updateNavPageCount();
-
-        if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
-          await Canvas.loadPage(Store.currentPage);
-        }
+        await goNext();
+      });
+    }
+    if (btnPrevSticky) {
+      btnPrevSticky.addEventListener('click', async () => {
+        await goPrev();
       });
     }
 
+    if (btnNextSticky) {
+      btnNextSticky.addEventListener('click', async () => {
+        await goNext();
+      });
+    }
     if (gotoInput) {
       gotoInput.addEventListener('keydown', async (e) => {
         if (e.key !== 'Enter') return;
@@ -285,12 +470,70 @@ const Sidebar = (() => {
     }
   }
 
+  function _bindKeyboardNavigation() {
+    document.addEventListener('keydown', async (e) => {
+      if (!Store.pipelineRan) return;
+
+      const tag = (e.target?.tagName || '').toLowerCase();
+      const isTypingTarget =
+        tag === 'input' ||
+        tag === 'textarea' ||
+        e.target?.isContentEditable;
+
+      if (isTypingTarget) return;
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        await goPrev();
+      }
+
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        await goNext();
+      }
+    });
+  }
+
+  async function goPrev() {
+    if (!Store.pipelineRan) return;
+    if (Store.currentPage <= 1) return;
+
+    Store.currentPage -= 1;
+    _updatePageDisplay();
+    _updateNavPageCount();
+
+    if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
+      await Canvas.loadPage(Store.currentPage);
+    }
+  }
+
+  async function goNext() {
+    if (!Store.pipelineRan) return;
+    if (Store.currentPage >= Store.pageCount) return;
+
+    Store.currentPage += 1;
+    _updatePageDisplay();
+    _updateNavPageCount();
+
+    if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
+      await Canvas.loadPage(Store.currentPage);
+    }
+  }
+
   function _updatePageDisplay() {
     const pageDisplay = document.getElementById('page-display');
+    const pageDisplaySticky = document.getElementById('page-display-sticky');
+
+    const current = Store.pageCount ? Store.currentPage : '—';
+    const total = Store.pageCount || '—';
+    const text = `${current} / ${total}`;
+
     if (pageDisplay) {
-      const current = Store.pageCount ? Store.currentPage : '—';
-      const total = Store.pageCount || '—';
-      pageDisplay.textContent = `${current} / ${total}`;
+      pageDisplay.textContent = text;
+    }
+
+    if (pageDisplaySticky) {
+      pageDisplaySticky.textContent = text;
     }
   }
 
@@ -333,6 +576,14 @@ const Sidebar = (() => {
     }
   }
 
+  function _resetStatsDisplay() {
+    _setText('stat-resolved', 0);
+    _setText('stat-unmapped', 0);
+    _setText('stat-corrected', 0);
+    _setText('stat-removed', 0);
+    _updateRing(0);
+  }
+
   function _setText(id, val) {
     const el = document.getElementById(id);
     if (el) {
@@ -360,5 +611,8 @@ const Sidebar = (() => {
   return {
     init,
     refreshStats,
+    goPrev,
+    goNext,
+    isPipelineRunning: () => pipelineRunning,
   };
 })();

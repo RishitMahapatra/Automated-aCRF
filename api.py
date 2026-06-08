@@ -6,9 +6,11 @@ Every public method is callable from JS via window.pywebview.api.method_name()
 """
 
 from __future__ import annotations
-
+import shutil
 import traceback
 from pathlib import Path
+
+import uuid
 
 import webview
 
@@ -47,7 +49,9 @@ class Api:
                 path = Path(result[0])
                 if path.exists() and path.suffix.lower() == ".pdf":
                     self._pdf_path = path
-                    self._session_id = path.stem.strip().replace(" ", "_")
+                    base = path.stem.strip().replace(" ", "_")
+                    suffix = uuid.uuid4().hex[:8]
+                    self._session_id = f"{base}_{suffix}"
                     self._export.set_pdf(path)
 
                     return {
@@ -85,6 +89,18 @@ class Api:
             "session_id": self._session_id,
             "page_count": self._export.get_page_count(),
         }
+    def restart_session(self):
+        """
+        Clear current in-memory session state so the frontend can reset the app
+        and start a fresh session.
+        """
+        try:
+            self._pdf_path = None
+            self._session_id = ""
+            self._export = ExportBridge()
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
     # =========================================================================
     # PIPELINE
@@ -273,11 +289,49 @@ class Api:
             if not self._pdf_path:
                 return {"ok": False, "error": "No PDF loaded"}
 
-            return self._export.export_annotated_pdf(
+            if not self._session_id:
+                return {"ok": False, "error": "No session ID"}
+
+            suggested_name = f"{self._session_id}.pdf"
+
+            save_result = self._window.create_file_dialog(
+                webview.SAVE_DIALOG,
+                save_filename=suggested_name,
+                file_types=("PDF Files (*.pdf)",),
+            )
+
+            if not save_result:
+                return {"ok": False, "error": "Export cancelled"}
+
+            if isinstance(save_result, (list, tuple)):
+                out_path = Path(save_result[0])
+            else:
+                out_path = Path(save_result)
+
+            if out_path.suffix.lower() != ".pdf":
+                out_path = out_path.with_suffix(".pdf")
+
+            export_result = self._export.export_annotated_pdf(
                 pdf_path=self._pdf_path,
                 session_id=self._session_id,
                 annotations=None,
             )
+
+            if not export_result.get("ok"):
+                return export_result
+
+            generated_path = Path(export_result["path"])
+            if not generated_path.exists():
+                return {"ok": False, "error": "Generated annotated PDF not found"}
+
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(generated_path, out_path)
+
+            return {
+                "ok": True,
+                "path": str(out_path),
+            }
+
         except Exception as e:
             return {"ok": False, "error": str(e)}
 

@@ -50,10 +50,10 @@ COL_CYAN = (0.0, 0.71, 0.85)
 COL_WHITE = (1.0, 1.0, 1.0)
 
 # Annotation sizing tuned so full variable names fit better
-VAR_FONT_SIZE = 7.0
-VAR_CHIP_PAD_X = 4.0
-VAR_CHIP_PAD_Y = 2.0
-VAR_TEXT_BUFFER = 2.0
+VAR_FONT_SIZE = 6.5
+VAR_CHIP_PAD_X = 3.5
+VAR_CHIP_PAD_Y = 1.8
+VAR_TEXT_BUFFER = 1.5
 
 # Header chip geometry
 HEADER_CHIP_PAD_X = 4.0
@@ -182,7 +182,20 @@ def text_width(page, text, fontsize, bold=False, text_buffer=2.0):
         return page.get_text_length(text, fontname=fname, fontsize=fontsize) + text_buffer
     except Exception:
         return 0.55 * fontsize * len(text) + text_buffer
+def fit_text_to_width(page, text, max_width_pts, start_fontsize, min_fontsize=5.2, bold=False):
+    """
+    Reduce font size slightly until text fits inside max_width_pts.
+    Returns: (fontsize, text_width_pts)
+    """
+    fontsize = start_fontsize
+    while fontsize >= min_fontsize:
+        tw = text_width(page, text, fontsize, bold=bold, text_buffer=0.0)
+        if tw <= max_width_pts:
+            return fontsize, tw
+        fontsize -= 0.2
 
+    tw = text_width(page, text, min_fontsize, bold=bold, text_buffer=0.0)
+    return min_fontsize, tw
 
 # =============================================================================
 # BOX DRAWING
@@ -338,7 +351,8 @@ def draw_dataset_chips(page, header_y0, header_y1, form_code, ds_list, registry)
 
 def draw_variable_box(page, comp_y0_pts, comp_y1_pts, sdtm_text, bg_colour, footer_y0, border_colour=None):
     """
-    Draw centered variable box containing full DATASET.VARIABLE text.
+    Draw centered variable box containing full DATASET.VARIABLE text,
+    while preserving padding and preventing text overflow.
     """
     if comp_y0_pts >= footer_y0:
         return
@@ -347,21 +361,32 @@ def draw_variable_box(page, comp_y0_pts, comp_y1_pts, sdtm_text, bg_colour, foot
     page_w = page.rect.width
     comp_cy = (comp_y0_pts + comp_y1_pts) / 2.0
 
-    tw = text_width(
+    comp_h = max(0.0, comp_y1_pts - comp_y0_pts)
+    if comp_h <= 2.0:
+        return
+
+    # Available width inside page center lane
+    max_box_w = min(page_w * 0.46, page_w - 12.0)
+    inner_max_text_w = max_box_w - (VAR_CHIP_PAD_X * 2)
+
+    fitted_font, tw = fit_text_to_width(
         page,
         sdtm_text,
-        VAR_FONT_SIZE,
+        inner_max_text_w,
+        start_fontsize=VAR_FONT_SIZE,
+        min_fontsize=5.2,
         bold=False,
-        text_buffer=VAR_TEXT_BUFFER,
     )
 
-    box_w = tw + VAR_CHIP_PAD_X * 2
-    box_h = VAR_FONT_SIZE + VAR_CHIP_PAD_Y * 2
+    box_w = min(max_box_w, tw + VAR_CHIP_PAD_X * 2)
+    box_h = fitted_font + VAR_CHIP_PAD_Y * 2
 
+    # Keep the annotation centered exactly as in editor mode
     x0 = max(page_w / 2.0 - box_w / 2.0, 4.0)
     x1 = min(page_w / 2.0 + box_w / 2.0, page_w - 4.0)
-    y0 = max(comp_cy - box_h / 2.0, comp_y0_pts + 1)
-    y1 = min(comp_cy + box_h / 2.0, comp_y1_pts - 1)
+
+    y0 = max(comp_cy - box_h / 2.0, comp_y0_pts + 1.0)
+    y1 = min(comp_cy + box_h / 2.0, comp_y1_pts - 1.0)
 
     if y1 <= y0 + 1 or x1 <= x0 + 1:
         return
@@ -372,9 +397,8 @@ def draw_variable_box(page, comp_y0_pts, comp_y1_pts, sdtm_text, bg_colour, foot
         border_colour=bc,
         text=sdtm_text,
         text_colour=COL_BLUE,
-        fontsize=VAR_FONT_SIZE,
+        fontsize=fitted_font,
     )
-
 
 def draw_unresolved_box(page, comp_y0_pts, comp_y1_pts, footer_y0):
     """
