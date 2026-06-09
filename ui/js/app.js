@@ -3,6 +3,12 @@
  * ------------
  * Main frontend bootstrap for the PyWebView CRF Annotation Editor.
  */
+const SIDEBAR_MIN_WIDTH = 220;
+const SIDEBAR_MAX_WIDTH = 520;
+
+const EDIT_PANEL_MIN_WIDTH = 260;
+const EDIT_PANEL_MAX_WIDTH = 560;
+
 
 async function initApp() {
   console.log('[app] Initializing CRF Annotation Editor...');
@@ -22,8 +28,11 @@ async function initApp() {
 
     _restoreThemePreference();
     _bindThemeToggle();
+    _bindSidebarResizer();
+    _bindEditPanelResizer();
     _bindExportButton();
     await _restoreStateIfAny();
+
 
     console.log('[app] Ready.');
   } catch (e) {
@@ -144,6 +153,97 @@ function _bindThemeToggle() {
   });
 
   _syncThemeToggleTooltip();
+}
+
+function _bindSidebarResizer() {
+  const resizer = document.getElementById('sidebar-resizer');
+  const sidebar = document.getElementById('sidebar');
+  if (!resizer || !sidebar) return;
+
+  let dragging = false;
+
+  const onMouseMove = (e) => {
+    if (!dragging) return;
+
+    const layout = document.getElementById('layout');
+    if (!layout) return;
+
+    const layoutRect = layout.getBoundingClientRect();
+    let nextWidth = e.clientX - layoutRect.left;
+
+    if (nextWidth < SIDEBAR_MIN_WIDTH) nextWidth = SIDEBAR_MIN_WIDTH;
+    if (nextWidth > SIDEBAR_MAX_WIDTH) nextWidth = SIDEBAR_MAX_WIDTH;
+
+    sidebar.style.width = `${nextWidth}px`;
+    sidebar.style.flex = `0 0 ${nextWidth}px`;
+  };
+
+  const stopDragging = () => {
+    if (!dragging) return;
+    dragging = false;
+    resizer.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+
+    window.removeEventListener('mousemove', onMouseMove);
+    window.removeEventListener('mouseup', stopDragging);
+  };
+
+  resizer.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    dragging = true;
+    resizer.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', stopDragging);
+  });
+}
+
+
+
+function _bindEditPanelResizer() {
+  const resizer = document.getElementById('edit-panel-resizer');
+  const editPanel = document.getElementById('edit-panel');
+  if (!resizer || !editPanel) return;
+
+  let dragging = false;
+
+  const onMouseMove = (e) => {
+    if (!dragging) return;
+
+    const viewportWidth = window.innerWidth;
+    let nextWidth = viewportWidth - e.clientX;
+
+    if (nextWidth < EDIT_PANEL_MIN_WIDTH) nextWidth = EDIT_PANEL_MIN_WIDTH;
+    if (nextWidth > EDIT_PANEL_MAX_WIDTH) nextWidth = EDIT_PANEL_MAX_WIDTH;
+
+    editPanel.style.width = `${nextWidth}px`;
+    editPanel.style.flex = `0 0 ${nextWidth}px`;
+  };
+
+  const stopDragging = () => {
+    if (!dragging) return;
+    dragging = false;
+    resizer.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+
+    window.removeEventListener('mousemove', onMouseMove);
+    window.removeEventListener('mouseup', stopDragging);
+  };
+
+  resizer.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    dragging = true;
+    resizer.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', stopDragging);
+  });
 }
 
 function _restoreThemePreference() {

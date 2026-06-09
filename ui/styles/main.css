@@ -3493,3 +3493,116 @@ body.theme-light .theme-toggle-btn .theme-icon-moon {
   opacity: 0;
   transform: scale(0.8) rotate(18deg);
 }
+
+
+/* ==========================================================
+   Sidebar resize handle
+   ========================================================== */
+
+#layout {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+#sidebar {
+  flex: 0 0 320px;
+  width: 320px;
+  min-width: 220px;
+  max-width: 520px;
+}
+
+.sidebar-resizer {
+  width: 8px;
+  min-width: 8px;
+  cursor: col-resize;
+  position: relative;
+  z-index: 30;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.sidebar-resizer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: rgba(142, 84, 255, 0.18);
+  border-radius: 999px;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sidebar-resizer:hover {
+  background: rgba(142, 84, 255, 0.04);
+}
+
+.sidebar-resizer:hover::before {
+  background: rgba(142, 84, 255, 0.55);
+  box-shadow: 0 0 10px rgba(142, 84, 255, 0.20);
+}
+
+.sidebar-resizer.dragging {
+  background: rgba(142, 84, 255, 0.08);
+}
+
+.sidebar-resizer.dragging::before {
+  background: rgba(142, 84, 255, 0.85);
+  box-shadow: 0 0 14px rgba(142, 84, 255, 0.28);
+}
+
+#canvas-area {
+  min-width: 0;
+}
+
+/* ==========================================================
+   Edit panel resize handle
+   ========================================================== */
+
+#edit-panel {
+  flex: 0 0 360px;
+  width: 360px;
+  min-width: 260px;
+  max-width: 560px;
+}
+
+.edit-panel-resizer {
+  width: 8px;
+  min-width: 8px;
+  cursor: col-resize;
+  position: relative;
+  z-index: 30;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.edit-panel-resizer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: rgba(142, 84, 255, 0.18);
+  border-radius: 999px;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.edit-panel-resizer:hover {
+  background: rgba(142, 84, 255, 0.04);
+}
+
+.edit-panel-resizer:hover::before {
+  background: rgba(142, 84, 255, 0.55);
+  box-shadow: 0 0 10px rgba(142, 84, 255, 0.20);
+}
+
+.edit-panel-resizer.dragging {
+  background: rgba(142, 84, 255, 0.08);
+}
+
+.edit-panel-resizer.dragging::before {
+  background: rgba(142, 84, 255, 0.85);
+  box-shadow: 0 0 14px rgba(142, 84, 255, 0.28);
+}
