@@ -3606,3 +3606,34 @@ body.theme-light .theme-toggle-btn .theme-icon-moon {
   background: rgba(142, 84, 255, 0.85);
   box-shadow: 0 0 14px rgba(142, 84, 255, 0.28);
 }
+
+
+
+/* ==========================================================
+   Zoom controls
+   ========================================================== */
+
+.nav-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+#btn-zoom-in,
+#btn-zoom-out {
+  min-width: 34px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#page-display {
+  min-width: 72px;
+  text-align: center;
+}

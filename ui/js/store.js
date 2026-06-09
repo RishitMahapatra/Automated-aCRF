@@ -9,6 +9,10 @@ const Store = {
   pdfLoaded: false,
   pdfName: "",
   pdfPath: "",
+  zoomPct: 100,
+  zoomMin: 50,
+  zoomMax: 200,
+  zoomStep: 10,
 
   pipelineRan: false,
   pageCount: 0,
@@ -142,5 +146,21 @@ const Store = {
 
   canRedo() {
     return this.redoStack.length > 0;
+  },
+  setZoom(pct) {
+    const next = Math.max(this.zoomMin, Math.min(this.zoomMax, pct));
+    this.zoomPct = next;
+  },
+
+  zoomIn() {
+    this.setZoom(this.zoomPct + this.zoomStep);
+  },
+
+  zoomOut() {
+    this.setZoom(this.zoomPct - this.zoomStep);
+  },
+
+  resetZoom() {
+    this.zoomPct = 100;
   },
 };

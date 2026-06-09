@@ -105,7 +105,7 @@ const Canvas = (() => {
       renderAnnotations();
       renderHeaderChips();
       updatePageMeta();
-
+      applyZoom();
     } catch (e) {
       console.error('[canvas] loadPage error:', e);
       showEmpty(true);
@@ -168,6 +168,41 @@ const Canvas = (() => {
     pdfContainer.classList.remove('hidden');
     pdfImg.src = Store.pageImage;
     annotationLayer.innerHTML = '';
+  }
+function applyZoom() {
+    const pageWrap = document.getElementById('pdf-page-wrap');
+    const pdfImg = document.getElementById('pdf-img');
+    const toolbarZoom = document.getElementById('toolbar-zoom');
+
+    if (!pageWrap || !pdfImg) return;
+
+    const zoom = Number(Store.zoomPct || 100);
+    const scale = zoom / 100;
+
+    pageWrap.style.transformOrigin = 'top left';
+    pageWrap.style.transform = `scale(${scale})`;
+    pageWrap.style.width = `${100 / scale}%`;
+
+    if (toolbarZoom) {
+      toolbarZoom.textContent = `${zoom}%`;
+    }
+  }
+
+  function applyZoom() {
+    const pageWrap = document.getElementById('pdf-page-wrap');
+    const toolbarZoom = document.getElementById('toolbar-zoom');
+
+    if (!pageWrap) return;
+
+    const zoom = Store.zoomPct || 100;
+    const scale = zoom / 100;
+
+    pageWrap.style.transform = `scale(${scale})`;
+    pageWrap.style.transformOrigin = 'top left';
+
+    if (toolbarZoom) {
+      toolbarZoom.textContent = `${zoom}%`;
+    }
   }
 
   function renderComponentBands() {
@@ -605,12 +640,13 @@ const Canvas = (() => {
     }
   }
 
-  return {
+ return {
     init,
     loadPage,
     renderPage,
     renderAnnotations,
     showEmpty,
     highlightSelected,
+    applyZoom,
   };
 })();

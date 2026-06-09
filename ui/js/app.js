@@ -30,6 +30,7 @@ async function initApp() {
     _bindThemeToggle();
     _bindSidebarResizer();
     _bindEditPanelResizer();
+    _bindZoomControls();
     _bindExportButton();
     await _restoreStateIfAny();
 
@@ -245,6 +246,38 @@ function _bindEditPanelResizer() {
     window.addEventListener('mouseup', stopDragging);
   });
 }
+
+
+function _bindZoomControls() {
+    const btnZoomIn = document.getElementById('btn-zoom-in');
+    const btnZoomOut = document.getElementById('btn-zoom-out');
+
+    if (btnZoomIn) {
+      btnZoomIn.addEventListener('click', () => {
+        if (!Store?.setZoom || !Canvas?.applyZoom) return;
+
+        const current = Number(Store.zoomPct || 100);
+        const step = Number(Store.zoomStep || 10);
+        const max = Number(Store.zoomMax || 200);
+
+        Store.setZoom(Math.min(max, current + step));
+        Canvas.applyZoom();
+      });
+    }
+
+    if (btnZoomOut) {
+      btnZoomOut.addEventListener('click', () => {
+        if (!Store?.setZoom || !Canvas?.applyZoom) return;
+
+        const current = Number(Store.zoomPct || 100);
+        const step = Number(Store.zoomStep || 10);
+        const min = Number(Store.zoomMin || 50);
+
+        Store.setZoom(Math.max(min, current - step));
+        Canvas.applyZoom();
+      });
+    }
+  }
 
 function _restoreThemePreference() {
   try {
