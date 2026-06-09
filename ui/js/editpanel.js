@@ -2,11 +2,6 @@
  * ui/js/editpanel.js
  * ------------------
  * Right-side annotation edit panel with undo/redo support.
- *
- * Supports:
- * - variable annotation editing
- * - dataset-chip editing mode
- * - dataset colour history for undo/redo
  */
 
 const EditPanel = (() => {
@@ -18,11 +13,15 @@ const EditPanel = (() => {
     _bindButtons();
     _bindExpanders();
     _bindUndoRedo();
+    close();
   }
 
   async function open(annotationId) {
     try {
-      if (!annotationId) return;
+      if (!annotationId) {
+        close();
+        return;
+      }
 
       currentMode = 'annotation';
       Store.selectedId = annotationId;
@@ -30,6 +29,7 @@ const EditPanel = (() => {
       const res = await window.pywebview.api.get_annotation(annotationId);
       if (!res || !res.ok || !res.record) {
         console.error('[editpanel] get_annotation failed:', res?.error);
+        close();
         return;
       }
 
@@ -41,24 +41,31 @@ const EditPanel = (() => {
       _clearManualFields();
       _setSuggestionsVisible(true);
       _showVariableField(true);
-      _resetManualLabels();
+      _setManualLabelsForVariableMode();
       _updatePrimaryActionLabels();
+      _setManualOverrideEnabled(true);
+      _setActionButtonsEnabled(true);
+
       await _loadSuggestions(annotationId);
 
       if (typeof Canvas !== 'undefined' && Canvas.highlightSelected) {
         Canvas.highlightSelected();
       }
-
     } catch (e) {
       console.error('[editpanel] open error:', e);
+      close();
     }
   }
 
   async function openDatasetChip(datasetRecord) {
     try {
-      if (!datasetRecord) return;
+      if (!datasetRecord) {
+        close();
+        return;
+      }
 
       currentMode = 'dataset-chip';
+      Store.selectedId = datasetRecord.annotation_id || '';
       Store.setSelectedAnnotation(datasetRecord);
 
       _showActivePanel();
@@ -67,6 +74,7 @@ const EditPanel = (() => {
 
       const dsInput = document.getElementById('manual-dataset');
       const labelInput = document.getElementById('manual-label');
+
       if (dsInput) dsInput.value = datasetRecord.sdtm_dataset || '';
       if (labelInput) labelInput.value = datasetRecord.sdtm_label || '';
 
@@ -75,14 +83,15 @@ const EditPanel = (() => {
       _showVariableField(false);
       _setManualLabelsForDatasetMode();
       _updatePrimaryActionLabels();
-      await _updateColourSwatchAvailability(datasetRecord);
+      _setManualOverrideEnabled(true);
+      _setActionButtonsEnabled(false);
 
       if (typeof Canvas !== 'undefined' && Canvas.highlightSelected) {
         Canvas.highlightSelected();
       }
-
     } catch (e) {
       console.error('[editpanel] openDatasetChip error:', e);
+      close();
     }
   }
 
@@ -94,16 +103,18 @@ const EditPanel = (() => {
     const panelActive = document.getElementById('panel-active');
     const removeConfirm = document.getElementById('remove-confirm');
 
-    if (panelEmpty) panelEmpty.classList.remove('hidden');
     if (panelActive) panelActive.classList.add('hidden');
+    if (panelEmpty) panelEmpty.classList.remove('hidden');
     if (removeConfirm) removeConfirm.classList.add('hidden');
 
     _clearSuggestions();
     _clearManualFields();
     _setSuggestionsVisible(true);
     _showVariableField(true);
-    _resetManualLabels();
+    _setManualLabelsForVariableMode();
     _updatePrimaryActionLabels();
+    _setManualOverrideEnabled(true);
+    _setActionButtonsEnabled(true);
 
     if (typeof Canvas !== 'undefined' && Canvas.highlightSelected) {
       Canvas.highlightSelected();
@@ -152,9 +163,6 @@ const EditPanel = (() => {
     if (currentDataset) {
       currentDataset.textContent = rec.sdtm_dataset || 'No dataset selected';
     }
-
-    _setManualOverrideEnabled(true);
-    _setActionButtonsEnabled(true);
   }
 
   function _populateDatasetRecord(rec) {
@@ -166,16 +174,19 @@ const EditPanel = (() => {
     const statusDot = document.getElementById('panel-status-dot');
     const currentDataset = document.getElementById('current-dataset-colour-target');
 
-    if (rawVar) rawVar.textContent = rec.sdtm_dataset || 'DATASET';
+    const ds = rec.sdtm_dataset || 'DATASET';
+    const fullForm = rec.sdtm_label || '';
+
+    if (rawVar) rawVar.textContent = ds;
     if (component) component.textContent = 'DATASET_HEADER';
     if (formCode) formCode.textContent = rec.form_code || '—';
 
     if (mapping) {
-      mapping.textContent = rec.sdtm_dataset || 'Dataset';
+      mapping.textContent = fullForm ? `${ds}=${fullForm}` : ds;
     }
 
     if (mappingLabel) {
-      mappingLabel.textContent = rec.sdtm_label || 'Dataset annotation';
+      mappingLabel.textContent = 'Dataset annotation';
     }
 
     if (statusDot) {
@@ -183,11 +194,8 @@ const EditPanel = (() => {
     }
 
     if (currentDataset) {
-      currentDataset.textContent = rec.sdtm_dataset || 'No dataset selected';
+      currentDataset.textContent = ds;
     }
-
-    _setManualOverrideEnabled(true);
-    _setActionButtonsEnabled(false);
   }
 
   function _setManualOverrideEnabled(enabled) {
@@ -216,23 +224,23 @@ const EditPanel = (() => {
       el.style.pointerEvents = enabled ? '' : 'none';
     });
   }
+
   function _showVariableField(show) {
     const variableInput = document.getElementById('manual-variable');
     if (!variableInput) return;
 
-    const variableRow =
-      variableInput.closest('.manual-row') ||
-      variableInput.parentElement;
-
-    if (!variableRow) return;
+    const manualRow = variableInput.closest('.manual-row');
+    if (!manualRow) return;
 
     if (show) {
+      manualRow.classList.remove('dataset-mode');
       variableInput.disabled = false;
-      variableRow.classList.remove('hidden');
+      variableInput.style.display = '';
     } else {
-      variableInput.value = '';
+      manualRow.classList.add('dataset-mode');
       variableInput.disabled = true;
-      variableRow.classList.add('hidden');
+      variableInput.value = '';
+      variableInput.style.display = 'none';
     }
   }
 
@@ -240,16 +248,18 @@ const EditPanel = (() => {
     const list = document.getElementById('suggestions-list');
     if (!list) return;
 
-    const section =
-      list.closest('.section-card') ||
-      list.parentElement;
+    const dividerAbove = list.previousElementSibling;
+    const labelAbove = dividerAbove ? dividerAbove.previousElementSibling : null;
+    const dividerBelow = list.nextElementSibling;
 
-    if (!section) return;
+    if (labelAbove && labelAbove.classList.contains('section-label')) {
+      labelAbove.classList.toggle('hidden', !show);
+    }
+    list.classList.toggle('hidden', !show);
 
-    if (show) {
-      section.classList.remove('hidden');
-    } else {
-      section.classList.add('hidden');
+    // keep the lower divider hidden too when suggestions are hidden
+    if (dividerBelow && dividerBelow.classList.contains('divider')) {
+      dividerBelow.classList.toggle('hidden', !show);
     }
   }
 
@@ -257,42 +267,37 @@ const EditPanel = (() => {
     const datasetInput = document.getElementById('manual-dataset');
     const labelInput = document.getElementById('manual-label');
 
-    const datasetLabel = datasetInput
-      ? document.querySelector(`label[for="${datasetInput.id}"]`)
-      : null;
-    const labelLabel = labelInput
-      ? document.querySelector(`label[for="${labelInput.id}"]`)
-      : null;
+    if (datasetInput) {
+      datasetInput.placeholder = 'Dataset';
+      datasetInput.style.width = '100%';
+      datasetInput.style.flex = '1';
+    }
 
-    if (datasetLabel) datasetLabel.textContent = 'Dataset';
-    if (labelLabel) labelLabel.textContent = 'Label (optional)';
-
-    if (datasetInput) datasetInput.placeholder = 'Dataset';
-    if (labelInput) labelInput.placeholder = 'Label (optional)';
+    if (labelInput) {
+      labelInput.placeholder = 'Full Form';
+    }
   }
 
-  function _resetManualLabels() {
+  function _setManualLabelsForVariableMode() {
     const datasetInput = document.getElementById('manual-dataset');
     const variableInput = document.getElementById('manual-variable');
     const labelInput = document.getElementById('manual-label');
 
-    const datasetLabel = datasetInput
-      ? document.querySelector(`label[for="${datasetInput.id}"]`)
-      : null;
-    const variableLabel = variableInput
-      ? document.querySelector(`label[for="${variableInput.id}"]`)
-      : null;
-    const labelLabel = labelInput
-      ? document.querySelector(`label[for="${labelInput.id}"]`)
-      : null;
+    if (datasetInput) {
+      datasetInput.placeholder = 'Dataset';
+      datasetInput.style.width = '90px';
+      datasetInput.style.flex = '';
+      datasetInput.style.display = '';
+    }
 
-    if (datasetLabel) datasetLabel.textContent = 'Dataset';
-    if (variableLabel) variableLabel.textContent = 'Variable';
-    if (labelLabel) labelLabel.textContent = 'Label';
+    if (variableInput) {
+      variableInput.placeholder = 'Variable';
+      variableInput.style.display = '';
+    }
 
-    if (datasetInput) datasetInput.placeholder = 'e.g. CM';
-    if (variableInput) variableInput.placeholder = 'e.g. CMTRT';
-    if (labelInput) labelInput.placeholder = 'Optional SDTM label';
+    if (labelInput) {
+      labelInput.placeholder = 'Label (optional)';
+    }
   }
 
   function _updatePrimaryActionLabels() {
@@ -363,12 +368,10 @@ const EditPanel = (() => {
     }
   }
 
-  
-
   function _clearSuggestions() {
     const list = document.getElementById('suggestions-list');
     if (list) {
-      list.innerHTML = '';
+      list.innerHTML = '<div class="suggestions-loading muted small">Loading suggestions...</div>';
     }
   }
 
@@ -464,8 +467,8 @@ const EditPanel = (() => {
         if (!Store.selectedRecord) return;
 
         if (currentMode === 'dataset-chip') {
-          const ds = (document.getElementById('manual-dataset')?.value || '').trim().toUpperCase();
-          const label = (document.getElementById('manual-label')?.value || '').trim();
+          const ds = (document.getElementById('manual-dataset')?.value || '').trim();
+          const fullForm = (document.getElementById('manual-label')?.value || '').trim();
 
           if (!ds) {
             alert('Dataset is required.');
@@ -473,7 +476,7 @@ const EditPanel = (() => {
           }
 
           Store.selectedRecord.sdtm_dataset = ds;
-          Store.selectedRecord.sdtm_label = label;
+          Store.selectedRecord.sdtm_label = fullForm;
           _populateDatasetRecord(Store.selectedRecord);
           return;
         }
@@ -528,17 +531,15 @@ const EditPanel = (() => {
       swatch.addEventListener('click', async () => {
         if (!Store.selectedRecord) return;
 
-        // Dataset-chip mode: colour action applies directly to dataset in selected form
         if (currentMode === 'dataset-chip' && Store.selectedRecord._isDatasetChip) {
           const colourKey = swatch.dataset.colourKey;
           const dataset = Store.selectedRecord._datasetCode;
-          const formCode = Store.selectedRecord._formCode;
-
-          const beforeKey = `${formCode}::${dataset}`;
 
           let beforeColour = '';
           try {
             const prev = await window.pywebview.api.get_dataset_colours();
+            const formCode = String(Store.selectedRecord._formCode || '').toUpperCase();
+            const beforeKey = `${formCode}::${String(dataset).toUpperCase()}`;
             if (prev && prev.ok && prev.colours) {
               beforeColour = prev.colours[beforeKey] || '';
             }
@@ -553,14 +554,14 @@ const EditPanel = (() => {
           Store.pushHistory({
             type: 'dataset-colour',
             before: {
-              form_code: formCode,
-              dataset: dataset,
+              form_code: Store.selectedRecord._formCode,
+              dataset,
               colour: beforeColour,
               mode: 'dataset-chip',
             },
             after: {
-              form_code: formCode,
-              dataset: dataset,
+              form_code: Store.selectedRecord._formCode,
+              dataset,
               colour: colourKey,
               mode: 'dataset-chip',
             },
@@ -569,7 +570,7 @@ const EditPanel = (() => {
           await _refreshAfterUpdate({
             reopenPanel: true,
             reloadSuggestions: false,
-            keepManualBlank: true,
+            keepManualBlank: false,
             preserveSelection: true,
             reopenDatasetChip: true,
           });
@@ -577,18 +578,16 @@ const EditPanel = (() => {
           return;
         }
 
-        // Annotation mode: colour applies to selected annotation's dataset
         if (!Store.selectedRecord.sdtm_dataset) return;
 
         const colourKey = swatch.dataset.colourKey;
         const dataset = Store.selectedRecord.sdtm_dataset;
         const formCode = Store.selectedRecord.form_code || '';
 
-        const beforeKey = `${String(formCode).toUpperCase()}::${String(dataset).toUpperCase()}`;
-
         let beforeColour = '';
         try {
           const prev = await window.pywebview.api.get_dataset_colours();
+          const beforeKey = `${String(formCode).toUpperCase()}::${String(dataset).toUpperCase()}`;
           if (prev && prev.ok && prev.colours) {
             beforeColour = prev.colours[beforeKey] || '';
           }
@@ -604,14 +603,14 @@ const EditPanel = (() => {
           type: 'dataset-colour',
           before: {
             form_code: formCode,
-            dataset: dataset,
+            dataset,
             colour: beforeColour,
             mode: 'annotation',
             annotation_id: Store.selectedId,
           },
           after: {
             form_code: formCode,
-            dataset: dataset,
+            dataset,
             colour: colourKey,
             mode: 'annotation',
             annotation_id: Store.selectedId,
@@ -640,7 +639,7 @@ const EditPanel = (() => {
         e.preventDefault();
         await undo();
       } else if (
-        (e.key.toLowerCase() === 'y') ||
+        e.key.toLowerCase() === 'y' ||
         (e.key.toLowerCase() === 'z' && e.shiftKey)
       ) {
         e.preventDefault();
@@ -817,7 +816,6 @@ const EditPanel = (() => {
       Store.selectedId = selectedId;
     }
 
-    // Dataset-chip reopen path
     if (reopenPanel && reopenDatasetChip && selectedRecord?._isDatasetChip) {
       await openDatasetChip(selectedRecord);
       return;
@@ -842,8 +840,10 @@ const EditPanel = (() => {
 
       _setSuggestionsVisible(true);
       _showVariableField(true);
-      _resetManualLabels();
+      _setManualLabelsForVariableMode();
       _updatePrimaryActionLabels();
+      _setManualOverrideEnabled(true);
+      _setActionButtonsEnabled(true);
 
       if (reloadSuggestions) {
         await _loadSuggestions(selectedId);
@@ -852,6 +852,8 @@ const EditPanel = (() => {
       if (typeof Canvas !== 'undefined' && Canvas.highlightSelected) {
         Canvas.highlightSelected();
       }
+    } else if (!selectedRecord) {
+      close();
     } else if (typeof Canvas !== 'undefined' && Canvas.highlightSelected) {
       Canvas.highlightSelected();
     }
