@@ -156,49 +156,58 @@ const Canvas = (() => {
   function renderPage() {
     const emptyState = document.getElementById('empty-state');
     const pdfContainer = document.getElementById('pdf-container');
+    const pdfPageWrap = document.getElementById('pdf-page-wrap');
     const pdfImg = document.getElementById('pdf-img');
     const annotationLayer = document.getElementById('annotation-layer');
 
-    if (!Store.pageImage || !pdfImg || !pdfContainer || !annotationLayer) {
+    if (!Store.pageImage || !pdfImg || !pdfContainer || !annotationLayer || !pdfPageWrap) {
       showEmpty(true);
       return;
     }
 
     if (emptyState) emptyState.classList.add('hidden');
     pdfContainer.classList.remove('hidden');
+
     pdfImg.src = Store.pageImage;
+    pdfImg.onload = () => {
+      applyZoom();
+    };
+    pdfPageWrap.style.position = 'relative';
+    pdfPageWrap.style.display = 'inline-block';
+
     annotationLayer.innerHTML = '';
-  }
-function applyZoom() {
-    const pageWrap = document.getElementById('pdf-page-wrap');
-    const pdfImg = document.getElementById('pdf-img');
-    const toolbarZoom = document.getElementById('toolbar-zoom');
-
-    if (!pageWrap || !pdfImg) return;
-
-    const zoom = Number(Store.zoomPct || 100);
-    const scale = zoom / 100;
-
-    pageWrap.style.transformOrigin = 'top left';
-    pageWrap.style.transform = `scale(${scale})`;
-    pageWrap.style.width = `${100 / scale}%`;
-
-    if (toolbarZoom) {
-      toolbarZoom.textContent = `${zoom}%`;
-    }
   }
 
   function applyZoom() {
     const pageWrap = document.getElementById('pdf-page-wrap');
+    const pdfImg = document.getElementById('pdf-img');
+    const annotationLayer = document.getElementById('annotation-layer');
     const toolbarZoom = document.getElementById('toolbar-zoom');
 
-    if (!pageWrap) return;
+    if (!pageWrap || !pdfImg || !annotationLayer) return;
 
-    const zoom = Store.zoomPct || 100;
+    const zoom = Number(Store.zoomPct || 100);
     const scale = zoom / 100;
 
-    pageWrap.style.transform = `scale(${scale})`;
+    pageWrap.style.position = 'relative';
     pageWrap.style.transformOrigin = 'top left';
+    pageWrap.style.transform = `scale(${scale})`;
+
+    const naturalWidth = pdfImg.offsetWidth || pdfImg.clientWidth || 0;
+    const naturalHeight = pdfImg.offsetHeight || pdfImg.clientHeight || 0;
+
+    if (naturalWidth > 0) {
+      pageWrap.style.width = `${naturalWidth}px`;
+    }
+
+    if (naturalHeight > 0) {
+      pageWrap.style.height = `${naturalHeight}px`;
+    }
+
+    const pdfContainer = document.getElementById('pdf-container');
+    if (pdfContainer && naturalWidth > 0 && naturalHeight > 0) {
+      pdfContainer.style.height = `${naturalHeight * scale}px`;
+    }
 
     if (toolbarZoom) {
       toolbarZoom.textContent = `${zoom}%`;
