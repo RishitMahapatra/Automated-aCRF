@@ -76,12 +76,12 @@ const EditPanel = (() => {
       const labelInput = document.getElementById('manual-label');
 
       if (dsInput) dsInput.value = datasetRecord.sdtm_dataset || '';
-      if (labelInput) labelInput.value = datasetRecord.sdtm_label || '';
+      if (labelInput) labelInput.value = _extractFullForm(datasetRecord.sdtm_label || '');
 
       _setSuggestionsVisible(false);
       _clearSuggestions();
       _showVariableField(false);
-      _setManualLabelsForDatasetMode();
+      _setManualLabelsForDatasetMode(datasetRecord);
       _updatePrimaryActionLabels();
       _setManualOverrideEnabled(true);
       _setActionButtonsEnabled(false);
@@ -136,7 +136,6 @@ const EditPanel = (() => {
     const mapping = document.getElementById('panel-mapping');
     const mappingLabel = document.getElementById('panel-mapping-label');
     const statusDot = document.getElementById('panel-status-dot');
-    const currentDataset = document.getElementById('current-dataset-colour-target');
 
     if (rawVar) rawVar.textContent = rec.raw_variable || 'PENDING';
     if (component) component.textContent = rec.component || '—';
@@ -159,10 +158,6 @@ const EditPanel = (() => {
     if (statusDot) {
       statusDot.style.background = _statusColour(rec.status);
     }
-
-    if (currentDataset) {
-      currentDataset.textContent = rec.sdtm_dataset || 'No dataset selected';
-    }
   }
 
   function _populateDatasetRecord(rec) {
@@ -172,30 +167,36 @@ const EditPanel = (() => {
     const mapping = document.getElementById('panel-mapping');
     const mappingLabel = document.getElementById('panel-mapping-label');
     const statusDot = document.getElementById('panel-status-dot');
-    const currentDataset = document.getElementById('current-dataset-colour-target');
 
     const ds = rec.sdtm_dataset || 'DATASET';
-    const fullForm = rec.sdtm_label || '';
+    const fullForm = _extractFullForm(rec.sdtm_label || '');
 
     if (rawVar) rawVar.textContent = ds;
     if (component) component.textContent = 'DATASET_HEADER';
     if (formCode) formCode.textContent = rec.form_code || '—';
 
     if (mapping) {
-      mapping.textContent = fullForm ? `${ds}=${fullForm}` : ds;
+      mapping.textContent = ds;
     }
 
     if (mappingLabel) {
-      mappingLabel.textContent = 'Dataset annotation';
+      mappingLabel.textContent = fullForm || 'Dataset annotation';
     }
 
     if (statusDot) {
       statusDot.style.background = '#652BDA';
     }
+  }
 
-    if (currentDataset) {
-      currentDataset.textContent = ds;
+  function _extractFullForm(text) {
+    const val = String(text || '').trim();
+    if (!val) return '';
+
+    const eq = val.indexOf('=');
+    if (eq >= 0) {
+      return val.slice(eq + 1).trim();
     }
+    return val;
   }
 
   function _setManualOverrideEnabled(enabled) {
@@ -248,33 +249,33 @@ const EditPanel = (() => {
     const list = document.getElementById('suggestions-list');
     if (!list) return;
 
-    const dividerAbove = list.previousElementSibling;
-    const labelAbove = dividerAbove ? dividerAbove.previousElementSibling : null;
+    const suggestionsLabel = list.previousElementSibling;
     const dividerBelow = list.nextElementSibling;
 
-    if (labelAbove && labelAbove.classList.contains('section-label')) {
-      labelAbove.classList.toggle('hidden', !show);
+    if (suggestionsLabel && suggestionsLabel.classList.contains('section-label')) {
+      suggestionsLabel.classList.toggle('hidden', !show);
     }
+
     list.classList.toggle('hidden', !show);
 
-    // keep the lower divider hidden too when suggestions are hidden
     if (dividerBelow && dividerBelow.classList.contains('divider')) {
       dividerBelow.classList.toggle('hidden', !show);
     }
   }
 
-  function _setManualLabelsForDatasetMode() {
+  function _setManualLabelsForDatasetMode(datasetRecord = null) {
     const datasetInput = document.getElementById('manual-dataset');
     const labelInput = document.getElementById('manual-label');
 
     if (datasetInput) {
-      datasetInput.placeholder = 'Dataset';
+      datasetInput.placeholder = datasetRecord?.sdtm_dataset || 'CM';
       datasetInput.style.width = '100%';
       datasetInput.style.flex = '1';
     }
 
     if (labelInput) {
-      labelInput.placeholder = 'Full Form';
+      const ff = _extractFullForm(datasetRecord?.sdtm_label || '');
+      labelInput.placeholder = ff || 'Concomitant Medication';
     }
   }
 
@@ -371,7 +372,7 @@ const EditPanel = (() => {
   function _clearSuggestions() {
     const list = document.getElementById('suggestions-list');
     if (list) {
-      list.innerHTML = '<div class="suggestions-loading muted small">Loading suggestions...</div>';
+      list.innerHTML = '';
     }
   }
 
@@ -478,6 +479,7 @@ const EditPanel = (() => {
           Store.selectedRecord.sdtm_dataset = ds;
           Store.selectedRecord.sdtm_label = fullForm;
           _populateDatasetRecord(Store.selectedRecord);
+          _setManualLabelsForDatasetMode(Store.selectedRecord);
           return;
         }
 
