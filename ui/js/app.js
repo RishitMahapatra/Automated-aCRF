@@ -31,6 +31,7 @@ async function initApp() {
     _bindSidebarResizer();
     _bindEditPanelResizer();
     _bindZoomControls();
+    _bindCtrlWheelZoom();
     _bindExportButton();
     await _restoreStateIfAny();
 
@@ -277,6 +278,33 @@ function _bindZoomControls() {
         Canvas.applyZoom();
       });
     }
+  }
+
+
+function _bindCtrlWheelZoom() {
+    const canvasArea = document.getElementById('canvas-area');
+    if (!canvasArea) return;
+
+    canvasArea.addEventListener('wheel', (e) => {
+      if (!e.ctrlKey) return;
+
+      e.preventDefault();
+
+      if (!Store?.setZoom || !Canvas?.applyZoom) return;
+
+      const current = Number(Store.zoomPct || 100);
+      const step = Number(Store.zoomStep || 10);
+      const min = Number(Store.zoomMin || 50);
+      const max = Number(Store.zoomMax || 200);
+
+      if (e.deltaY < 0) {
+        Store.setZoom(Math.min(max, current + step));
+      } else if (e.deltaY > 0) {
+        Store.setZoom(Math.max(min, current - step));
+      }
+
+      Canvas.applyZoom();
+    }, { passive: false });
   }
 
 function _restoreThemePreference() {
