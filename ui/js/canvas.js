@@ -2,18 +2,6 @@
  * ui/js/canvas.js
  * ----------------
  * Live editor overlay rendering.
- *
- * Implements:
- * - clickable full component bands
- * - purple hover for components
- * - clickable annotation boxes
- * - clickable dataset chips
- * - header dataset chips
- * - dataset-specific colours per form
- * - consistent colours across pages of same form
- * - full annotation labels
- * - unmapped red styling
- * - selected annotation remains highlighted
  */
 
 const Canvas = (() => {
@@ -22,13 +10,13 @@ const Canvas = (() => {
   const DEFAULT_DPI = 150;
 
   const PALETTE = [
-    '#F0E442', // Yellow
-    '#56B4E9', // Sky Blue
-    '#009E73', // Bluish Green
-    '#D55E00', // Vermillion
-    '#0072B2', // Blue
-    '#E69F00', // Orange
-    '#CC79A7', // Reddish Purple
+    '#F0E442',
+    '#56B4E9',
+    '#009E73',
+    '#D55E00',
+    '#0072B2',
+    '#E69F00',
+    '#CC79A7',
   ];
 
   const COLOUR_KEY_TO_HEX = {
@@ -68,8 +56,20 @@ const Canvas = (() => {
   };
 
   let formColourRegistry = {};
-    let dragState = null;
-    let resizeState = null; //initial state 
+  let dragState = null;
+  let resizeState = null;
+
+  const annotationGeometryOverrides = {};
+  const datasetChipUiOverrides = {};
+
+  /**
+   * PUBLIC HELPER — Apply all local geometry and dataset-chip UI position
+   * overrides to any record fetched from the backend.
+   */
+  function applyLocalOverrides(rec) {
+    if (!rec) return rec;
+    return applyOverridesToRecord(rec);
+  }
 
   async function loadPage(pageNumber) {
     try {
@@ -97,7 +97,8 @@ const Canvas = (() => {
         console.error('[canvas] failed to load annotations:', annRes?.error);
         Store.setAnnotations([]);
       } else {
-        Store.setAnnotations(annRes.records || []);
+        const patched = (annRes.records || []).map(rec => applyOverridesToRecord(rec));
+        Store.setAnnotations(patched);
       }
 
       await _ensureColourRegistry();
@@ -155,6 +156,35 @@ const Canvas = (() => {
     }
   }
 
+  function applyOverridesToRecord(rec) {
+    if (!rec) return rec;
+
+    const next = { ...rec };
+
+    if (next.annotation_id && annotationGeometryOverrides[next.annotation_id]) {
+      const g = annotationGeometryOverrides[next.annotation_id];
+      next.x0_pts = g.x0_pts;
+      next.y0_pts = g.y0_pts;
+      next.x1_pts = g.x1_pts;
+      next.y1_pts = g.y1_pts;
+      // Mark that this record has a user-defined box position
+      next._hasGeometryOverride = true;
+    }
+
+    if (next._isDatasetChip) {
+      const key = `${String(next._formCode || '').toUpperCase()}::${String(next._datasetCode || '').toUpperCase()}`;
+      const ui = datasetChipUiOverrides[key];
+      if (ui) {
+        next._ui_left = ui._ui_left || '';
+        next._ui_top = ui._ui_top || '';
+        next._ui_width = ui._ui_width || '';
+        next._ui_height = ui._ui_height || '';
+      }
+    }
+
+    return next;
+  }
+
   function renderPage() {
     const emptyState = document.getElementById('empty-state');
     const pdfContainer = document.getElementById('pdf-container');
@@ -199,13 +229,8 @@ const Canvas = (() => {
     const naturalWidth = pdfImg.offsetWidth || pdfImg.clientWidth || 0;
     const naturalHeight = pdfImg.offsetHeight || pdfImg.clientHeight || 0;
 
-    if (naturalWidth > 0) {
-      pageWrap.style.width = `${naturalWidth}px`;
-    }
-
-    if (naturalHeight > 0) {
-      pageWrap.style.height = `${naturalHeight}px`;
-    }
+    if (naturalWidth > 0) pageWrap.style.width = `${naturalWidth}px`;
+    if (naturalHeight > 0) pageWrap.style.height = `${naturalHeight}px`;
 
     const pdfContainer = document.getElementById('pdf-container');
     if (pdfContainer && naturalWidth > 0 && naturalHeight > 0) {
@@ -283,7 +308,13 @@ const Canvas = (() => {
   }
 
   function _endAnnotationDrag() {
-    if (!dragState || resizeState) return;
+    if (!dragState) return;
+
+    if (dragState.isDatasetChip) {
+      _persistDatasetChipVisualState(dragState.rec, dragState.box);
+    } else {
+      _persistBoxGeometry(dragState.rec, dragState.box);
+    }
 
     dragState.box.style.cursor = 'grab';
     dragState.box.style.boxShadow = '';
@@ -304,6 +335,7 @@ const Canvas = (() => {
       _endAnnotationDrag();
     });
   }
+
   function _startAnnotationResize(e, box, rec) {
     const pageRect = _getPageRect();
     if (!pageRect) return;
@@ -360,6 +392,12 @@ const Canvas = (() => {
   function _endAnnotationResize() {
     if (!resizeState) return;
 
+    if (resizeState.isDatasetChip) {
+      _persistDatasetChipVisualState(resizeState.rec, resizeState.box);
+    } else {
+      _persistBoxGeometry(resizeState.rec, resizeState.box);
+    }
+
     resizeState.box.style.boxShadow = '';
     resizeState.box.style.zIndex = resizeState.isDatasetChip ? '12' : '10';
 
@@ -378,6 +416,93 @@ const Canvas = (() => {
       _endAnnotationResize();
     });
   }
+
+  function _persistBoxGeometry(rec, box) {
+    if (!rec || !box || !rec.annotation_id) return;
+
+    const leftPct = parseFloat(box.style.left) || 0;
+    const topPct = parseFloat(box.style.top) || 0;
+    const widthPct = parseFloat(box.style.width) || 0;
+    const heightPct = parseFloat(box.style.height) || 0;
+
+    const pageW = Number(Store.pageWidthPts || 0);
+    const pageH = Number(Store.pageHeightPts || 0);
+    if (!pageW || !pageH) return;
+
+    const x0 = (leftPct / 100) * pageW;
+    const y0 = (topPct / 100) * pageH;
+    const x1 = ((leftPct + widthPct) / 100) * pageW;
+    const y1 = ((topPct + heightPct) / 100) * pageH;
+
+    annotationGeometryOverrides[rec.annotation_id] = {
+      x0_pts: x0,
+      y0_pts: y0,
+      x1_pts: x1,
+      y1_pts: y1,
+    };
+
+    rec.x0_pts = x0;
+    rec.y0_pts = y0;
+    rec.x1_pts = x1;
+    rec.y1_pts = y1;
+    rec._hasGeometryOverride = true;
+
+    if (Array.isArray(Store.annotations)) {
+      const idx = Store.annotations.findIndex(r => r.annotation_id === rec.annotation_id);
+      if (idx >= 0) {
+        Store.annotations[idx] = applyOverridesToRecord({
+          ...Store.annotations[idx],
+          x0_pts: x0,
+          y0_pts: y0,
+          x1_pts: x1,
+          y1_pts: y1,
+        });
+      }
+    }
+
+    if (Store.selectedRecord && Store.selectedRecord.annotation_id === rec.annotation_id) {
+      Store.setSelectedAnnotation(applyOverridesToRecord({
+        ...Store.selectedRecord,
+        x0_pts: x0,
+        y0_pts: y0,
+        x1_pts: x1,
+        y1_pts: y1,
+      }));
+    }
+  }
+
+  function _persistDatasetChipVisualState(rec, box) {
+    if (!rec || !box || !rec._isDatasetChip) return;
+
+    const key = `${String(rec._formCode || '').toUpperCase()}::${String(rec._datasetCode || '').toUpperCase()}`;
+    const left = box.style.left || '50%';
+    const top = box.style.top || '1%';
+    const width = box.style.width || '';
+    const height = box.style.height || '';
+
+    datasetChipUiOverrides[key] = {
+      _ui_left: left,
+      _ui_top: top,
+      _ui_width: width,
+      _ui_height: height,
+    };
+
+    rec._ui_left = left;
+    rec._ui_top = top;
+    rec._ui_width = width;
+    rec._ui_height = height;
+
+    if (Store.selectedRecord && Store.selectedRecord.annotation_id === rec.annotation_id) {
+      Store.setSelectedAnnotation(applyOverridesToRecord({
+        ...Store.selectedRecord,
+        _ui_left: left,
+        _ui_top: top,
+        _ui_width: width,
+        _ui_height: height,
+      }));
+    }
+  }
+
   function renderComponentBands() {
     const annotationLayer = document.getElementById('annotation-layer');
     if (!annotationLayer) return;
@@ -597,7 +722,24 @@ const Canvas = (() => {
     return box;
   }
 
+  /**
+   * KEY FIX: This function now checks if the record has a geometry override
+   * (from drag/resize). If it does, it uses the stored x0/y0/x1/y1 directly
+   * instead of recalculating from the centring formula.
+   */
   function computeBoxGeometry(rec, pageW, pageH, label) {
+    // If this record has been dragged/resized, use the override coordinates directly
+    if (rec._hasGeometryOverride && rec.annotation_id && annotationGeometryOverrides[rec.annotation_id]) {
+      const g = annotationGeometryOverrides[rec.annotation_id];
+      return {
+        leftPct: ((g.x0_pts / pageW) * 100).toFixed(3),
+        topPct: ((g.y0_pts / pageH) * 100).toFixed(3),
+        widthPct: (((g.x1_pts - g.x0_pts) / pageW) * 100).toFixed(3),
+        heightPct: (((g.y1_pts - g.y0_pts) / pageH) * 100).toFixed(3),
+      };
+    }
+
+    // Default: compute centred position from component band y-coordinates
     const y0 = parseFloat(rec.y0_pts) || 0;
     const y1 = parseFloat(rec.y1_pts) || 0;
 
@@ -700,13 +842,14 @@ const Canvas = (() => {
 
       const label = DATASET_LABELS[ds] || `${ds}=${ds}`;
       const bg = formColourRegistry?.[formCode]?.[ds] || PALETTE[0];
+      const datasetRecord = applyOverridesToRecord(buildDatasetSelectionRecord(ds, formCode, records));
 
       chip.textContent = label;
       chip.title = label;
 
       chip.style.position = 'absolute';
-      chip.style.left = '50%';
-      chip.style.top = `${topPct}%`;
+      chip.style.left = datasetRecord._ui_left || '50%';
+      chip.style.top = datasetRecord._ui_top || `${topPct}%`;
       chip.style.background = bg;
       chip.style.border = '1.5px solid #000000';
       chip.style.color = '#000000';
@@ -720,10 +863,12 @@ const Canvas = (() => {
       chip.style.zIndex = '12';
       chip.style.boxShadow = '0 1px 3px rgba(0,0,0,0.18)';
 
+      if (datasetRecord._ui_width) chip.style.width = datasetRecord._ui_width;
+      if (datasetRecord._ui_height) chip.style.height = datasetRecord._ui_height;
+
       chip.addEventListener('click', async (e) => {
         e.stopPropagation();
 
-        const datasetRecord = buildDatasetSelectionRecord(ds, formCode, records);
         Store.setSelectedAnnotation(datasetRecord);
         highlightSelected();
 
@@ -743,8 +888,6 @@ const Canvas = (() => {
 
       chip.addEventListener('mousedown', (e) => {
         if (e.button !== 0) return;
-
-        const datasetRecord = buildDatasetSelectionRecord(ds, formCode, records);
         _startAnnotationDrag(e, chip, datasetRecord);
       });
 
@@ -779,6 +922,10 @@ const Canvas = (() => {
       _isDatasetChip: true,
       _datasetCode: dsUpper,
       _formCode: formUpper,
+      _ui_left: '',
+      _ui_top: '',
+      _ui_width: '',
+      _ui_height: '',
     };
   }
 
@@ -897,5 +1044,7 @@ const Canvas = (() => {
     showEmpty,
     highlightSelected,
     applyZoom,
+    applyOverridesToRecord,
+    applyLocalOverrides,
   };
 })();

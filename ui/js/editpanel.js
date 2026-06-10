@@ -33,7 +33,11 @@ const EditPanel = (() => {
         return;
       }
 
-      const rec = res.record;
+      // *** FIX: re-apply local geometry overrides to the fresh backend record ***
+      const rec = (typeof Canvas !== 'undefined' && Canvas.applyLocalOverrides)
+        ? Canvas.applyLocalOverrides(res.record)
+        : res.record;
+
       Store.setSelectedAnnotation(rec);
 
       _showActivePanel();
@@ -65,23 +69,29 @@ const EditPanel = (() => {
       }
 
       currentMode = 'dataset-chip';
-      Store.selectedId = datasetRecord.annotation_id || '';
-      Store.setSelectedAnnotation(datasetRecord);
+
+      // *** FIX: re-apply local UI overrides to the dataset chip record ***
+      const rec = (typeof Canvas !== 'undefined' && Canvas.applyLocalOverrides)
+        ? Canvas.applyLocalOverrides(datasetRecord)
+        : datasetRecord;
+
+      Store.selectedId = rec.annotation_id || '';
+      Store.setSelectedAnnotation(rec);
 
       _showActivePanel();
-      _populateDatasetRecord(datasetRecord);
+      _populateDatasetRecord(rec);
       _clearManualFields();
 
       const dsInput = document.getElementById('manual-dataset');
       const labelInput = document.getElementById('manual-label');
 
-      if (dsInput) dsInput.value = datasetRecord.sdtm_dataset || '';
-      if (labelInput) labelInput.value = _extractFullForm(datasetRecord.sdtm_label || '');
+      if (dsInput) dsInput.value = rec.sdtm_dataset || '';
+      if (labelInput) labelInput.value = _extractFullForm(rec.sdtm_label || '');
 
       _setSuggestionsVisible(false);
       _clearSuggestions();
       _showVariableField(false);
-      _setManualLabelsForDatasetMode(datasetRecord);
+      _setManualLabelsForDatasetMode(rec);
       _updatePrimaryActionLabels();
       _setManualOverrideEnabled(true);
       _setActionButtonsEnabled(false);
@@ -819,7 +829,11 @@ const EditPanel = (() => {
     }
 
     if (reopenPanel && reopenDatasetChip && selectedRecord?._isDatasetChip) {
-      await openDatasetChip(selectedRecord);
+      // *** FIX: Apply local overrides before reopening dataset chip panel ***
+      const patchedRecord = (typeof Canvas !== 'undefined' && Canvas.applyLocalOverrides)
+        ? Canvas.applyLocalOverrides(selectedRecord)
+        : selectedRecord;
+      await openDatasetChip(patchedRecord);
       return;
     }
 
@@ -827,8 +841,11 @@ const EditPanel = (() => {
     if (selectedId && !String(selectedId).startsWith('datasetchip::')) {
       const fresh = await window.pywebview.api.get_annotation(selectedId);
       if (fresh && fresh.ok && fresh.record) {
-        freshRecord = fresh.record;
-        Store.setSelectedAnnotation(fresh.record);
+        // *** FIX: Apply local geometry overrides to the fresh backend record ***
+        freshRecord = (typeof Canvas !== 'undefined' && Canvas.applyLocalOverrides)
+          ? Canvas.applyLocalOverrides(fresh.record)
+          : fresh.record;
+        Store.setSelectedAnnotation(freshRecord);
       }
     }
 
