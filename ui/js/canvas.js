@@ -59,6 +59,10 @@ const Canvas = (() => {
   let dragState = null;
   let resizeState = null;
 
+  // Pointer-based zoom origin (0-1 fraction of page dimensions)
+  let zoomOriginX = 0;
+  let zoomOriginY = 0;
+
   const annotationGeometryOverrides = {};
   const datasetChipUiOverrides = {};
 
@@ -167,7 +171,6 @@ const Canvas = (() => {
       next.y0_pts = g.y0_pts;
       next.x1_pts = g.x1_pts;
       next.y1_pts = g.y1_pts;
-      // Mark that this record has a user-defined box position
       next._hasGeometryOverride = true;
     }
 
@@ -222,12 +225,16 @@ const Canvas = (() => {
     const zoom = Number(Store.zoomPct || 100);
     const scale = zoom / 100;
 
-    pageWrap.style.position = 'relative';
-    pageWrap.style.transformOrigin = 'top left';
-    pageWrap.style.transform = `scale(${scale})`;
-
     const naturalWidth = pdfImg.offsetWidth || pdfImg.clientWidth || 0;
     const naturalHeight = pdfImg.offsetHeight || pdfImg.clientHeight || 0;
+
+    // Use pointer-based transform origin for zoom toward cursor
+    const originX = (zoomOriginX * 100).toFixed(2);
+    const originY = (zoomOriginY * 100).toFixed(2);
+
+    pageWrap.style.position = 'relative';
+    pageWrap.style.transformOrigin = `${originX}% ${originY}%`;
+    pageWrap.style.transform = `scale(${scale})`;
 
     if (naturalWidth > 0) pageWrap.style.width = `${naturalWidth}px`;
     if (naturalHeight > 0) pageWrap.style.height = `${naturalHeight}px`;
@@ -254,6 +261,49 @@ const Canvas = (() => {
     const pageWrap = _getPageWrap();
     if (!pageWrap) return null;
     return pageWrap.getBoundingClientRect();
+  }
+
+  /**
+   * Ctrl+Scroll wheel zoom toward mouse pointer position.
+   */
+  function _bindScrollZoom() {
+    const canvasArea = document.getElementById('canvas-area');
+    if (!canvasArea) return;
+
+    canvasArea.addEventListener('wheel', (e) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const pageWrap = document.getElementById('pdf-page-wrap');
+      if (!pageWrap) return;
+
+      const pageRect = pageWrap.getBoundingClientRect();
+      const currentZoom = Number(Store.zoomPct || 100) / 100;
+
+      // Get pointer position relative to the unscaled page content
+      const pointerXInPage = (e.clientX - pageRect.left) / currentZoom;
+      const pointerYInPage = (e.clientY - pageRect.top) / currentZoom;
+
+      const naturalWidth = pageWrap.offsetWidth || 1;
+      const naturalHeight = pageWrap.offsetHeight || 1;
+
+      // Set zoom origin as fraction (0-1) of the page dimensions
+      zoomOriginX = _clamp(pointerXInPage / naturalWidth, 0, 1);
+      zoomOriginY = _clamp(pointerYInPage / naturalHeight, 0, 1);
+
+      // Determine zoom direction
+      const delta = e.deltaY > 0 ? -Store.zoomStep : Store.zoomStep;
+      const newZoom = _clamp(
+        (Store.zoomPct || 100) + delta,
+        Store.zoomMin,
+        Store.zoomMax
+      );
+
+      Store.setZoom(newZoom);
+      applyZoom();
+    }, { passive: false });
   }
 
   function _startAnnotationDrag(e, box, rec) {
@@ -722,13 +772,7 @@ const Canvas = (() => {
     return box;
   }
 
-  /**
-   * KEY FIX: This function now checks if the record has a geometry override
-   * (from drag/resize). If it does, it uses the stored x0/y0/x1/y1 directly
-   * instead of recalculating from the centring formula.
-   */
   function computeBoxGeometry(rec, pageW, pageH, label) {
-    // If this record has been dragged/resized, use the override coordinates directly
     if (rec._hasGeometryOverride && rec.annotation_id && annotationGeometryOverrides[rec.annotation_id]) {
       const g = annotationGeometryOverrides[rec.annotation_id];
       return {
@@ -739,7 +783,6 @@ const Canvas = (() => {
       };
     }
 
-    // Default: compute centred position from component band y-coordinates
     const y0 = parseFloat(rec.y0_pts) || 0;
     const y1 = parseFloat(rec.y1_pts) || 0;
 
@@ -1010,6 +1053,7 @@ const Canvas = (() => {
 
     _bindGlobalAnnotationDragEvents();
     _bindGlobalAnnotationResizeEvents();
+    _bindScrollZoom();
 
     if (annotationLayer) {
       annotationLayer.addEventListener('click', (e) => {
