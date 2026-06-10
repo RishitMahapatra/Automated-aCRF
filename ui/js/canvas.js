@@ -68,6 +68,7 @@ const Canvas = (() => {
   };
 
   let formColourRegistry = {};
+  let dragState = null; 
 
   async function loadPage(pageNumber) {
     try {
@@ -213,6 +214,95 @@ const Canvas = (() => {
       toolbarZoom.textContent = `${zoom}%`;
     }
   }
+  ///adding the drag state function
+  function _clamp(val, min, max) {
+    return Math.max(min, Math.min(max, val));
+  }
+
+  function _getPageWrap() {
+    return document.getElementById('pdf-page-wrap');
+  }
+
+  function _getPageRect() {
+    const pageWrap = _getPageWrap();
+    if (!pageWrap) return null;
+    return pageWrap.getBoundingClientRect();
+  }
+
+  function _startAnnotationDrag(e, box, rec) {
+    const pageRect = _getPageRect();
+    if (!pageRect) return;
+
+    const boxRect = box.getBoundingClientRect();
+
+    dragState = {
+      box,
+      rec,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      offsetX: e.clientX - boxRect.left,
+      offsetY: e.clientY - boxRect.top,
+      boxWidthPx: boxRect.width,
+      boxHeightPx: boxRect.height,
+      moved: false,
+    };
+
+    box.style.cursor = 'grabbing';
+    box.style.boxShadow = '0 0 0 2px rgba(255,255,255,0.45), 0 8px 20px rgba(0,0,0,0.35)';
+    box.style.zIndex = '50';
+    document.body.style.cursor="grabbing"
+    document.body.style.userSelect = 'none';
+    
+  }
+
+  function _moveAnnotationDrag(e) {
+    if (!dragState) return;
+
+    const pageRect = _getPageRect();
+    if (!pageRect) return;
+
+    let newLeft = e.clientX - pageRect.left - dragState.offsetX;
+    let newTop = e.clientY - pageRect.top - dragState.offsetY;
+
+    newLeft = _clamp(newLeft, 0, pageRect.width - dragState.boxWidthPx);
+    newTop = _clamp(newTop, 0, pageRect.height - dragState.boxHeightPx);
+
+    const leftPct = (newLeft / pageRect.width) * 100;
+    const topPct = (newTop / pageRect.height) * 100;
+
+    dragState.box.style.left = `${leftPct}%`;
+    dragState.box.style.top = `${topPct}%`;
+
+    const dx = Math.abs(e.clientX - dragState.startClientX);
+    const dy = Math.abs(e.clientY - dragState.startClientY);
+    if (dx > 3 || dy > 3) {
+      dragState.moved = true;
+    }
+  }
+
+  function _endAnnotationDrag() {
+    if (!dragState) return;
+
+    dragState.box.style.cursor = 'grab';
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    dragState.box.style.boxShadow = '';
+    dragState.box.style.zIndex = '10';
+
+    dragState = null;
+  }
+
+  function _bindGlobalAnnotationDragEvents() {
+    document.addEventListener('mousemove', (e) => {
+      _moveAnnotationDrag(e);
+    });
+
+    document.addEventListener('mouseup', () => {
+      _endAnnotationDrag();
+    });
+  }
+
+
 
   function renderComponentBands() {
     const annotationLayer = document.getElementById('annotation-layer');
@@ -367,6 +457,11 @@ const Canvas = (() => {
       if (typeof EditPanel !== 'undefined' && EditPanel.open) {
         await EditPanel.open(rec.annotation_id);
       }
+    });
+
+    box.addEventListener('mousedown', (e) => { //this is for the drag event behaviour 
+      if (e.button !== 0) return;
+      _startAnnotationDrag(e, box, rec);
     });
 
     return box;
@@ -623,6 +718,7 @@ const Canvas = (() => {
   function init() {
     const annotationLayer = document.getElementById('annotation-layer');
     const pdfImg = document.getElementById('pdf-img');
+    _bindGlobalAnnotationDragEvents();
 
     if (annotationLayer) {
       annotationLayer.addEventListener('click', (e) => {
