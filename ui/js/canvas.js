@@ -68,7 +68,8 @@ const Canvas = (() => {
   };
 
   let formColourRegistry = {};
-  let dragState = null;
+    let dragState = null;
+    let resizeState = null; //initial state 
 
   async function loadPage(pageNumber) {
     try {
@@ -257,7 +258,7 @@ const Canvas = (() => {
   }
 
   function _moveAnnotationDrag(e) {
-    if (!dragState) return;
+    if (!dragState || resizeState) return;
 
     const pageRect = _getPageRect();
     if (!pageRect) return;
@@ -282,7 +283,7 @@ const Canvas = (() => {
   }
 
   function _endAnnotationDrag() {
-    if (!dragState) return;
+    if (!dragState || resizeState) return;
 
     dragState.box.style.cursor = 'grab';
     dragState.box.style.boxShadow = '';
@@ -303,7 +304,80 @@ const Canvas = (() => {
       _endAnnotationDrag();
     });
   }
+  function _startAnnotationResize(e, box, rec) {
+    const pageRect = _getPageRect();
+    if (!pageRect) return;
 
+    const boxRect = box.getBoundingClientRect();
+
+    resizeState = {
+      box,
+      rec,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startWidthPx: boxRect.width,
+      startHeightPx: boxRect.height,
+      startLeftPx: boxRect.left - pageRect.left,
+      startTopPx: boxRect.top - pageRect.top,
+      isDatasetChip: !!rec._isDatasetChip,
+    };
+
+    box.style.boxShadow = '0 0 0 2px rgba(255,255,255,0.45), 0 8px 20px rgba(0,0,0,0.35)';
+    box.style.zIndex = '50';
+    document.body.style.cursor = 'nwse-resize';
+    document.body.style.userSelect = 'none';
+  }
+
+  function _moveAnnotationResize(e) {
+    if (!resizeState) return;
+
+    const pageRect = _getPageRect();
+    if (!pageRect) return;
+
+    let nextWidthPx = resizeState.startWidthPx + (e.clientX - resizeState.startClientX);
+    let nextHeightPx = resizeState.startHeightPx + (e.clientY - resizeState.startClientY);
+
+    const minWidthPx = 28;
+    const minHeightPx = 14;
+
+    const maxWidthPx = pageRect.width - resizeState.startLeftPx;
+    const maxHeightPx = pageRect.height - resizeState.startTopPx;
+
+    nextWidthPx = _clamp(nextWidthPx, minWidthPx, maxWidthPx);
+    nextHeightPx = _clamp(nextHeightPx, minHeightPx, maxHeightPx);
+
+    const leftPct = (resizeState.startLeftPx / pageRect.width) * 100;
+    const topPct = (resizeState.startTopPx / pageRect.height) * 100;
+    const widthPct = (nextWidthPx / pageRect.width) * 100;
+    const heightPct = (nextHeightPx / pageRect.height) * 100;
+
+    resizeState.box.style.left = `${leftPct}%`;
+    resizeState.box.style.top = `${topPct}%`;
+    resizeState.box.style.width = `${widthPct}%`;
+    resizeState.box.style.height = `${heightPct}%`;
+  }
+
+  function _endAnnotationResize() {
+    if (!resizeState) return;
+
+    resizeState.box.style.boxShadow = '';
+    resizeState.box.style.zIndex = resizeState.isDatasetChip ? '12' : '10';
+
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+
+    resizeState = null;
+  }
+
+  function _bindGlobalAnnotationResizeEvents() {
+    document.addEventListener('mousemove', (e) => {
+      _moveAnnotationResize(e);
+    });
+
+    document.addEventListener('mouseup', () => {
+      _endAnnotationResize();
+    });
+  }
   function renderComponentBands() {
     const annotationLayer = document.getElementById('annotation-layer');
     if (!annotationLayer) return;
@@ -448,6 +522,62 @@ const Canvas = (() => {
     labelSpan.style.textOverflow = 'clip';
     labelSpan.style.pointerEvents = 'none';
     box.appendChild(labelSpan);
+
+    const resizeHandle = document.createElement('div');
+    resizeHandle.className = 'ann-resize-handle';
+    resizeHandle.innerHTML = '↘';
+
+    resizeHandle.style.position = 'absolute';
+    resizeHandle.style.right = '2px';
+    resizeHandle.style.bottom = '0px';
+    resizeHandle.style.width = '12px';
+    resizeHandle.style.height = '12px';
+    resizeHandle.style.display = 'flex';
+    resizeHandle.style.alignItems = 'center';
+    resizeHandle.style.justifyContent = 'center';
+    resizeHandle.style.fontSize = '10px';
+    resizeHandle.style.lineHeight = '10px';
+    resizeHandle.style.fontWeight = '700';
+    resizeHandle.style.color = '#B388FF';
+    resizeHandle.style.background = 'rgba(101, 43, 218, 0.12)';
+    resizeHandle.style.border = '1px solid rgba(179, 136, 255, 0.45)';
+    resizeHandle.style.borderRadius = '3px';
+    resizeHandle.style.cursor = 'nwse-resize';
+    resizeHandle.style.zIndex = '3';
+    resizeHandle.style.boxSizing = 'border-box';
+    resizeHandle.style.opacity = '0';
+    resizeHandle.style.pointerEvents = 'auto';
+    resizeHandle.style.transition = 'opacity 0.12s ease, background 0.12s ease, border-color 0.12s ease, transform 0.12s ease';
+
+    resizeHandle.addEventListener('mouseenter', () => {
+      resizeHandle.style.background = 'rgba(101, 43, 218, 0.22)';
+      resizeHandle.style.borderColor = 'rgba(179, 136, 255, 0.75)';
+      resizeHandle.style.transform = 'scale(1.04)';
+    });
+
+    resizeHandle.addEventListener('mouseleave', () => {
+      resizeHandle.style.background = 'rgba(101, 43, 218, 0.12)';
+      resizeHandle.style.borderColor = 'rgba(179, 136, 255, 0.45)';
+      resizeHandle.style.transform = 'scale(1)';
+    });
+
+    resizeHandle.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      e.preventDefault();
+      _startAnnotationResize(e, box, rec);
+    });
+
+    box.addEventListener('mouseenter', () => {
+      resizeHandle.style.opacity = '1';
+    });
+
+    box.addEventListener('mouseleave', () => {
+      if (box.dataset.selected === 'true') return;
+      resizeHandle.style.opacity = '0';
+    });
+
+    box.appendChild(resizeHandle);
 
     box.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -660,6 +790,12 @@ const Canvas = (() => {
     document.querySelectorAll('.ann-box').forEach(box => {
       const selected = box.dataset.id === Store.selectedId;
       box.classList.toggle('selected', selected);
+      box.dataset.selected = selected ? 'true' : 'false';
+
+      const handle = box.querySelector('.ann-resize-handle');
+      if (handle) {
+        handle.style.opacity = selected ? '1' : '0';
+      }
     });
 
     document.querySelectorAll('.component-band').forEach(band => {
@@ -726,6 +862,7 @@ const Canvas = (() => {
     const pdfImg = document.getElementById('pdf-img');
 
     _bindGlobalAnnotationDragEvents();
+    _bindGlobalAnnotationResizeEvents();
 
     if (annotationLayer) {
       annotationLayer.addEventListener('click', (e) => {
