@@ -68,7 +68,7 @@ const Canvas = (() => {
   };
 
   let formColourRegistry = {};
-  let dragState = null; 
+  let dragState = null;
 
   async function loadPage(pageNumber) {
     try {
@@ -173,6 +173,7 @@ const Canvas = (() => {
     pdfImg.onload = () => {
       applyZoom();
     };
+
     pdfPageWrap.style.position = 'relative';
     pdfPageWrap.style.display = 'inline-block';
 
@@ -214,7 +215,7 @@ const Canvas = (() => {
       toolbarZoom.textContent = `${zoom}%`;
     }
   }
-  ///adding the drag state function
+
   function _clamp(val, min, max) {
     return Math.max(min, Math.min(max, val));
   }
@@ -245,14 +246,14 @@ const Canvas = (() => {
       boxWidthPx: boxRect.width,
       boxHeightPx: boxRect.height,
       moved: false,
+      isDatasetChip: !!rec._isDatasetChip,
     };
 
     box.style.cursor = 'grabbing';
+    document.body.style.cursor = 'grabbing';
+    document.body.style.userSelect = 'none';
     box.style.boxShadow = '0 0 0 2px rgba(255,255,255,0.45), 0 8px 20px rgba(0,0,0,0.35)';
     box.style.zIndex = '50';
-    document.body.style.cursor="grabbing"
-    document.body.style.userSelect = 'none';
-    
   }
 
   function _moveAnnotationDrag(e) {
@@ -284,10 +285,11 @@ const Canvas = (() => {
     if (!dragState) return;
 
     dragState.box.style.cursor = 'grab';
+    dragState.box.style.boxShadow = '';
+    dragState.box.style.zIndex = dragState.isDatasetChip ? '12' : '10';
+
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
-    dragState.box.style.boxShadow = '';
-    dragState.box.style.zIndex = '10';
 
     dragState = null;
   }
@@ -301,8 +303,6 @@ const Canvas = (() => {
       _endAnnotationDrag();
     });
   }
-
-
 
   function renderComponentBands() {
     const annotationLayer = document.getElementById('annotation-layer');
@@ -434,7 +434,7 @@ const Canvas = (() => {
     box.style.width = `${geom.widthPct}%`;
     box.style.height = `${geom.heightPct}%`;
     box.style.pointerEvents = 'all';
-    box.style.cursor = 'pointer';
+    box.style.cursor = 'grab';
     box.style.zIndex = '10';
 
     applyBoxVisualStyle(box, rec);
@@ -459,7 +459,7 @@ const Canvas = (() => {
       }
     });
 
-    box.addEventListener('mousedown', (e) => { //this is for the drag event behaviour 
+    box.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return;
       _startAnnotationDrag(e, box, rec);
     });
@@ -585,7 +585,7 @@ const Canvas = (() => {
       chip.style.padding = '2px 6px';
       chip.style.borderRadius = '2px';
       chip.style.pointerEvents = 'all';
-      chip.style.cursor = 'pointer';
+      chip.style.cursor = 'grab';
       chip.style.whiteSpace = 'nowrap';
       chip.style.zIndex = '12';
       chip.style.boxShadow = '0 1px 3px rgba(0,0,0,0.18)';
@@ -600,7 +600,6 @@ const Canvas = (() => {
         if (typeof EditPanel !== 'undefined' && EditPanel.openDatasetChip) {
           await EditPanel.openDatasetChip(datasetRecord);
         } else if (typeof EditPanel !== 'undefined' && EditPanel.open) {
-          // fallback: open the first annotation record for that dataset
           const fallback = records.find(r =>
             (r.form_code || '').toUpperCase() === formCode &&
             (r.sdtm_dataset || '').toUpperCase() === ds &&
@@ -610,6 +609,13 @@ const Canvas = (() => {
             await EditPanel.open(fallback.annotation_id);
           }
         }
+      });
+
+      chip.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+
+        const datasetRecord = buildDatasetSelectionRecord(ds, formCode, records);
+        _startAnnotationDrag(e, chip, datasetRecord);
       });
 
       annotationLayer.appendChild(chip);
@@ -696,7 +702,7 @@ const Canvas = (() => {
 
     const toolbarZoom = document.getElementById('toolbar-zoom');
     if (toolbarZoom) {
-      toolbarZoom.textContent = '100%';
+      toolbarZoom.textContent = `${Store.zoomPct || 100}%`;
     }
   }
 
@@ -718,6 +724,7 @@ const Canvas = (() => {
   function init() {
     const annotationLayer = document.getElementById('annotation-layer');
     const pdfImg = document.getElementById('pdf-img');
+
     _bindGlobalAnnotationDragEvents();
 
     if (annotationLayer) {
@@ -745,7 +752,7 @@ const Canvas = (() => {
     }
   }
 
- return {
+  return {
     init,
     loadPage,
     renderPage,
