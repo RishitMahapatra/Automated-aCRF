@@ -65,6 +65,118 @@ const Canvas = (() => {
 
   const annotationGeometryOverrides = {};
   const datasetChipUiOverrides = {};
+  // Geometry undo/redo stacks (max 5 actions)
+const GEOMETRY_HISTORY_LIMIT = 5;
+const geometryUndoStack = [];
+const geometryRedoStack = [];
+
+function _pushGeometryUndo(action) {
+  geometryUndoStack.push(action);
+  if (geometryUndoStack.length > GEOMETRY_HISTORY_LIMIT) {
+    geometryUndoStack.shift();
+  }
+  geometryRedoStack.length = 0;
+}
+
+function undoGeometry() {
+  if (!geometryUndoStack.length) return;
+  const action = geometryUndoStack.pop();
+  geometryRedoStack.push(action);
+  if (geometryRedoStack.length > GEOMETRY_HISTORY_LIMIT) {
+    geometryRedoStack.shift();
+  }
+
+  if (action.type === 'annotation') {
+    if (action.before) {
+      annotationGeometryOverrides[action.id] = { ...action.before };
+    } else {
+      delete annotationGeometryOverrides[action.id];
+    }
+  } else if (action.type === 'dataset-chip') {
+    if (action.before) {
+      datasetChipUiOverrides[action.chipKey] = { ...action.before };
+    } else {
+      delete datasetChipUiOverrides[action.chipKey];
+    }
+  }
+  _refreshAnnotationLayer();
+}
+
+function redoGeometry() {
+  if (!geometryRedoStack.length) return;
+  const action = geometryRedoStack.pop();
+  geometryUndoStack.push(action);
+  if (geometryUndoStack.length > GEOMETRY_HISTORY_LIMIT) {
+    geometryUndoStack.shift();
+  }
+
+  if (action.type === 'annotation') {
+    if (action.after) {
+      annotationGeometryOverrides[action.id] = { ...action.after };
+    } else {
+      delete annotationGeometryOverrides[action.id];
+    }
+  } else if (action.type === 'dataset-chip') {
+    if (action.after) {
+      datasetChipUiOverrides[action.chipKey] = { ...action.after };
+    } else {
+      delete datasetChipUiOverrides[action.chipKey];
+    }
+  }
+  _refreshAnnotationLayer();
+}
+
+function _refreshAnnotationLayer() {
+  if (Array.isArray(Store.annotations)) {
+    const patched = Store.annotations.map(rec => {
+      const base = { ...rec };
+      delete base._hasGeometryOverride;
+      return applyOverridesToRecord(base);
+    });
+    Store.setAnnotations(patched);
+  }
+
+  const annotationLayer = document.getElementById('annotation-layer');
+  if (annotationLayer) {
+    annotationLayer.innerHTML = '';
+    renderComponentBands();
+    renderAnnotations();
+    renderHeaderChips();
+  }
+
+  if (Store.selectedRecord) {
+    Store.setSelectedAnnotation(applyOverridesToRecord({ ...Store.selectedRecord }));
+  }
+  highlightSelected();
+}
+
+function _bindGeometryUndoRedo() {
+  document.addEventListener('keydown', (e) => {
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+    const isMac = navigator.platform.toUpperCase().includes('MAC');
+    const ctrl = isMac ? e.metaKey : e.ctrlKey;
+    if (!ctrl) return;
+
+    if (e.key.toLowerCase() === 'z' && !e.shiftKey) {
+      if (geometryUndoStack.length > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        undoGeometry();
+      }
+    } else if (
+      e.key.toLowerCase() === 'y' ||
+      (e.key.toLowerCase() === 'z' && e.shiftKey)
+    ) {
+      if (geometryRedoStack.length > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        redoGeometry();
+      }
+    }
+  }, true);
+}
 
   /**
    * PUBLIC HELPER — Apply all local geometry and dataset-chip UI position
@@ -323,7 +435,21 @@ const Canvas = (() => {
       boxHeightPx: boxRect.height,
       moved: false,
       isDatasetChip: !!rec._isDatasetChip,
+      // ADD THESE:
+    beforeGeometry: rec.annotation_id && annotationGeometryOverrides[rec.annotation_id]
+      ? { ...annotationGeometryOverrides[rec.annotation_id] }
+      : null,
+    beforeChipUi: null,
+    chipKey: null,
     };
+    // Capture dataset chip state before drag
+    if (rec._isDatasetChip) {
+      const key = `${String(rec._formCode || '').toUpperCase()}::${String(rec._datasetCode || '').toUpperCase()}`;
+      dragState.chipKey = key;
+      dragState.beforeChipUi = datasetChipUiOverrides[key]
+        ? { ...datasetChipUiOverrides[key] }
+        : null;
+    }
 
     box.style.cursor = 'grabbing';
     document.body.style.cursor = 'grabbing';
@@ -360,10 +486,29 @@ const Canvas = (() => {
   function _endAnnotationDrag() {
     if (!dragState) return;
 
-    if (dragState.isDatasetChip) {
-      _persistDatasetChipVisualState(dragState.rec, dragState.box);
-    } else {
-      _persistBoxGeometry(dragState.rec, dragState.box);
+    if (dragState.moved) {
+      if (dragState.isDatasetChip) {
+        _persistDatasetChipVisualState(dragState.rec, dragState.box);
+        _pushGeometryUndo({
+          type: 'dataset-chip',
+          chipKey: dragState.chipKey,
+          before: dragState.beforeChipUi,
+          after: datasetChipUiOverrides[dragState.chipKey]
+            ? { ...datasetChipUiOverrides[dragState.chipKey] }
+            : null,
+        });
+      } else {
+        _persistBoxGeometry(dragState.rec, dragState.box);
+        const id = dragState.rec.annotation_id;
+        _pushGeometryUndo({
+          type: 'annotation',
+          id: id,
+          before: dragState.beforeGeometry,
+          after: annotationGeometryOverrides[id]
+            ? { ...annotationGeometryOverrides[id] }
+            : null,
+        });
+      }
     }
 
     dragState.box.style.cursor = 'grab';
@@ -374,7 +519,7 @@ const Canvas = (() => {
     document.body.style.userSelect = '';
 
     dragState = null;
-  }
+  } 
 
   function _bindGlobalAnnotationDragEvents() {
     document.addEventListener('mousemove', (e) => {
@@ -402,7 +547,20 @@ const Canvas = (() => {
       startLeftPx: boxRect.left - pageRect.left,
       startTopPx: boxRect.top - pageRect.top,
       isDatasetChip: !!rec._isDatasetChip,
+      // ADD THESE:
+    beforeGeometry: rec.annotation_id && annotationGeometryOverrides[rec.annotation_id]
+      ? { ...annotationGeometryOverrides[rec.annotation_id] }
+      : null,
+    beforeChipUi: null,
+    chipKey: null,
     };
+    if (rec._isDatasetChip) {
+      const key = `${String(rec._formCode || '').toUpperCase()}::${String(rec._datasetCode || '').toUpperCase()}`;
+      resizeState.chipKey = key;
+      resizeState.beforeChipUi = datasetChipUiOverrides[key]
+        ? { ...datasetChipUiOverrides[key] }
+        : null;
+    }
 
     box.style.boxShadow = '0 0 0 2px rgba(255,255,255,0.45), 0 8px 20px rgba(0,0,0,0.35)';
     box.style.zIndex = '50';
@@ -439,13 +597,30 @@ const Canvas = (() => {
     resizeState.box.style.height = `${heightPct}%`;
   }
 
-  function _endAnnotationResize() {
+ function _endAnnotationResize() {
     if (!resizeState) return;
 
     if (resizeState.isDatasetChip) {
       _persistDatasetChipVisualState(resizeState.rec, resizeState.box);
+      _pushGeometryUndo({
+        type: 'dataset-chip',
+        chipKey: resizeState.chipKey,
+        before: resizeState.beforeChipUi,
+        after: datasetChipUiOverrides[resizeState.chipKey]
+          ? { ...datasetChipUiOverrides[resizeState.chipKey] }
+          : null,
+      });
     } else {
       _persistBoxGeometry(resizeState.rec, resizeState.box);
+      const id = resizeState.rec.annotation_id;
+      _pushGeometryUndo({
+        type: 'annotation',
+        id: id,
+        before: resizeState.beforeGeometry,
+        after: annotationGeometryOverrides[id]
+          ? { ...annotationGeometryOverrides[id] }
+          : null,
+      });
     }
 
     resizeState.box.style.boxShadow = '';
@@ -456,7 +631,6 @@ const Canvas = (() => {
 
     resizeState = null;
   }
-
   function _bindGlobalAnnotationResizeEvents() {
     document.addEventListener('mousemove', (e) => {
       _moveAnnotationResize(e);
@@ -1058,6 +1232,7 @@ const Canvas = (() => {
     _bindGlobalAnnotationDragEvents();
     _bindGlobalAnnotationResizeEvents();
     _bindScrollZoom();
+    _bindGeometryUndoRedo();
 
     if (annotationLayer) {
       annotationLayer.addEventListener('click', (e) => {
@@ -1094,5 +1269,7 @@ const Canvas = (() => {
     applyZoom,
     applyOverridesToRecord,
     applyLocalOverrides,
+    undoGeometry,
+    redoGeometry,
   };
 })();
