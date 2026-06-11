@@ -685,6 +685,10 @@ const Canvas = (() => {
     box.style.pointerEvents = 'all';
     box.style.cursor = 'grab';
     box.style.zIndex = '10';
+    box.style.paddingLeft = '7px';
+    box.style.paddingRight = '7px';
+    box.style.display = 'flex';
+    box.style.alignItems = 'center';
 
     applyBoxVisualStyle(box, rec);
 
@@ -787,11 +791,11 @@ const Canvas = (() => {
     const y1 = parseFloat(rec.y1_pts) || 0;
 
     const fontSizePts = 7.0;
-    const padX = 4.0;
-    const padY = 2.0;
-    const textWidthPts = Math.max(20, 0.58 * fontSizePts * (label || '').length + 2.0);
+    const padX = 6.0;
+    const padY = 5.0;
+    const textWidthPts = Math.max(20, 0.60 * fontSizePts * (label || '').length + 3.0);
 
-    const boxW = textWidthPts + padX * 2;
+    const boxW = textWidthPts + padX * 6.0;
     const boxH = fontSizePts + padY * 2;
 
     const centreX = pageW / 2.0;
