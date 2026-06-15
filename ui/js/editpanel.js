@@ -26,17 +26,26 @@ const EditPanel = (() => {
       currentMode = 'annotation';
       Store.selectedId = annotationId;
 
+      // Try backend first, fall back to Store for user-created annotations
+      let rec = null;
       const res = await window.pywebview.api.get_annotation(annotationId);
-      if (!res || !res.ok || !res.record) {
-        console.error('[editpanel] get_annotation failed:', res?.error);
+      if (res && res.ok && res.record) {
+        rec = res.record;
+      } else {
+        // Fallback: check Store for user-created annotations
+        rec = (Store.annotations || []).find(r => r.annotation_id === annotationId) || null;
+      }
+
+      if (!rec) {
+        console.error('[editpanel] annotation not found:', annotationId);
         close();
         return;
       }
 
-      // *** FIX: re-apply local geometry overrides to the fresh backend record ***
-      const rec = (typeof Canvas !== 'undefined' && Canvas.applyLocalOverrides)
-        ? Canvas.applyLocalOverrides(res.record)
-        : res.record;
+      // Apply local geometry overrides
+      if (typeof Canvas !== 'undefined' && Canvas.applyLocalOverrides) {
+        rec = Canvas.applyLocalOverrides(rec);
+      }
 
       Store.setSelectedAnnotation(rec);
 
@@ -70,7 +79,7 @@ const EditPanel = (() => {
 
       currentMode = 'dataset-chip';
 
-      // *** FIX: re-apply local UI overrides to the dataset chip record ***
+      // Apply local UI overrides to the dataset chip record
       const rec = (typeof Canvas !== 'undefined' && Canvas.applyLocalOverrides)
         ? Canvas.applyLocalOverrides(datasetRecord)
         : datasetRecord;
@@ -332,6 +341,12 @@ const EditPanel = (() => {
     const list = document.getElementById('suggestions-list');
     if (!list) return;
 
+    // Skip suggestions for user-created annotations (backend doesn't know them)
+    if (typeof Canvas !== 'undefined' && Canvas.isUserCreated && Canvas.isUserCreated(annotationId)) {
+      list.innerHTML = '<div class="suggestions-loading muted small">No suggestions (user-created)</div>';
+      return;
+    }
+
     list.innerHTML = '<div class="suggestions-loading muted small">Loading suggestions...</div>';
 
     try {
@@ -544,98 +559,112 @@ const EditPanel = (() => {
         if (!Store.selectedRecord) return;
 
         if (currentMode === 'dataset-chip' && Store.selectedRecord._isDatasetChip) {
-          const colourKey = swatch.dataset.colourKey;
-          const dataset = Store.selectedRecord._datasetCode;
+  const colourKey = swatch.dataset.colourKey;
+  const dataset = Store.selectedRecord._datasetCode;
 
-          let beforeColour = '';
-          try {
-            const prev = await window.pywebview.api.get_dataset_colours();
-            const formCode = String(Store.selectedRecord._formCode || '').toUpperCase();
-            const beforeKey = `${formCode}::${String(dataset).toUpperCase()}`;
-            if (prev && prev.ok && prev.colours) {
-              beforeColour = prev.colours[beforeKey] || '';
-            }
-          } catch (_) {}
+  let beforeColour = '';
+  try {
+    const prev = await window.pywebview.api.get_dataset_colours();
+    const formCode = String(Store.selectedRecord._formCode || '').toUpperCase();
+    const beforeKey = `${formCode}::${String(dataset).toUpperCase()}`;
+    if (prev && prev.ok && prev.colours) {
+      beforeColour = prev.colours[beforeKey] || '';
+    }
+  } catch (_) {}
 
-          const res = await window.pywebview.api.set_dataset_colour(dataset, colourKey);
-          if (!res || !res.ok) {
-            console.error('[editpanel] set_dataset_colour failed:', res?.error);
-            return;
-          }
+  const res = await window.pywebview.api.set_dataset_colour(dataset, colourKey);
+  if (!res || !res.ok) {
+    console.error('[editpanel] set_dataset_colour failed:', res?.error);
+  }
 
-          Store.pushHistory({
-            type: 'dataset-colour',
-            before: {
-              form_code: Store.selectedRecord._formCode,
-              dataset,
-              colour: beforeColour,
-              mode: 'dataset-chip',
-            },
-            after: {
-              form_code: Store.selectedRecord._formCode,
-              dataset,
-              colour: colourKey,
-              mode: 'dataset-chip',
-            },
-          });
+  // Always update formColourRegistry directly
+  if (typeof Canvas !== 'undefined' && Canvas.updateFormColour) {
+    Canvas.updateFormColour(
+      String(Store.selectedRecord._formCode || '').toUpperCase(),
+      String(dataset).toUpperCase(),
+      colourKey
+    );
+  }
 
-          await _refreshAfterUpdate({
-            reopenPanel: true,
-            reloadSuggestions: false,
-            keepManualBlank: false,
-            preserveSelection: true,
-            reopenDatasetChip: true,
-          });
+  Store.pushHistory({
+    type: 'dataset-colour',
+    before: {
+      form_code: Store.selectedRecord._formCode,
+      dataset,
+      colour: beforeColour,
+      mode: 'dataset-chip',
+    },
+    after: {
+      form_code: Store.selectedRecord._formCode,
+      dataset,
+      colour: colourKey,
+      mode: 'dataset-chip',
+    },
+  });
 
-          return;
-        }
+  await _refreshAfterUpdate({
+    reopenPanel: true,
+    reloadSuggestions: false,
+    keepManualBlank: false,
+    preserveSelection: true,
+    reopenDatasetChip: true,
+  });
+
+  return;
+}
 
         if (!Store.selectedRecord.sdtm_dataset) return;
 
-        const colourKey = swatch.dataset.colourKey;
-        const dataset = Store.selectedRecord.sdtm_dataset;
-        const formCode = Store.selectedRecord.form_code || '';
+const colourKey = swatch.dataset.colourKey;
+const dataset = Store.selectedRecord.sdtm_dataset;
+const formCode = Store.selectedRecord.form_code || '';
 
-        let beforeColour = '';
-        try {
-          const prev = await window.pywebview.api.get_dataset_colours();
-          const beforeKey = `${String(formCode).toUpperCase()}::${String(dataset).toUpperCase()}`;
-          if (prev && prev.ok && prev.colours) {
-            beforeColour = prev.colours[beforeKey] || '';
-          }
-        } catch (_) {}
+let beforeColour = '';
+try {
+  const prev = await window.pywebview.api.get_dataset_colours();
+  const beforeKey = `${String(formCode).toUpperCase()}::${String(dataset).toUpperCase()}`;
+  if (prev && prev.ok && prev.colours) {
+    beforeColour = prev.colours[beforeKey] || '';
+  }
+} catch (_) {}
 
-        const res = await window.pywebview.api.set_dataset_colour(dataset, colourKey);
-        if (!res || !res.ok) {
-          console.error('[editpanel] set_dataset_colour failed:', res?.error);
-          return;
-        }
+// Try backend colour update
+const res = await window.pywebview.api.set_dataset_colour(dataset, colourKey);
+if (!res || !res.ok) {
+  console.error('[editpanel] set_dataset_colour failed:', res?.error);
+  // Even if backend fails, update locally for user-created datasets
+}
 
-        Store.pushHistory({
-          type: 'dataset-colour',
-          before: {
-            form_code: formCode,
-            dataset,
-            colour: beforeColour,
-            mode: 'annotation',
-            annotation_id: Store.selectedId,
-          },
-          after: {
-            form_code: formCode,
-            dataset,
-            colour: colourKey,
-            mode: 'annotation',
-            annotation_id: Store.selectedId,
-          },
-        });
+// Always update formColourRegistry directly for immediate effect
+if (typeof Canvas !== 'undefined' && Canvas.updateFormColour) {
+  Canvas.updateFormColour(formCode, dataset, colourKey);
+}
 
-        await _refreshAfterUpdate({
-          reopenPanel: true,
-          reloadSuggestions: false,
-          keepManualBlank: true,
-          preserveSelection: true,
-          reopenDatasetChip: false,
-        });
+Store.pushHistory({
+  type: 'dataset-colour',
+  before: {
+    form_code: formCode,
+    dataset,
+    colour: beforeColour,
+    mode: 'annotation',
+    annotation_id: Store.selectedId,
+  },
+  after: {
+    form_code: formCode,
+    dataset,
+    colour: colourKey,
+    mode: 'annotation',
+    annotation_id: Store.selectedId,
+  },
+});
+
+await _refreshAfterUpdate({
+  reopenPanel: true,
+  reloadSuggestions: false,
+  keepManualBlank: true,
+  preserveSelection: true,
+  reopenDatasetChip: false,
+});
       });
     });
   }
@@ -661,6 +690,29 @@ const EditPanel = (() => {
   }
 
   async function _applyAndTrack(action, reopenPanel = true) {
+    const annotationId = action.after.annotation_id;
+
+    // If user-created, update locally only
+    if (typeof Canvas !== 'undefined' && Canvas.isUserCreated && Canvas.isUserCreated(annotationId)) {
+      const updatedFields = {
+        status: action.after.status,
+        sdtm_dataset: action.after.sdtm_dataset || '',
+        sdtm_variable: action.after.sdtm_variable || '',
+        sdtm_label: action.after.sdtm_label || '',
+      };
+      Canvas.updateUserAnnotation(annotationId, updatedFields);
+      Store.pushHistory(action);
+
+      await _refreshAfterUpdate({
+        reopenPanel,
+        reloadSuggestions: false,
+        keepManualBlank: true,
+        preserveSelection: true,
+        reopenDatasetChip: false,
+      });
+      return;
+    }
+
     const ok = await _applySnapshot(action.after);
     if (!ok) return;
 
@@ -738,6 +790,29 @@ const EditPanel = (() => {
       return;
     }
 
+    // For user-created annotations, update locally
+    const annotationId = action.before.annotation_id;
+    if (typeof Canvas !== 'undefined' && Canvas.isUserCreated && Canvas.isUserCreated(annotationId)) {
+      const updatedFields = {
+        status: action.before.status,
+        sdtm_dataset: action.before.sdtm_dataset || '',
+        sdtm_variable: action.before.sdtm_variable || '',
+        sdtm_label: action.before.sdtm_label || '',
+      };
+      Canvas.updateUserAnnotation(annotationId, updatedFields);
+      Store.pushRedo(action);
+      Store.selectedId = annotationId;
+
+      await _refreshAfterUpdate({
+        reopenPanel: true,
+        reloadSuggestions: false,
+        keepManualBlank: true,
+        preserveSelection: true,
+        reopenDatasetChip: false,
+      });
+      return;
+    }
+
     const ok = await _applySnapshot(action.before);
     if (!ok) return;
 
@@ -775,6 +850,29 @@ const EditPanel = (() => {
         keepManualBlank: true,
         preserveSelection: true,
         reopenDatasetChip: action.after.mode === 'dataset-chip',
+      });
+      return;
+    }
+
+    // For user-created annotations, update locally
+    const annotationId = action.after.annotation_id;
+    if (typeof Canvas !== 'undefined' && Canvas.isUserCreated && Canvas.isUserCreated(annotationId)) {
+      const updatedFields = {
+        status: action.after.status,
+        sdtm_dataset: action.after.sdtm_dataset || '',
+        sdtm_variable: action.after.sdtm_variable || '',
+        sdtm_label: action.after.sdtm_label || '',
+      };
+      Canvas.updateUserAnnotation(annotationId, updatedFields);
+      Store.pushHistory(action);
+      Store.selectedId = annotationId;
+
+      await _refreshAfterUpdate({
+        reopenPanel: true,
+        reloadSuggestions: false,
+        keepManualBlank: true,
+        preserveSelection: true,
+        reopenDatasetChip: false,
       });
       return;
     }
@@ -829,7 +927,6 @@ const EditPanel = (() => {
     }
 
     if (reopenPanel && reopenDatasetChip && selectedRecord?._isDatasetChip) {
-      // *** FIX: Apply local overrides before reopening dataset chip panel ***
       const patchedRecord = (typeof Canvas !== 'undefined' && Canvas.applyLocalOverrides)
         ? Canvas.applyLocalOverrides(selectedRecord)
         : selectedRecord;
@@ -839,12 +936,23 @@ const EditPanel = (() => {
 
     let freshRecord = null;
     if (selectedId && !String(selectedId).startsWith('datasetchip::')) {
+      // Try backend first
       const fresh = await window.pywebview.api.get_annotation(selectedId);
       if (fresh && fresh.ok && fresh.record) {
-        // *** FIX: Apply local geometry overrides to the fresh backend record ***
         freshRecord = (typeof Canvas !== 'undefined' && Canvas.applyLocalOverrides)
           ? Canvas.applyLocalOverrides(fresh.record)
           : fresh.record;
+      } else {
+        // Fallback: check Store for user-created annotations
+        const storeRec = (Store.annotations || []).find(r => r.annotation_id === selectedId);
+        if (storeRec) {
+          freshRecord = (typeof Canvas !== 'undefined' && Canvas.applyLocalOverrides)
+            ? Canvas.applyLocalOverrides(storeRec)
+            : storeRec;
+        }
+      }
+
+      if (freshRecord) {
         Store.setSelectedAnnotation(freshRecord);
       }
     }

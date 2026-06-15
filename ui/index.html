@@ -10,6 +10,157 @@
   <link rel="stylesheet" href="styles/main.css" />
 
   <style>
+    /* ── Context Menu ──────────────────────────────────────── */
+.ctx-menu {
+  position       : fixed;
+  z-index        : 9999;
+  background     : #1A1730;
+  border         : 1px solid rgba(142, 84, 255, 0.4);
+  border-radius  : 6px;
+  padding        : 4px 0;
+  min-width      : 160px;
+  box-shadow     : 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.ctx-menu-item {
+  display        : block;
+  width          : 100%;
+  padding        : 8px 16px;
+  background     : none;
+  border         : none;
+  color          : #E0D6FF;
+  font-size      : 13px;
+  font-weight    : 500;
+  text-align     : left;
+  cursor         : pointer;
+  transition     : background 0.1s ease;
+}
+
+.ctx-menu-item:hover {
+  background     : rgba(142, 84, 255, 0.2);
+}
+
+.ctx-menu-cancel {
+  color          : #888;
+  border-top     : 1px solid rgba(142, 84, 255, 0.15);
+  margin-top     : 2px;
+  padding-top    : 8px;
+}
+
+/* ── Add Annotation Dialog ─────────────────────────────── */
+.add-ann-overlay {
+  position       : fixed;
+  inset          : 0;
+  z-index        : 10000;
+  background     : rgba(0, 0, 0, 0.55);
+  display        : flex;
+  align-items    : center;
+  justify-content: center;
+}
+
+.add-ann-dialog {
+  background     : #1A1730;
+  border         : 1px solid rgba(142, 84, 255, 0.4);
+  border-radius  : 10px;
+  padding        : 20px 24px;
+  min-width      : 320px;
+  max-width      : 400px;
+  box-shadow     : 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+.add-ann-header {
+  display        : flex;
+  justify-content: space-between;
+  align-items    : center;
+  margin-bottom  : 16px;
+}
+
+.add-ann-title {
+  font-size      : 15px;
+  font-weight    : 600;
+  color          : #E0D6FF;
+}
+
+.add-ann-close {
+  background     : none;
+  border         : none;
+  color          : #888;
+  font-size      : 20px;
+  cursor         : pointer;
+  line-height    : 1;
+}
+
+.add-ann-close:hover {
+  color          : #fff;
+}
+
+.add-ann-section {
+  margin-bottom  : 12px;
+}
+
+.add-ann-label {
+  display        : block;
+  font-size      : 11px;
+  font-weight    : 600;
+  color          : #A89FCC;
+  margin-bottom  : 4px;
+  text-transform : uppercase;
+  letter-spacing : 0.5px;
+}
+
+.add-ann-radio-row {
+  display        : flex;
+  gap            : 16px;
+}
+
+.add-ann-radio {
+  display        : flex;
+  align-items    : center;
+  gap            : 6px;
+  font-size      : 13px;
+  color          : #C4B5FD;
+  cursor         : pointer;
+}
+
+.add-ann-radio input[type="radio"] {
+  accent-color   : #8E54FF;
+}
+
+.add-ann-colour-row {
+  display        : flex;
+  gap            : 8px;
+  margin-top     : 4px;
+}
+
+.add-ann-swatch {
+  width          : 24px;
+  height         : 24px;
+  border-radius  : 4px;
+  cursor         : pointer;
+  transition     : transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.add-ann-swatch:hover {
+  transform      : scale(1.15);
+}
+
+.add-ann-swatch.selected {
+  box-shadow     : 0 0 0 3px #8E54FF;
+  transform      : scale(1.1);
+}
+
+.add-ann-actions {
+  display        : flex;
+  gap            : 8px;
+  margin-top     : 16px;
+}
+
+.add-ann-error {
+  margin-top     : 10px;
+  font-size      : 12px;
+  color          : #FF6B6B;
+  font-weight    : 500;
+}
   /* ── Canvas area scrollbar — must be inline for pywebview ── */
   #canvas-area {
     overflow-x : hidden;
@@ -581,6 +732,79 @@
 
     </div>
   </div>
+  <!-- ── Right-click Context Menu ────────────────────────── -->
+<div id="ctx-menu" class="ctx-menu hidden">
+  <button class="ctx-menu-item" id="ctx-add-annotation">Add Annotation</button>
+  <button class="ctx-menu-item ctx-menu-cancel" id="ctx-cancel">Cancel</button>
+</div>
+
+<!-- ── Add Annotation Dialog ──────────────────────────── -->
+<div id="add-ann-overlay" class="add-ann-overlay hidden">
+  <div class="add-ann-dialog">
+    <div class="add-ann-header">
+      <span class="add-ann-title">Add Annotation</span>
+      <button class="add-ann-close" id="add-ann-close">×</button>
+    </div>
+
+    <!-- Type selection -->
+    <div class="add-ann-section">
+      <label class="add-ann-label">Type</label>
+      <div class="add-ann-radio-row">
+        <label class="add-ann-radio">
+          <input type="radio" name="add-ann-type" value="variable" checked />
+          <span>Variable</span>
+        </label>
+        <label class="add-ann-radio">
+          <input type="radio" name="add-ann-type" value="dataset" />
+          <span>Dataset</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Variable fields -->
+    <div id="add-ann-variable-fields" class="add-ann-fields">
+      <div class="add-ann-section">
+        <label class="add-ann-label">Dataset</label>
+        <input type="text" id="add-ann-var-dataset" class="input" placeholder="e.g. CM" />
+      </div>
+      <div class="add-ann-section">
+        <label class="add-ann-label">Variable Name</label>
+        <input type="text" id="add-ann-var-name" class="input" placeholder="e.g. CMTRT" />
+      </div>
+    </div>
+
+    <!-- Dataset fields -->
+    <div id="add-ann-dataset-fields" class="add-ann-fields hidden">
+      <div class="add-ann-section">
+        <label class="add-ann-label">Dataset Shorthand</label>
+        <input type="text" id="add-ann-ds-short" class="input" placeholder="e.g. CM" />
+      </div>
+      <div class="add-ann-section">
+        <label class="add-ann-label">Dataset Full Name</label>
+        <input type="text" id="add-ann-ds-name" class="input" placeholder="e.g. Concomitant Medications" />
+      </div>
+      <div class="add-ann-section">
+        <label class="add-ann-label">Colour</label>
+        <div class="add-ann-colour-row">
+          <button class="colour-swatch add-ann-swatch" data-colour="yellow" style="background:#F0E442;border:2px solid #000;"></button>
+          <button class="colour-swatch add-ann-swatch" data-colour="blue" style="background:#56B4E9;border:2px solid #000;"></button>
+          <button class="colour-swatch add-ann-swatch" data-colour="teal" style="background:#009E73;border:2px solid #000;"></button>
+          <button class="colour-swatch add-ann-swatch" data-colour="vermillion" style="background:#D55E00;border:2px solid #000;"></button>
+          <button class="colour-swatch add-ann-swatch" data-colour="purple" style="background:#CC79A7;border:2px solid #000;"></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="add-ann-actions">
+      <button class="btn btn-primary" id="add-ann-confirm">Create</button>
+      <button class="btn" id="add-ann-cancel">Cancel</button>
+    </div>
+
+    <!-- Error message -->
+    <div id="add-ann-error" class="add-ann-error hidden"></div>
+  </div>
+</div>
 
   <!-- Scripts -->
   <script src="js/store.js"></script>

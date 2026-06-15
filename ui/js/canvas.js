@@ -92,13 +92,33 @@ function undoGeometry() {
     } else {
       delete annotationGeometryOverrides[action.id];
     }
+    if (Array.isArray(Store.annotations)) {
+      const idx = Store.annotations.findIndex(r => r.annotation_id === action.id);
+      if (idx >= 0 && !action.before) {
+        delete Store.annotations[idx]._hasGeometryOverride;
+      }
+    }
   } else if (action.type === 'dataset-chip') {
     if (action.before) {
       datasetChipUiOverrides[action.chipKey] = { ...action.before };
     } else {
       delete datasetChipUiOverrides[action.chipKey];
     }
+  } else if (action.type === 'add-annotation') {
+    const idx = Store.annotations.findIndex(r => r.annotation_id === action.id);
+    if (idx >= 0) Store.annotations.splice(idx, 1);
+    delete annotationGeometryOverrides[action.id];
+    _removeUserAnnotation(action.id);
+  } else if (action.type === 'add-dataset-chip') {
+    const idx = Store.annotations.findIndex(r => r.annotation_id === action.id);
+    if (idx >= 0) Store.annotations.splice(idx, 1);
+    delete datasetChipUiOverrides[action.chipKey];
+    _removeUserAnnotation(action.id);
+    if (formColourRegistry[action.formCode]) {
+      delete formColourRegistry[action.formCode][action.dsShort];
+    }
   }
+
   _refreshAnnotationLayer();
 }
 
@@ -122,10 +142,27 @@ function redoGeometry() {
     } else {
       delete datasetChipUiOverrides[action.chipKey];
     }
+  } else if (action.type === 'add-annotation') {
+    const restored = { ...action.record };
+    Store.annotations.push(restored);
+    _addUserAnnotation(restored);
+    annotationGeometryOverrides[action.id] = {
+      x0_pts: action.record.x0_pts,
+      y0_pts: action.record.y0_pts,
+      x1_pts: action.record.x1_pts,
+      y1_pts: action.record.y1_pts,
+    };
+  } else if (action.type === 'add-dataset-chip') {
+    const restored = { ...action.record };
+    Store.annotations.push(restored);
+    _addUserAnnotation(restored);
+    datasetChipUiOverrides[action.chipKey] = { ...action.uiOverride };
+    if (!formColourRegistry[action.formCode]) formColourRegistry[action.formCode] = {};
+    formColourRegistry[action.formCode][action.dsShort] = COLOUR_KEY_TO_HEX[action.colourKey] || PALETTE[0];
   }
+
   _refreshAnnotationLayer();
 }
-
 function _refreshAnnotationLayer() {
   if (Array.isArray(Store.annotations)) {
     const patched = Store.annotations.map(rec => {
@@ -177,6 +214,395 @@ function _bindGeometryUndoRedo() {
     }
   }, true);
 }
+// ─── PERSISTENT USER ANNOTATIONS ─────────────────────────────────────
+
+  const userCreatedAnnotations = [];
+
+  function _addUserAnnotation(rec) {
+    userCreatedAnnotations.push(rec);
+  }
+
+  function _removeUserAnnotation(id) {
+    const idx = userCreatedAnnotations.findIndex(r => r.annotation_id === id);
+    if (idx >= 0) userCreatedAnnotations.splice(idx, 1);
+  }
+
+  function _getUserAnnotationsForPage(pageNumber) {
+    return userCreatedAnnotations.filter(r => r.page === pageNumber);
+  }
+
+  function isUserCreated(annotationId) {
+    return userCreatedAnnotations.some(r => r.annotation_id === annotationId);
+  }
+
+  function updateUserAnnotation(annotationId, fields) {
+    const idx = userCreatedAnnotations.findIndex(r => r.annotation_id === annotationId);
+    if (idx >= 0) {
+      userCreatedAnnotations[idx] = { ...userCreatedAnnotations[idx], ...fields };
+    }
+    const storeIdx = (Store.annotations || []).findIndex(r => r.annotation_id === annotationId);
+    if (storeIdx >= 0) {
+      Store.annotations[storeIdx] = { ...Store.annotations[storeIdx], ...fields };
+    }
+  }
+  function updateFormColour(formCode, dataset, colourKey) {
+  const fc = (formCode || '').toUpperCase();
+  const ds = (dataset || '').toUpperCase();
+  const hex = COLOUR_KEY_TO_HEX[colourKey] || PALETTE[0];
+
+  if (!formColourRegistry[fc]) formColourRegistry[fc] = {};
+  formColourRegistry[fc][ds] = hex;
+}
+  // ─── RIGHT-CLICK ADD ANNOTATION ───────────────────────────────────────
+
+  let pendingClickPts = null;
+
+  function _bindContextMenu() {
+    const canvasArea = document.getElementById('canvas-area');
+    const ctxMenu = document.getElementById('ctx-menu');
+    if (!canvasArea || !ctxMenu) return;
+
+    canvasArea.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+
+      // Edge cases
+      if (dragState || resizeState) return;
+      if (!Store.pdfLoaded || !Store.pageImage) return;
+      if (!Store.pipelineRan) return;
+
+      const records = Store.annotations || [];
+      const first = records[0] || {};
+      if ((first.page_type || 'FORM') === 'TABLE') return;
+
+      const pageWrap = document.getElementById('pdf-page-wrap');
+      if (!pageWrap) return;
+
+      const pageRect = pageWrap.getBoundingClientRect();
+      const zoom = Number(Store.zoomPct || 100) / 100;
+
+      const clickXPx = (e.clientX - pageRect.left) / zoom;
+      const clickYPx = (e.clientY - pageRect.top) / zoom;
+
+      const naturalWidth = pageWrap.offsetWidth || 1;
+      const naturalHeight = pageWrap.offsetHeight || 1;
+
+      const x_pts = (clickXPx / naturalWidth) * Store.pageWidthPts;
+      const y_pts = (clickYPx / naturalHeight) * Store.pageHeightPts;
+
+      pendingClickPts = {
+        x_pts: _clamp(x_pts, 4, Store.pageWidthPts - 4),
+        y_pts: _clamp(y_pts, 4, Store.pageHeightPts - 4),
+        page: Store.currentPage,
+      };
+
+      ctxMenu.style.left = `${e.clientX}px`;
+      ctxMenu.style.top = `${e.clientY}px`;
+      ctxMenu.classList.remove('hidden');
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!ctxMenu.contains(e.target)) {
+        ctxMenu.classList.add('hidden');
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        ctxMenu.classList.add('hidden');
+      }
+    });
+
+    const btnAdd = document.getElementById('ctx-add-annotation');
+    if (btnAdd) {
+      btnAdd.addEventListener('click', () => {
+        ctxMenu.classList.add('hidden');
+        _openAddAnnotationDialog();
+      });
+    }
+
+    const btnCancel = document.getElementById('ctx-cancel');
+    if (btnCancel) {
+      btnCancel.addEventListener('click', () => {
+        ctxMenu.classList.add('hidden');
+      });
+    }
+  }
+
+  function _openAddAnnotationDialog() {
+    const overlay = document.getElementById('add-ann-overlay');
+    if (!overlay) return;
+
+    const varDataset = document.getElementById('add-ann-var-dataset');
+    const varName = document.getElementById('add-ann-var-name');
+    const dsShort = document.getElementById('add-ann-ds-short');
+    const dsName = document.getElementById('add-ann-ds-name');
+    const errorEl = document.getElementById('add-ann-error');
+
+    if (varDataset) varDataset.value = '';
+    if (varName) varName.value = '';
+    if (dsShort) dsShort.value = '';
+    if (dsName) dsName.value = '';
+    if (errorEl) { errorEl.textContent = ''; errorEl.classList.add('hidden'); }
+
+    const radioVar = document.querySelector('input[name="add-ann-type"][value="variable"]');
+    if (radioVar) radioVar.checked = true;
+    _toggleAddAnnFields('variable');
+
+    document.querySelectorAll('.add-ann-swatch').forEach(s => s.classList.remove('selected'));
+
+    overlay.classList.remove('hidden');
+  }
+
+  function _closeAddAnnotationDialog() {
+    const overlay = document.getElementById('add-ann-overlay');
+    if (overlay) overlay.classList.add('hidden');
+    pendingClickPts = null;
+  }
+
+  function _toggleAddAnnFields(type) {
+    const varFields = document.getElementById('add-ann-variable-fields');
+    const dsFields = document.getElementById('add-ann-dataset-fields');
+
+    if (type === 'variable') {
+      if (varFields) varFields.classList.remove('hidden');
+      if (dsFields) dsFields.classList.add('hidden');
+    } else {
+      if (varFields) varFields.classList.add('hidden');
+      if (dsFields) dsFields.classList.remove('hidden');
+    }
+  }
+
+  function _getSelectedAddType() {
+    const checked = document.querySelector('input[name="add-ann-type"]:checked');
+    return checked ? checked.value : 'variable';
+  }
+
+  function _getSelectedColour() {
+    const selected = document.querySelector('.add-ann-swatch.selected');
+    return selected ? selected.dataset.colour : null;
+  }
+
+  function _showAddError(msg) {
+    const errorEl = document.getElementById('add-ann-error');
+    if (errorEl) {
+      errorEl.textContent = msg;
+      errorEl.classList.remove('hidden');
+    }
+  }
+
+  function _createAnnotationAtClick() {
+    if (!pendingClickPts) {
+      _showAddError('No position captured. Try right-clicking again.');
+      return;
+    }
+
+    const type = _getSelectedAddType();
+    if (type === 'variable') {
+      _createVariableAnnotation();
+    } else {
+      _createDatasetAnnotation();
+    }
+  }
+
+  function _createVariableAnnotation() {
+    const datasetRaw = (document.getElementById('add-ann-var-dataset')?.value || '').trim().toUpperCase();
+    const variableRaw = (document.getElementById('add-ann-var-name')?.value || '').trim().toUpperCase();
+
+    if (!datasetRaw) { _showAddError('Dataset is required.'); return; }
+    if (!variableRaw) { _showAddError('Variable name is required.'); return; }
+    if (/\s/.test(datasetRaw)) { _showAddError('Dataset cannot contain spaces.'); return; }
+    if (/\s/.test(variableRaw)) { _showAddError('Variable cannot contain spaces.'); return; }
+
+    const records = Store.annotations || [];
+    const first = records[0] || {};
+    const formCode = (first.form_code || 'UNKNOWN').toUpperCase();
+
+    const annotationId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+
+    const label = `${datasetRaw}.${variableRaw}`;
+    const fontSizePts = 7.0;
+    const padX = 6.0;
+    const padY = 5.0;
+    const textWidthPts = Math.max(20, 0.60 * fontSizePts * label.length + 3.0);
+    const boxW = textWidthPts + padX * 6.0;
+    const boxH = fontSizePts + padY * 2;
+
+    const x0 = _clamp(pendingClickPts.x_pts - boxW / 2, 0, Store.pageWidthPts - boxW);
+    const y0 = _clamp(pendingClickPts.y_pts - boxH / 2, 0, Store.pageHeightPts - boxH);
+    const x1 = x0 + boxW;
+    const y1 = y0 + boxH;
+
+    // Assign colour from registry or create new
+    let colour = formColourRegistry?.[formCode]?.[datasetRaw];
+    if (!colour) {
+      if (!formColourRegistry[formCode]) formColourRegistry[formCode] = {};
+      const existingCount = Object.keys(formColourRegistry[formCode]).length;
+      colour = PALETTE[existingCount % PALETTE.length];
+      formColourRegistry[formCode][datasetRaw] = colour;
+    }
+
+    const newRec = {
+      annotation_id: annotationId,
+      page: Store.currentPage,
+      page_type: 'FORM',
+      form_code: formCode,
+      component: '',
+      raw_variable: variableRaw,
+      sdtm_dataset: datasetRaw,
+      sdtm_variable: variableRaw,
+      sdtm_label: '',
+      status: 'USER_CORRECTED',
+      x0_pts: x0,
+      y0_pts: y0,
+      x1_pts: x1,
+      y1_pts: y1,
+      confidence: 1.0,
+      _isUserCreated: true,
+      _hasGeometryOverride: true,
+    };
+
+    annotationGeometryOverrides[annotationId] = { x0_pts: x0, y0_pts: y0, x1_pts: x1, y1_pts: y1 };
+
+    Store.annotations.push(newRec);
+    _addUserAnnotation(newRec);
+
+    _pushGeometryUndo({
+      type: 'add-annotation',
+      id: annotationId,
+      record: { ...newRec },
+    });
+
+    _refreshAnnotationLayer();
+
+    Store.setSelectedAnnotation(newRec);
+    highlightSelected();
+
+    _closeAddAnnotationDialog();
+
+    if (typeof EditPanel !== 'undefined' && EditPanel.open) {
+      EditPanel.open(annotationId);
+    }
+  }
+
+  function _createDatasetAnnotation() {
+    const dsShort = (document.getElementById('add-ann-ds-short')?.value || '').trim().toUpperCase();
+    const dsName = (document.getElementById('add-ann-ds-name')?.value || '').trim();
+    const colourKey = _getSelectedColour();
+
+    if (!dsShort) { _showAddError('Dataset shorthand is required.'); return; }
+    if (/\s/.test(dsShort)) { _showAddError('Dataset shorthand cannot contain spaces.'); return; }
+    if (!dsName) { _showAddError('Dataset full name is required.'); return; }
+    if (!colourKey) { _showAddError('Please select a colour.'); return; }
+
+    const records = Store.annotations || [];
+    const first = records[0] || {};
+    const formCode = (first.form_code || 'UNKNOWN').toUpperCase();
+
+    const annotationId = `userdschip_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+
+    const colour = COLOUR_KEY_TO_HEX[colourKey] || PALETTE[0];
+    if (!formColourRegistry[formCode]) formColourRegistry[formCode] = {};
+    formColourRegistry[formCode][dsShort] = colour;
+
+    const chipLabel = `${dsShort}=${dsName}`;
+    const chipKey = `${formCode}::${dsShort}`;
+
+    const leftPct = ((pendingClickPts.x_pts / Store.pageWidthPts) * 100).toFixed(2);
+    const topPct = ((pendingClickPts.y_pts / Store.pageHeightPts) * 100).toFixed(2);
+
+    datasetChipUiOverrides[chipKey] = {
+      _ui_left: `${leftPct}%`,
+      _ui_top: `${topPct}%`,
+      _ui_width: '',
+      _ui_height: '',
+    };
+
+    if (!DATASET_LABELS[dsShort]) {
+      DATASET_LABELS[dsShort] = chipLabel;
+    }
+
+    const placeholderRec = {
+      annotation_id: annotationId,
+      page: Store.currentPage,
+      page_type: 'FORM',
+      form_code: formCode,
+      component: 'DATASET_HEADER',
+      raw_variable: chipLabel,
+      sdtm_dataset: dsShort,
+      sdtm_variable: '',
+      sdtm_label: chipLabel,
+      status: 'RESOLVED',
+      x0_pts: pendingClickPts.x_pts,
+      y0_pts: pendingClickPts.y_pts,
+      x1_pts: pendingClickPts.x_pts + 50,
+      y1_pts: pendingClickPts.y_pts + 15,
+      confidence: 1.0,
+      _isUserCreated: true,
+      _isDatasetChipPlaceholder: true,
+    };
+
+    Store.annotations.push(placeholderRec);
+    _addUserAnnotation(placeholderRec);
+
+    _pushGeometryUndo({
+      type: 'add-dataset-chip',
+      chipKey: chipKey,
+      id: annotationId,
+      record: { ...placeholderRec },
+      uiOverride: { ...datasetChipUiOverrides[chipKey] },
+      colourKey: colourKey,
+      dsShort: dsShort,
+      dsName: dsName,
+      formCode: formCode,
+    });
+
+    _refreshAnnotationLayer();
+    _closeAddAnnotationDialog();
+  }
+
+  function _bindAddAnnotationDialog() {
+    const radios = document.querySelectorAll('input[name="add-ann-type"]');
+    radios.forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        _toggleAddAnnFields(e.target.value);
+      });
+    });
+
+    document.querySelectorAll('.add-ann-swatch').forEach(swatch => {
+      swatch.addEventListener('click', () => {
+        document.querySelectorAll('.add-ann-swatch').forEach(s => s.classList.remove('selected'));
+        swatch.classList.add('selected');
+      });
+    });
+
+    const btnConfirm = document.getElementById('add-ann-confirm');
+    if (btnConfirm) {
+      btnConfirm.addEventListener('click', () => {
+        _createAnnotationAtClick();
+      });
+    }
+
+    const btnCancel = document.getElementById('add-ann-cancel');
+    const btnClose = document.getElementById('add-ann-close');
+    if (btnCancel) btnCancel.addEventListener('click', _closeAddAnnotationDialog);
+    if (btnClose) btnClose.addEventListener('click', _closeAddAnnotationDialog);
+
+    const overlay = document.getElementById('add-ann-overlay');
+    if (overlay) {
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) _closeAddAnnotationDialog();
+      });
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const ov = document.getElementById('add-ann-overlay');
+        if (ov && !ov.classList.contains('hidden')) {
+          _closeAddAnnotationDialog();
+        }
+      }
+    });
+  }
 
   /**
    * PUBLIC HELPER — Apply all local geometry and dataset-chip UI position
@@ -208,14 +634,19 @@ function _bindGeometryUndoRedo() {
         imgRes.height
       );
 
-      const annRes = await window.pywebview.api.get_page_annotations(pageNumber);
-      if (!annRes || !annRes.ok) {
-        console.error('[canvas] failed to load annotations:', annRes?.error);
-        Store.setAnnotations([]);
-      } else {
-        const patched = (annRes.records || []).map(rec => applyOverridesToRecord(rec));
-        Store.setAnnotations(patched);
-      }
+      let backendRecords = [];
+const annRes = await window.pywebview.api.get_page_annotations(pageNumber);
+if (!annRes || !annRes.ok) {
+  console.error('[canvas] failed to load annotations:', annRes?.error);
+} else {
+  backendRecords = (annRes.records || []).map(rec => applyOverridesToRecord(rec));
+}
+
+// Merge with user-created annotations for this page
+const userRecs = _getUserAnnotationsForPage(pageNumber).map(rec => applyOverridesToRecord({ ...rec }));
+const backendIds = new Set(backendRecords.map(r => r.annotation_id));
+const uniqueUserRecs = userRecs.filter(r => !backendIds.has(r.annotation_id));
+Store.setAnnotations([...backendRecords, ...uniqueUserRecs]);
 
       await _ensureColourRegistry();
 
@@ -232,30 +663,42 @@ function _bindGeometryUndoRedo() {
   }
 
   async function _ensureColourRegistry() {
-    try {
-      const allRes = await window.pywebview.api.get_annotations();
-      if (!allRes || !allRes.ok || !Array.isArray(allRes.records)) return;
+  try {
+    const allRes = await window.pywebview.api.get_annotations();
+    if (!allRes || !allRes.ok || !Array.isArray(allRes.records)) return;
 
-      const colourRes = await window.pywebview.api.get_dataset_colours();
-      const savedColours = (colourRes && colourRes.ok && colourRes.colours) ? colourRes.colours : {};
+    const colourRes = await window.pywebview.api.get_dataset_colours();
+    const savedColours = (colourRes && colourRes.ok && colourRes.colours) ? colourRes.colours : {};
 
-      formColourRegistry = {};
-      const seenByForm = {};
+    // Save user-created dataset colours before rebuild
+    const preservedUserColours = {};
+    for (const rec of userCreatedAnnotations) {
+      const formCode = (rec.form_code || '').toUpperCase();
+      const ds = (rec.sdtm_dataset || '').toUpperCase();
+      if (formCode && ds && formColourRegistry[formCode] && formColourRegistry[formCode][ds]) {
+        if (!preservedUserColours[formCode]) preservedUserColours[formCode] = {};
+        preservedUserColours[formCode][ds] = formColourRegistry[formCode][ds];
+      }
+    }
 
-      for (const rec of allRes.records) {
-        if ((rec.page_type || 'FORM') !== 'FORM') continue;
-        if ((rec.status || '') === 'REMOVED') continue;
+    const seenByForm = {};
 
-        const formCode = (rec.form_code || '').toUpperCase();
-        const ds = (rec.sdtm_dataset || '').toUpperCase();
-        if (!formCode || !ds) continue;
+    for (const rec of allRes.records) {
+      if ((rec.page_type || 'FORM') !== 'FORM') continue;
+      if ((rec.status || '') === 'REMOVED') continue;
 
-        if (!formColourRegistry[formCode]) formColourRegistry[formCode] = {};
-        if (!seenByForm[formCode]) seenByForm[formCode] = [];
+      const formCode = (rec.form_code || '').toUpperCase();
+      const ds = (rec.sdtm_dataset || '').toUpperCase();
+      if (!formCode || !ds) continue;
 
-        if (!seenByForm[formCode].includes(ds)) {
-          seenByForm[formCode].push(ds);
+      if (!formColourRegistry[formCode]) formColourRegistry[formCode] = {};
+      if (!seenByForm[formCode]) seenByForm[formCode] = [];
 
+      if (!seenByForm[formCode].includes(ds)) {
+        seenByForm[formCode].push(ds);
+
+        // Only assign if not already in registry (preserve existing assignments)
+        if (!formColourRegistry[formCode][ds]) {
           const savedKey = `${formCode}::${ds}`;
           const savedColourName = String(savedColours[savedKey] || '').trim().toLowerCase();
 
@@ -267,10 +710,34 @@ function _bindGeometryUndoRedo() {
           }
         }
       }
-    } catch (e) {
-      console.error('[canvas] colour registry error:', e);
     }
+
+    // Restore user-created dataset colours that backend doesn't know about
+    for (const formCode of Object.keys(preservedUserColours)) {
+      if (!formColourRegistry[formCode]) formColourRegistry[formCode] = {};
+      for (const ds of Object.keys(preservedUserColours[formCode])) {
+        if (!formColourRegistry[formCode][ds]) {
+          formColourRegistry[formCode][ds] = preservedUserColours[formCode][ds];
+        }
+      }
+    }
+
+    // Also ensure any user-created annotations' datasets are in the registry
+    for (const rec of userCreatedAnnotations) {
+      const formCode = (rec.form_code || '').toUpperCase();
+      const ds = (rec.sdtm_dataset || '').toUpperCase();
+      if (!formCode || !ds) continue;
+
+      if (!formColourRegistry[formCode]) formColourRegistry[formCode] = {};
+      if (!formColourRegistry[formCode][ds]) {
+        const existingCount = Object.keys(formColourRegistry[formCode]).length;
+        formColourRegistry[formCode][ds] = PALETTE[existingCount % PALETTE.length];
+      }
+    }
+  } catch (e) {
+    console.error('[canvas] colour registry error:', e);
   }
+}
 
   function applyOverridesToRecord(rec) {
     if (!rec) return rec;
@@ -326,40 +793,45 @@ function _bindGeometryUndoRedo() {
     annotationLayer.innerHTML = '';
   }
 
-  function applyZoom() {
-    const pageWrap = document.getElementById('pdf-page-wrap');
-    const pdfImg = document.getElementById('pdf-img');
-    const annotationLayer = document.getElementById('annotation-layer');
-    const toolbarZoom = document.getElementById('toolbar-zoom');
+  function applyZoom(usePointerOrigin = false) {
+  const pageWrap = document.getElementById('pdf-page-wrap');
+  const pdfImg = document.getElementById('pdf-img');
+  const annotationLayer = document.getElementById('annotation-layer');
+  const toolbarZoom = document.getElementById('toolbar-zoom');
 
-    if (!pageWrap || !pdfImg || !annotationLayer) return;
+  if (!pageWrap || !pdfImg || !annotationLayer) return;
 
-    const zoom = Number(Store.zoomPct || 100);
-    const scale = zoom / 100;
+  const zoom = Number(Store.zoomPct || 100);
+  const scale = zoom / 100;
 
-    const naturalWidth = pdfImg.offsetWidth || pdfImg.clientWidth || 0;
-    const naturalHeight = pdfImg.offsetHeight || pdfImg.clientHeight || 0;
+  const naturalWidth = pdfImg.offsetWidth || pdfImg.clientWidth || 0;
+  const naturalHeight = pdfImg.offsetHeight || pdfImg.clientHeight || 0;
 
-    // Use pointer-based transform origin for zoom toward cursor
-    const originX = (zoomOriginX * 100).toFixed(2);
-    const originY = (zoomOriginY * 100).toFixed(2);
-
-    pageWrap.style.position = 'relative';
-    pageWrap.style.transformOrigin = `${originX}% ${originY}%`;
-    pageWrap.style.transform = `scale(${scale})`;
-
-    if (naturalWidth > 0) pageWrap.style.width = `${naturalWidth}px`;
-    if (naturalHeight > 0) pageWrap.style.height = `${naturalHeight}px`;
-
-    const pdfContainer = document.getElementById('pdf-container');
-    if (pdfContainer && naturalWidth > 0 && naturalHeight > 0) {
-      pdfContainer.style.height = `${naturalHeight * scale}px`;
-    }
-
-    if (toolbarZoom) {
-      toolbarZoom.textContent = `${zoom}%`;
-    }
+  // Only use pointer-based origin during active Ctrl+Scroll
+  // Otherwise reset to top-left for consistent rendering after reloads
+  let originX = '0';
+  let originY = '0';
+  if (usePointerOrigin) {
+    originX = (zoomOriginX * 100).toFixed(2);
+    originY = (zoomOriginY * 100).toFixed(2);
   }
+
+  pageWrap.style.position = 'relative';
+  pageWrap.style.transformOrigin = `${originX}% ${originY}%`;
+  pageWrap.style.transform = `scale(${scale})`;
+
+  if (naturalWidth > 0) pageWrap.style.width = `${naturalWidth}px`;
+  if (naturalHeight > 0) pageWrap.style.height = `${naturalHeight}px`;
+
+  const pdfContainer = document.getElementById('pdf-container');
+  if (pdfContainer && naturalWidth > 0 && naturalHeight > 0) {
+    pdfContainer.style.height = `${naturalHeight * scale}px`;
+  }
+
+  if (toolbarZoom) {
+    toolbarZoom.textContent = `${zoom}%`;
+  }
+}
 
   function _clamp(val, min, max) {
     return Math.max(min, Math.min(max, val));
@@ -414,7 +886,7 @@ function _bindGeometryUndoRedo() {
       );
 
       Store.setZoom(newZoom);
-      applyZoom();
+      applyZoom(true);
     }, { passive: false });
   }
 
@@ -642,58 +1114,49 @@ function _bindGeometryUndoRedo() {
   }
 
   function _persistBoxGeometry(rec, box) {
-    if (!rec || !box || !rec.annotation_id) return;
+  if (!rec || !box || !rec.annotation_id) return;
 
-    const leftPct = parseFloat(box.style.left) || 0;
-    const topPct = parseFloat(box.style.top) || 0;
-    const widthPct = parseFloat(box.style.width) || 0;
-    const heightPct = parseFloat(box.style.height) || 0;
+  const leftPct = parseFloat(box.style.left) || 0;
+  const topPct = parseFloat(box.style.top) || 0;
+  const widthPct = parseFloat(box.style.width) || 0;
+  const heightPct = parseFloat(box.style.height) || 0;
 
-    const pageW = Number(Store.pageWidthPts || 0);
-    const pageH = Number(Store.pageHeightPts || 0);
-    if (!pageW || !pageH) return;
+  const pageW = Number(Store.pageWidthPts || 0);
+  const pageH = Number(Store.pageHeightPts || 0);
+  if (!pageW || !pageH) return;
 
-    const x0 = (leftPct / 100) * pageW;
-    const y0 = (topPct / 100) * pageH;
-    const x1 = ((leftPct + widthPct) / 100) * pageW;
-    const y1 = ((topPct + heightPct) / 100) * pageH;
+  const x0 = (leftPct / 100) * pageW;
+  const y0 = (topPct / 100) * pageH;
+  const x1 = ((leftPct + widthPct) / 100) * pageW;
+  const y1 = ((topPct + heightPct) / 100) * pageH;
 
-    annotationGeometryOverrides[rec.annotation_id] = {
-      x0_pts: x0,
-      y0_pts: y0,
-      x1_pts: x1,
-      y1_pts: y1,
-    };
+  annotationGeometryOverrides[rec.annotation_id] = {
+    x0_pts: x0,
+    y0_pts: y0,
+    x1_pts: x1,
+    y1_pts: y1,
+  };
 
-    rec.x0_pts = x0;
-    rec.y0_pts = y0;
-    rec.x1_pts = x1;
-    rec.y1_pts = y1;
-    rec._hasGeometryOverride = true;
-
-    if (Array.isArray(Store.annotations)) {
-      const idx = Store.annotations.findIndex(r => r.annotation_id === rec.annotation_id);
-      if (idx >= 0) {
-        Store.annotations[idx] = applyOverridesToRecord({
-          ...Store.annotations[idx],
-          x0_pts: x0,
-          y0_pts: y0,
-          x1_pts: x1,
-          y1_pts: y1,
-        });
-      }
-    }
-
-    if (Store.selectedRecord && Store.selectedRecord.annotation_id === rec.annotation_id) {
-      Store.setSelectedAnnotation(applyOverridesToRecord({
-        ...Store.selectedRecord,
-        x0_pts: x0,
-        y0_pts: y0,
-        x1_pts: x1,
-        y1_pts: y1,
-      }));
+  // Update Store via override system (don't mutate rec directly)
+  if (Array.isArray(Store.annotations)) {
+    const idx = Store.annotations.findIndex(r => r.annotation_id === rec.annotation_id);
+    if (idx >= 0) {
+      Store.annotations[idx] = applyOverridesToRecord(Store.annotations[idx]);
     }
   }
+
+  if (Store.selectedRecord && Store.selectedRecord.annotation_id === rec.annotation_id) {
+    Store.setSelectedAnnotation(applyOverridesToRecord(Store.selectedRecord));
+  }
+
+  // Also update user-created annotation if applicable
+  if (rec._isUserCreated) {
+    const uIdx = userCreatedAnnotations.findIndex(r => r.annotation_id === rec.annotation_id);
+    if (uIdx >= 0) {
+      userCreatedAnnotations[uIdx] = applyOverridesToRecord(userCreatedAnnotations[uIdx]);
+    }
+  }
+}
 
   function _persistDatasetChipVisualState(rec, box) {
     if (!rec || !box || !rec._isDatasetChip) return;
@@ -758,6 +1221,7 @@ function _bindGeometryUndoRedo() {
       const y0 = parseFloat(rec.y0_pts) || 0;
       const y1 = parseFloat(rec.y1_pts) || 0;
       if (y0 === 0 && y1 === 0) continue;
+      if (rec._hasGeometryOverride && rec._isUserCreated) continue;
 
       const band = document.createElement('div');
       band.className = 'component-band';
@@ -830,8 +1294,8 @@ function _bindGeometryUndoRedo() {
     if (!pageW || !pageH) return;
 
     records
-      .filter(r => (r.page_type || 'FORM') === 'FORM' && (r.status || '') !== 'REMOVED')
-      .forEach(rec => {
+  .filter(r => (r.page_type || 'FORM') === 'FORM' && (r.status || '') !== 'REMOVED' && !r._isDatasetChipPlaceholder)
+  .forEach(rec => {
         const y0 = parseFloat(rec.y0_pts) || 0;
         const y1 = parseFloat(rec.y1_pts) || 0;
         if (y0 === 0 && y1 === 0) return;
@@ -1233,6 +1697,8 @@ function _bindGeometryUndoRedo() {
     _bindGlobalAnnotationResizeEvents();
     _bindScrollZoom();
     _bindGeometryUndoRedo();
+    _bindContextMenu();
+  _bindAddAnnotationDialog();
 
     if (annotationLayer) {
       annotationLayer.addEventListener('click', (e) => {
@@ -1260,16 +1726,19 @@ function _bindGeometryUndoRedo() {
   }
 
   return {
-    init,
-    loadPage,
-    renderPage,
-    renderAnnotations,
-    showEmpty,
-    highlightSelected,
-    applyZoom,
-    applyOverridesToRecord,
-    applyLocalOverrides,
-    undoGeometry,
-    redoGeometry,
-  };
+  init,
+  loadPage,
+  renderPage,
+  renderAnnotations,
+  showEmpty,
+  highlightSelected,
+  applyZoom,
+  applyOverridesToRecord,
+  applyLocalOverrides,
+  undoGeometry,
+  redoGeometry,
+  isUserCreated,
+  updateUserAnnotation,
+  updateFormColour,
+};
 })();
