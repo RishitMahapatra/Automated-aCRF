@@ -95,7 +95,6 @@ async function _captureCurrentRenderedPage() {
     throw new Error('Failed to get canvas context');
   }
 
-  // Draw PDF page base image
   const img = new Image();
   img.src = Store.pageImage;
 
@@ -106,7 +105,6 @@ async function _captureCurrentRenderedPage() {
 
   ctx.drawImage(img, 0, 0, imgWidth, imgHeight);
 
-  // Draw annotation boxes exactly as visible in DOM
   const boxes = Array.from(annotationLayer.querySelectorAll('.ann-box'));
   const layerRect = annotationLayer.getBoundingClientRect();
   const scaleX = imgWidth / Math.max(1, layerRect.width);
@@ -114,6 +112,7 @@ async function _captureCurrentRenderedPage() {
 
   boxes.forEach(box => {
     const rect = box.getBoundingClientRect();
+    const boxId = String(box.dataset.id || '');
 
     const x = (rect.left - layerRect.left) * scaleX;
     const y = (rect.top - layerRect.top) * scaleY;
@@ -135,20 +134,56 @@ async function _captureCurrentRenderedPage() {
     ctx.strokeStyle = border;
     ctx.stroke();
 
-    const text = (box.textContent || '').trim();
+    // EXPORT-ONLY: never draw resize icon text
+    const handle = box.querySelector('.ann-resize-handle');
+    const handleText = handle ? (handle.textContent || '').trim() : '';
+
+    let text = (box.textContent || '').trim();
+    if (handleText && text.endsWith(handleText)) {
+      text = text.slice(0, text.length - handleText.length).trim();
+    }
+
     if (text) {
-      const fontPx = parseFloat(style.fontSize || '12') || 12;
-      const fontFamily = style.fontFamily || 'Arial';
-      const fontWeight = style.fontWeight || '500';
+      // EXPORT-ONLY: enforce uniform typography
+      const exportFontPx = 11;
+      const exportFontWeight = '500';
+      const exportFontFamily = 'Arial';
+      const exportLetterSpacingPx = 0;
 
       ctx.fillStyle = textColor;
-      ctx.font = `${fontWeight} ${fontPx * scaleY}px ${fontFamily}`;
+      ctx.font = `${exportFontWeight} ${exportFontPx * scaleY}px ${exportFontFamily}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
       const textX = x + w / 2;
       const textY = y + h / 2;
-      ctx.fillText(text, textX, textY, Math.max(10, w - 8));
+
+      // Match a stable inner text width for export
+      const maxTextWidth = Math.max(10, w - (14 * scaleX));
+
+      if (exportLetterSpacingPx === 0) {
+        ctx.fillText(text, textX, textY, maxTextWidth);
+      } else {
+        const chars = Array.from(text);
+        ctx.font = `${exportFontWeight} ${exportFontPx * scaleY}px ${exportFontFamily}`;
+
+        let totalWidth = 0;
+        chars.forEach((ch, idx) => {
+          totalWidth += ctx.measureText(ch).width;
+          if (idx < chars.length - 1) {
+            totalWidth += exportLetterSpacingPx * scaleX;
+          }
+        });
+
+        let cursorX = textX - totalWidth / 2;
+        chars.forEach((ch, idx) => {
+          ctx.fillText(ch, cursorX, textY);
+          cursorX += ctx.measureText(ch).width;
+          if (idx < chars.length - 1) {
+            cursorX += exportLetterSpacingPx * scaleX;
+          }
+        });
+      }
     }
 
     ctx.restore();
