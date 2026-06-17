@@ -6,17 +6,18 @@ Every public method is callable from JS via window.pywebview.api.method_name()
 """
 
 from __future__ import annotations
+
 import shutil
 import traceback
-from pathlib import Path
-
 import uuid
+from pathlib import Path
 
 import webview
 
-from config import ROOT_DIR, OUTPUTS_DIR, EXCEL_PATH
+from config import ROOT_DIR, OUTPUTS_DIR, EXCEL_PATH, get_session_output_dir
 from bridge.pipeline_bridge import PipelineBridge, run_full_pipeline
 from bridge import annotation_bridge
+from bridge import editor_state_bridge
 from bridge.export_bridge import ExportBridge
 
 
@@ -30,9 +31,9 @@ class Api:
         self._pipeline = PipelineBridge()
         self._export = ExportBridge()
 
-    # =========================================================================
+    # ==========================================================================
     # FILE UPLOAD
-    # =========================================================================
+    # ==========================================================================
 
     def select_pdf(self):
         """
@@ -72,9 +73,9 @@ class Api:
         """
         return self.select_pdf()
 
-    # =========================================================================
+    # ==========================================================================
     # SESSION
-    # =========================================================================
+    # ==========================================================================
 
     def set_session_id(self, session_id):
         self._session_id = str(session_id or "").strip().replace(" ", "_")
@@ -89,6 +90,7 @@ class Api:
             "session_id": self._session_id,
             "page_count": self._export.get_page_count(),
         }
+
     def restart_session(self):
         """
         Clear current in-memory session state so the frontend can reset the app
@@ -102,9 +104,9 @@ class Api:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
-    # =========================================================================
+    # ==========================================================================
     # PIPELINE
-    # =========================================================================
+    # ==========================================================================
 
     def run_pipeline(self, pdf_path=None, session_id=None):
         """
@@ -142,9 +144,9 @@ class Api:
                 "trace": traceback.format_exc(),
             }
 
-    # =========================================================================
+    # ==========================================================================
     # PAGE RENDERING
-    # =========================================================================
+    # ==========================================================================
 
     def get_page_image(self, page_number, dpi=150):
         try:
@@ -158,9 +160,9 @@ class Api:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
-    # =========================================================================
+    # ==========================================================================
     # ANNOTATIONS
-    # =========================================================================
+    # ==========================================================================
 
     def get_annotations(self):
         try:
@@ -269,9 +271,34 @@ class Api:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
-    # =========================================================================
+    # ==========================================================================
+    # EDITOR STATE SNAPSHOT
+    # ==========================================================================
+
+    def save_editor_state(self, state):
+        try:
+            if not self._session_id:
+                return {"ok": False, "error": "No session ID"}
+
+            return editor_state_bridge.save_editor_state(
+                self._session_id,
+                state or {},
+            )
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def load_editor_state(self):
+        try:
+            if not self._session_id:
+                return {"ok": False, "error": "No session ID"}
+
+            return editor_state_bridge.load_editor_state(self._session_id)
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    # ==========================================================================
     # STATS
-    # =========================================================================
+    # ==========================================================================
 
     def get_stats(self):
         try:
@@ -280,11 +307,14 @@ class Api:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
-    # =========================================================================
+    # ==========================================================================
     # EXPORT
-    # =========================================================================
+    # ==========================================================================
 
     def export_pdf(self):
+        """
+        Existing export path. Kept for backward compatibility.
+        """
         try:
             if not self._pdf_path:
                 return {"ok": False, "error": "No PDF loaded"}
@@ -335,9 +365,60 @@ class Api:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
-    # =========================================================================
+    def export_pdf_from_images(self, page_images):
+        """
+        New screenshot-style export path.
+        Frontend sends one rendered page image per PDF page.
+        """
+        try:
+            if not self._session_id:
+                return {"ok": False, "error": "No session ID"}
+
+            if not page_images or not isinstance(page_images, list):
+                return {"ok": False, "error": "No page images provided"}
+
+            suggested_name = f"{self._session_id}.pdf"
+
+            save_result = self._window.create_file_dialog(
+                webview.SAVE_DIALOG,
+                save_filename=suggested_name,
+                file_types=("PDF Files (*.pdf)",),
+            )
+
+            if not save_result:
+                return {"ok": False, "error": "Export cancelled"}
+
+            if isinstance(save_result, (list, tuple)):
+                out_path = Path(save_result[0])
+            else:
+                out_path = Path(save_result)
+
+            if out_path.suffix.lower() != ".pdf":
+                out_path = out_path.with_suffix(".pdf")
+
+            temp_out = (
+                get_session_output_dir(self._session_id)
+                / f"{self._session_id}_screenshot_export.pdf"
+            )
+
+            result = self._export.export_from_page_images(page_images, temp_out)
+            if not result.get("ok"):
+                return result
+
+            if not temp_out.exists():
+                return {"ok": False, "error": "Temporary export PDF not created"}
+
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(temp_out, out_path)
+
+            return {"ok": True, "path": str(out_path)}
+
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    # ==========================================================================
     # COLOUR
-    # =========================================================================
+    # ==========================================================================
 
     def get_dataset_colours(self):
         try:

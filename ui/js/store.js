@@ -33,6 +33,10 @@ const Store = {
 
   formDatasetColours: {},
 
+  // New canonical frontend export state containers
+  editorObjects: [],
+  datasetChips: [],
+
   stats: {
     total: 0,
     resolved: 0,
@@ -71,6 +75,8 @@ const Store = {
     this.selectedAnnotation = null;
 
     this.formDatasetColours = {};
+    this.editorObjects = [];
+    this.datasetChips = [];
 
     this.stats = {
       total: 0,
@@ -113,6 +119,56 @@ const Store = {
     this.selectedId = null;
   },
 
+  setEditorObjects(objects) {
+    this.editorObjects = Array.isArray(objects) ? objects : [];
+  },
+
+  getVisibleEditorObjects() {
+    return (this.editorObjects || []).filter(
+      o => o && o.visible !== false && o.removed !== true
+    );
+  },
+
+  upsertEditorObject(obj) {
+    if (!obj || !obj.object_id) return;
+    const idx = this.editorObjects.findIndex(x => x.object_id === obj.object_id);
+    if (idx >= 0) {
+      this.editorObjects[idx] = obj;
+    } else {
+      this.editorObjects.push(obj);
+    }
+  },
+
+  removeEditorObject(objectId) {
+    const idx = this.editorObjects.findIndex(x => x.object_id === objectId);
+    if (idx >= 0) {
+      this.editorObjects[idx].removed = true;
+      this.editorObjects[idx].visible = false;
+    }
+  },
+
+  setDatasetChips(chips) {
+    this.datasetChips = Array.isArray(chips) ? chips : [];
+  },
+
+  upsertDatasetChip(chip) {
+    if (!chip || !chip.chip_id) return;
+    const idx = this.datasetChips.findIndex(x => x.chip_id === chip.chip_id);
+    if (idx >= 0) {
+      this.datasetChips[idx] = chip;
+    } else {
+      this.datasetChips.push(chip);
+    }
+  },
+
+  removeDatasetChip(chipId) {
+    const idx = this.datasetChips.findIndex(x => x.chip_id === chipId);
+    if (idx >= 0) {
+      this.datasetChips[idx].removed = true;
+      this.datasetChips[idx].visible = false;
+    }
+  },
+
   pushHistory(action) {
     if (!action) return;
     this.undoStack.push(action);
@@ -147,6 +203,7 @@ const Store = {
   canRedo() {
     return this.redoStack.length > 0;
   },
+
   setZoom(pct) {
     const next = Math.max(this.zoomMin, Math.min(this.zoomMax, pct));
     this.zoomPct = next;

@@ -34,13 +34,158 @@ async function initApp() {
     _bindCtrlWheelZoom();
     _bindExportButton();
     await _restoreStateIfAny();
-
+    await _restoreEditorStateIfAny();
 
     console.log('[app] Ready.');
   } catch (e) {
     console.error('[app] Initialization failed:', e);
   }
 }
+
+function _sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function _hexToRgb(hex) {
+  const clean = String(hex || '').replace('#', '').trim();
+  if (clean.length !== 6) return [191, 224, 255];
+  return [
+    parseInt(clean.slice(0, 2), 16),
+    parseInt(clean.slice(2, 4), 16),
+    parseInt(clean.slice(4, 6), 16),
+  ];
+}
+
+function _cssColorToCanvasFill(cssColor) {
+  return cssColor || '#fffad9';
+}
+
+function _drawRoundedRect(ctx, x, y, w, h, r) {
+  const rr = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+async function _captureCurrentRenderedPage() {
+  const pdfImg = document.getElementById('pdf-img');
+  const annotationLayer = document.getElementById('annotation-layer');
+
+  if (!pdfImg || !annotationLayer || !Store.pageImage) {
+    throw new Error('Current page is not rendered');
+  }
+
+  const imgWidth = Number(Store.imgWidth || pdfImg.naturalWidth || 0);
+  const imgHeight = Number(Store.imgHeight || pdfImg.naturalHeight || 0);
+
+  if (!imgWidth || !imgHeight) {
+    throw new Error('Missing page image dimensions');
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = imgWidth;
+  canvas.height = imgHeight;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    throw new Error('Failed to get canvas context');
+  }
+
+  // Draw PDF page base image
+  const img = new Image();
+  img.src = Store.pageImage;
+
+  await new Promise((resolve, reject) => {
+    img.onload = resolve;
+    img.onerror = reject;
+  });
+
+  ctx.drawImage(img, 0, 0, imgWidth, imgHeight);
+
+  // Draw annotation boxes exactly as visible in DOM
+  const boxes = Array.from(annotationLayer.querySelectorAll('.ann-box'));
+  const layerRect = annotationLayer.getBoundingClientRect();
+  const scaleX = imgWidth / Math.max(1, layerRect.width);
+  const scaleY = imgHeight / Math.max(1, layerRect.height);
+
+  boxes.forEach(box => {
+    const rect = box.getBoundingClientRect();
+
+    const x = (rect.left - layerRect.left) * scaleX;
+    const y = (rect.top - layerRect.top) * scaleY;
+    const w = rect.width * scaleX;
+    const h = rect.height * scaleY;
+
+    const style = window.getComputedStyle(box);
+    const bg = _cssColorToCanvasFill(style.backgroundColor);
+    const border = style.borderColor || '#000000';
+    const textColor = style.color || '#000000';
+
+    ctx.save();
+
+    _drawRoundedRect(ctx, x, y, w, h, 2);
+    ctx.fillStyle = bg;
+    ctx.fill();
+
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = border;
+    ctx.stroke();
+
+    const text = (box.textContent || '').trim();
+    if (text) {
+      const fontPx = parseFloat(style.fontSize || '12') || 12;
+      const fontFamily = style.fontFamily || 'Arial';
+      const fontWeight = style.fontWeight || '500';
+
+      ctx.fillStyle = textColor;
+      ctx.font = `${fontWeight} ${fontPx * scaleY}px ${fontFamily}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      const textX = x + w / 2;
+      const textY = y + h / 2;
+      ctx.fillText(text, textX, textY, Math.max(10, w - 8));
+    }
+
+    ctx.restore();
+  });
+
+  return canvas.toDataURL('image/png');
+}
+
+async function _captureAllPagesForExport() {
+  if (!Store.pageCount || Store.pageCount < 1) {
+    throw new Error('No pages available for export');
+  }
+
+  const originalPage = Store.currentPage;
+  const images = [];
+
+  for (let page = 1; page <= Store.pageCount; page++) {
+    if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
+      await Canvas.loadPage(page);
+    } else {
+      throw new Error('Canvas.loadPage is unavailable');
+    }
+
+    await _sleep(120);
+
+    const img = await _captureCurrentRenderedPage();
+    images.push(img);
+  }
+
+  if (typeof Canvas !== 'undefined' && Canvas.loadPage && originalPage) {
+    await Canvas.loadPage(originalPage);
+  }
+
+  return images;
+}
+
+
 
 function _bindExportButton() {
   const btn = document.getElementById('btn-export-pdf');
@@ -53,18 +198,34 @@ function _bindExportButton() {
         return;
       }
 
-      const res = await window.pywebview.api.export_pdf();
+      btn.disabled = true;
+      const oldText = btn.textContent;
+      btn.textContent = 'Exporting...';
+
+      const pageImages = await _captureAllPagesForExport();
+      if (!pageImages || !pageImages.length) {
+        alert('No page images captured for export.');
+        return;
+      }
+
+      const res = await window.pywebview.api.export_pdf_from_images(pageImages);
+
       if (res && res.ok) {
         alert('PDF exported successfully:\n' + res.path);
       } else {
         alert('Export failed: ' + (res?.error || 'Unknown error'));
       }
+
     } catch (e) {
-      console.error('[app] export error:', e);
+      console.error('[app] screenshot export error:', e);
       alert('Export failed: ' + e);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Export ↗';
     }
   });
 }
+
 
 async function _restoreStateIfAny() {
   try {
@@ -130,6 +291,38 @@ async function _restoreStateIfAny() {
 
   } catch (e) {
     console.error('[app] restore state error:', e);
+  }
+}
+async function _restoreEditorStateIfAny() {
+  try {
+    if (typeof EditorState === 'undefined' || !EditorState.restoreIfAny) return;
+
+    const saved = await EditorState.restoreIfAny();
+    if (!saved || !Array.isArray(saved.objects)) return;
+
+    Store.setEditorObjects(saved.objects);
+
+    const chips = saved.objects
+      .filter(o => o && o.object_type === 'dataset_chip' && o.visible !== false && o.removed !== true)
+      .map(o => ({
+        chip_id: o.object_id,
+        page: o.page,
+        dataset: o?.data?.dataset || '',
+        full_name: o?.data?.full_name || '',
+        display_text: o.display_text || '',
+        rect_pts: o.rect_pts || null,
+        fill_rgb: o?.style?.fill_rgb || [191, 224, 255],
+        visible: true,
+        removed: false,
+        source: o.source || 'AUTO',
+      }));
+
+    if (chips.length) {
+      Store.setDatasetChips(chips);
+    }
+
+  } catch (e) {
+    console.error('[app] restore editor state error:', e);
   }
 }
 

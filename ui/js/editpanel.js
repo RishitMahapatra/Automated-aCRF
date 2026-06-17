@@ -505,6 +505,11 @@ const EditPanel = (() => {
           Store.selectedRecord.sdtm_label = fullForm;
           _populateDatasetRecord(Store.selectedRecord);
           _setManualLabelsForDatasetMode(Store.selectedRecord);
+
+          if (typeof EditorState !== 'undefined' && EditorState.scheduleAutosave) {
+            EditorState.scheduleAutosave();
+          }
+
           return;
         }
 
