@@ -10,50 +10,50 @@ const Canvas = (() => {
   const DEFAULT_DPI = 150;
 
   const PALETTE = [
-    '#F0E442',
-    '#56B4E9',
-    '#009E73',
-    '#D55E00',
-    '#0072B2',
-    '#E69F00',
-    '#CC79A7',
+    '#FFFF96', // yellow  = rgb(255,255,150)
+    '#BFFFFF', // blue    = rgb(191,255,255)
+    '#96FF96', // green   = rgb(150,255,150)
+    '#FFBE9B', // orange  = rgb(255,190,155)
+    '#BFFFFF', // cobalt  -> same as blue
+    '#FFBE9B', // orange  -> same as orange
+    '#CC79A7', // purple  -> kept as-is for compatibility
   ];
 
   const COLOUR_KEY_TO_HEX = {
-    yellow: '#F0E442',
-    blue: '#56B4E9',
-    teal: '#009E73',
-    vermillion: '#D55E00',
-    cobalt: '#0072B2',
-    orange: '#E69F00',
-    purple: '#CC79A7',
+    yellow: '#FFFF96',     // rgb(255,255,150)
+    blue: '#BFFFFF',       // rgb(191,255,255)
+    teal: '#96FF96',       // rgb(150,255,150)  -> used as green
+    vermillion: '#FFBE9B', // rgb(255,190,155)  -> used as orange
+    cobalt: '#BFFFFF',     // compatibility
+    orange: '#FFBE9B',     // compatibility
+    purple: '#CC79A7',     // unchanged unless you want to replace it too
   };
 
   const DATASET_LABELS = {
-    DM: 'DM=Demographics',
-    CM: 'CM=Concomitant Medications',
-    AE: 'AE=Adverse Events',
-    EX: 'EX=Exposure',
-    MH: 'MH=Medical History',
-    VS: 'VS=Vital Signs',
-    LB: 'LB=Laboratory',
-    DS: 'DS=Disposition',
-    PE: 'PE=Physical Examination',
-    EG: 'EG=ECG',
-    QS: 'QS=Questionnaires',
-    SC: 'SC=Subject Characteristics',
-    SU: 'SU=Substance Use',
-    FA: 'FA=Findings About',
-    PR: 'PR=Procedures',
-    SUPPCM: 'SUPPCM=Supplemental Qualifiers for CM',
-    SUPPAE: 'SUPPAE=Supplemental Qualifiers for AE',
-    SUPPDM: 'SUPPDM=Supplemental Qualifiers for DM',
-    SUPPEX: 'SUPPEX=Supplemental Qualifiers for EX',
-    SUPPMH: 'SUPPMH=Supplemental Qualifiers for MH',
-    SUPPVS: 'SUPPVS=Supplemental Qualifiers for VS',
-    SUPPLB: 'SUPPLB=Supplemental Qualifiers for LB',
-    SUPPDS: 'SUPPDS=Supplemental Qualifiers for DS',
-  };
+  DM: 'DM (Demographics)',
+  CM: 'CM (Concomitant Medications)',
+  AE: 'AE (Adverse Events)',
+  EX: 'EX (Exposure)',
+  MH: 'MH (Medical History)',
+  VS: 'VS (Vital Signs)',
+  LB: 'LB (Laboratory)',
+  DS: 'DS (Disposition)',
+  PE: 'PE (Physical Examination)',
+  EG: 'EG (ECG)',
+  QS: 'QS (Questionnaires)',
+  SC: 'SC (Subject Characteristics)',
+  SU: 'SU (Substance Use)',
+  FA: 'FA (Findings About)',
+  PR: 'PR (Procedures)',
+  SUPPCM: 'SUPPCM (Supplemental Qualifiers for CM)',
+  SUPPAE: 'SUPPAE (Supplemental Qualifiers for AE)',
+  SUPPDM: 'SUPPDM (Supplemental Qualifiers for DM)',
+  SUPPEX: 'SUPPEX (Supplemental Qualifiers for EX)',
+  SUPPMH: 'SUPPMH (Supplemental Qualifiers for MH)',
+  SUPPVS: 'SUPPVS (Supplemental Qualifiers for VS)',
+  SUPPLB: 'SUPPLB (Supplemental Qualifiers for LB)',
+  SUPPDS: 'SUPPDS (Supplemental Qualifiers for DS)',
+};
 
   let formColourRegistry = {};
   let dragState = null;
@@ -521,7 +521,7 @@ function _bindGeometryUndoRedo() {
     if (!formColourRegistry[formCode]) formColourRegistry[formCode] = {};
     formColourRegistry[formCode][dsShort] = colour;
 
-    const chipLabel = `${dsShort}=${dsName}`;
+    const chipLabel = `${dsShort} (${dsName})`;
     const chipKey = `${formCode}::${dsShort}`;
 
     const leftPct = ((pendingClickPts.x_pts / Store.pageWidthPts) * 100).toFixed(2);
@@ -1614,7 +1614,7 @@ function _persistDatasetChipVisualState(rec, box) {
       chip.dataset.kind = 'dataset-chip';
       chip.dataset.id = `datasetchip::${formCode}::${ds}`;
 
-      const label = DATASET_LABELS[ds] || `${ds}=${ds}`;
+      const label = DATASET_LABELS[ds] || `${ds} (${ds})`;
       const bg = formColourRegistry?.[formCode]?.[ds] || PALETTE[0];
       const datasetRecord = applyOverridesToRecord(buildDatasetSelectionRecord(ds, formCode, records));
 
@@ -1693,7 +1693,7 @@ function _persistDatasetChipVisualState(rec, box) {
 
     return {
       annotation_id: `datasetchip::${formUpper}::${dsUpper}`,
-      raw_variable: DATASET_LABELS[dsUpper] || dsUpper,
+      raw_variable: DATASET_LABELS[dsUpper] || `${dsUpper} (${dsUpper})`,
       component: 'DATASET_HEADER',
       form_code: formUpper,
       page_type: 'FORM',
@@ -1701,7 +1701,7 @@ function _persistDatasetChipVisualState(rec, box) {
       status: 'RESOLVED',
       sdtm_dataset: dsUpper,
       sdtm_variable: '',
-      sdtm_label: DATASET_LABELS[dsUpper] || dsUpper,
+      sdtm_label: DATASET_LABELS[dsUpper] || `${dsUpper} (${dsUpper})`,
       _isDatasetChip: true,
       _datasetCode: dsUpper,
       _formCode: formUpper,

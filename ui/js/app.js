@@ -72,121 +72,25 @@ function _drawRoundedRect(ctx, x, y, w, h, r) {
 }
 
 async function _captureCurrentRenderedPage() {
-  const pdfImg = document.getElementById('pdf-img');
-  const annotationLayer = document.getElementById('annotation-layer');
+  const target = document.getElementById('pdf-page-wrap');
 
-  if (!pdfImg || !annotationLayer || !Store.pageImage) {
-    throw new Error('Current page is not rendered');
+  if (!target) {
+    throw new Error('pdf-page-wrap not found');
   }
 
-  const imgWidth = Number(Store.imgWidth || pdfImg.naturalWidth || 0);
-  const imgHeight = Number(Store.imgHeight || pdfImg.naturalHeight || 0);
-
-  if (!imgWidth || !imgHeight) {
-    throw new Error('Missing page image dimensions');
+  if (typeof html2canvas === 'undefined') {
+    throw new Error('html2canvas is not loaded');
   }
 
-  const canvas = document.createElement('canvas');
-  canvas.width = imgWidth;
-  canvas.height = imgHeight;
+  // Wait a tick so latest DOM updates/annotation rendering settle
+  await _sleep(80);
 
-  const ctx = canvas.getContext('2d');
-  if (!ctx) {
-    throw new Error('Failed to get canvas context');
-  }
-
-  const img = new Image();
-  img.src = Store.pageImage;
-
-  await new Promise((resolve, reject) => {
-    img.onload = resolve;
-    img.onerror = reject;
-  });
-
-  ctx.drawImage(img, 0, 0, imgWidth, imgHeight);
-
-  const boxes = Array.from(annotationLayer.querySelectorAll('.ann-box'));
-  const layerRect = annotationLayer.getBoundingClientRect();
-  const scaleX = imgWidth / Math.max(1, layerRect.width);
-  const scaleY = imgHeight / Math.max(1, layerRect.height);
-
-  boxes.forEach(box => {
-    const rect = box.getBoundingClientRect();
-    const boxId = String(box.dataset.id || '');
-
-    const x = (rect.left - layerRect.left) * scaleX;
-    const y = (rect.top - layerRect.top) * scaleY;
-    const w = rect.width * scaleX;
-    const h = rect.height * scaleY;
-
-    const style = window.getComputedStyle(box);
-    const bg = _cssColorToCanvasFill(style.backgroundColor);
-    const border = style.borderColor || '#000000';
-    const textColor = style.color || '#000000';
-
-    ctx.save();
-
-    _drawRoundedRect(ctx, x, y, w, h, 2);
-    ctx.fillStyle = bg;
-    ctx.fill();
-
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = border;
-    ctx.stroke();
-
-    // EXPORT-ONLY: never draw resize icon text
-    const handle = box.querySelector('.ann-resize-handle');
-    const handleText = handle ? (handle.textContent || '').trim() : '';
-
-    let text = (box.textContent || '').trim();
-    if (handleText && text.endsWith(handleText)) {
-      text = text.slice(0, text.length - handleText.length).trim();
-    }
-
-    if (text) {
-      // EXPORT-ONLY: enforce uniform typography
-      const exportFontPx = 11;
-      const exportFontWeight = '500';
-      const exportFontFamily = 'Arial';
-      const exportLetterSpacingPx = 0;
-
-      ctx.fillStyle = textColor;
-      ctx.font = `${exportFontWeight} ${exportFontPx * scaleY}px ${exportFontFamily}`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-
-      const textX = x + w / 2;
-      const textY = y + h / 2;
-
-      // Match a stable inner text width for export
-      const maxTextWidth = Math.max(10, w - (14 * scaleX));
-
-      if (exportLetterSpacingPx === 0) {
-        ctx.fillText(text, textX, textY, maxTextWidth);
-      } else {
-        const chars = Array.from(text);
-        ctx.font = `${exportFontWeight} ${exportFontPx * scaleY}px ${exportFontFamily}`;
-
-        let totalWidth = 0;
-        chars.forEach((ch, idx) => {
-          totalWidth += ctx.measureText(ch).width;
-          if (idx < chars.length - 1) {
-            totalWidth += exportLetterSpacingPx * scaleX;
-          }
-        });
-
-        let cursorX = textX - totalWidth / 2;
-        chars.forEach((ch, idx) => {
-          ctx.fillText(ch, cursorX, textY);
-          cursorX += ctx.measureText(ch).width;
-          if (idx < chars.length - 1) {
-            cursorX += exportLetterSpacingPx * scaleX;
-          }
-        });
-      }
-    }
-
-    ctx.restore();
+  const canvas = await html2canvas(target, {
+    backgroundColor: '#ffffff',
+    useCORS: true,
+    scale: 4,
+    logging: false,
+    removeContainer: true,
   });
 
   return canvas.toDataURL('image/png');
@@ -198,28 +102,43 @@ async function _captureAllPagesForExport() {
   }
 
   const originalPage = Store.currentPage;
+  const originalZoom = Number(Store.zoomPct || 100);
   const images = [];
 
-  for (let page = 1; page <= Store.pageCount; page++) {
-    if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
-      await Canvas.loadPage(page);
-    } else {
-      throw new Error('Canvas.loadPage is unavailable');
+  try {
+    // Export at stable zoom for consistent capture
+    if (Store.setZoom && typeof Canvas !== 'undefined' && Canvas.applyZoom) {
+      Store.setZoom(100);
+      Canvas.applyZoom();
+      await _sleep(120);
     }
 
-    await _sleep(120);
+    for (let page = 1; page <= Store.pageCount; page++) {
+      if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
+        await Canvas.loadPage(page);
+      } else {
+        throw new Error('Canvas.loadPage is unavailable');
+      }
 
-    const img = await _captureCurrentRenderedPage();
-    images.push(img);
+      // Let image + annotations + chips fully render
+      await _sleep(250);
+
+      const img = await _captureCurrentRenderedPage();
+      images.push(img);
+    }
+
+    return images;
+  } finally {
+    if (typeof Canvas !== 'undefined' && Canvas.loadPage && originalPage) {
+      await Canvas.loadPage(originalPage);
+    }
+
+    if (Store.setZoom && typeof Canvas !== 'undefined' && Canvas.applyZoom) {
+      Store.setZoom(originalZoom);
+      Canvas.applyZoom();
+    }
   }
-
-  if (typeof Canvas !== 'undefined' && Canvas.loadPage && originalPage) {
-    await Canvas.loadPage(originalPage);
-  }
-
-  return images;
 }
-
 
 
 function _bindExportButton() {
