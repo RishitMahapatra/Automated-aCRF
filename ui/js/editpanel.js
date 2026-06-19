@@ -215,6 +215,12 @@ const EditPanel = (() => {
     if (eq >= 0) {
       return val.slice(eq + 1).trim();
     }
+
+    const parenMatch = val.match(/^[A-Z0-9_]+\s*\((.*)\)$/);
+    if (parenMatch) {
+      return String(parenMatch[1] || '').trim();
+    }
+
     return val;
   }
 
@@ -493,7 +499,7 @@ const EditPanel = (() => {
         if (!Store.selectedRecord) return;
 
         if (currentMode === 'dataset-chip') {
-          const ds = (document.getElementById('manual-dataset')?.value || '').trim();
+          const ds = (document.getElementById('manual-dataset')?.value || '').trim().toUpperCase();
           const fullForm = (document.getElementById('manual-label')?.value || '').trim();
 
           if (!ds) {
@@ -501,13 +507,46 @@ const EditPanel = (() => {
             return;
           }
 
-          Store.selectedRecord.sdtm_dataset = ds;
-          Store.selectedRecord.sdtm_label = fullForm;
-          _populateDatasetRecord(Store.selectedRecord);
-          _setManualLabelsForDatasetMode(Store.selectedRecord);
+          if (!Store.selectedRecord || !Store.selectedRecord._isDatasetChip) {
+            return;
+          }
 
-          if (typeof EditorState !== 'undefined' && EditorState.scheduleAutosave) {
-            EditorState.scheduleAutosave();
+          const before = {
+            annotation_id: Store.selectedRecord.annotation_id,
+            sdtm_dataset: Store.selectedRecord.sdtm_dataset || '',
+            sdtm_label: Store.selectedRecord.sdtm_label || '',
+            full_name: _extractFullForm(Store.selectedRecord.sdtm_label || ''),
+            mode: 'dataset-chip-edit',
+          };
+
+          let nextRecord = Store.selectedRecord;
+          if (typeof Canvas !== 'undefined' && Canvas.updateDatasetChip) {
+            nextRecord = Canvas.updateDatasetChip(Store.selectedRecord, {
+              sdtm_dataset: ds,
+              full_name: fullForm,
+            }) || Store.selectedRecord;
+          }
+
+          const after = {
+            annotation_id: nextRecord.annotation_id,
+            sdtm_dataset: nextRecord.sdtm_dataset || ds,
+            sdtm_label: nextRecord.sdtm_label || (fullForm ? `${ds} (${fullForm})` : ds),
+            full_name: fullForm,
+            mode: 'dataset-chip-edit',
+          };
+
+          Store.pushHistory({
+            type: 'dataset-chip-edit',
+            before,
+            after,
+          });
+
+          Store.setSelectedAnnotation(nextRecord);
+          _populateDatasetRecord(nextRecord);
+          _setManualLabelsForDatasetMode(nextRecord);
+
+          if (typeof Canvas !== 'undefined' && Canvas.highlightSelected) {
+            Canvas.highlightSelected();
           }
 
           return;
@@ -773,6 +812,25 @@ await _refreshAfterUpdate({
     const action = Store.popUndo();
     if (!action) return;
 
+    if (action.type === 'dataset-chip-edit') {
+      const chipId = action.before.annotation_id;
+      const chipRecord = (Store.annotations || []).find(r => r.annotation_id === chipId);
+
+      if (chipRecord && typeof Canvas !== 'undefined' && Canvas.updateDatasetChip) {
+        const restored = Canvas.updateDatasetChip(chipRecord, {
+          sdtm_dataset: action.before.sdtm_dataset || '',
+          full_name: action.before.full_name || _extractFullForm(action.before.sdtm_label || ''),
+        });
+
+        Store.pushRedo(action);
+        if (restored) {
+          Store.selectedId = restored.annotation_id;
+          await openDatasetChip(restored);
+        }
+      }
+      return;
+    }
+
     if (action.type === 'dataset-colour') {
       const ok = await _applyDatasetColourSnapshot(action.before);
       if (!ok) return;
@@ -836,6 +894,24 @@ await _refreshAfterUpdate({
   async function redo() {
     const action = Store.popRedo();
     if (!action) return;
+    if (action.type === 'dataset-chip-edit') {
+      const chipId = action.after.annotation_id;
+      const chipRecord = (Store.annotations || []).find(r => r.annotation_id === chipId);
+
+      if (chipRecord && typeof Canvas !== 'undefined' && Canvas.updateDatasetChip) {
+        const restored = Canvas.updateDatasetChip(chipRecord, {
+          sdtm_dataset: action.after.sdtm_dataset || '',
+          full_name: action.after.full_name || _extractFullForm(action.after.sdtm_label || ''),
+        });
+
+        Store.pushHistory(action);
+        if (restored) {
+          Store.selectedId = restored.annotation_id;
+          await openDatasetChip(restored);
+        }
+      }
+      return;
+    }
 
     if (action.type === 'dataset-colour') {
       const ok = await _applyDatasetColourSnapshot(action.after);

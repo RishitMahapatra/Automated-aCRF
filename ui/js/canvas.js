@@ -266,6 +266,143 @@ function _bindGeometryUndoRedo() {
       EditorState.scheduleAutosave();
     }
   }
+//dataset annotation
+function updateDatasetChip(chipRecord, fields = {}) {
+    if (!chipRecord) return null;
+
+    const formCode = String(chipRecord._formCode || chipRecord.form_code || '').toUpperCase();
+    const oldDs = String(chipRecord._datasetCode || chipRecord.sdtm_dataset || '').toUpperCase();
+
+    const nextDataset = String(fields.sdtm_dataset || oldDs || '').trim().toUpperCase();
+    const nextFullName = String(fields.full_name || '').trim();
+
+    const nextDisplayText = nextFullName
+      ? `${nextDataset} (${nextFullName})`
+      : (DATASET_LABELS[nextDataset] || nextDataset);
+
+    const oldKey = `${formCode}::${oldDs}`;
+    const nextKey = `${formCode}::${nextDataset}`;
+
+    // Preserve existing UI position/size
+    const existingUi =
+      datasetChipUiOverrides[oldKey] ||
+      datasetChipUiOverrides[nextKey] || {
+        _ui_left: chipRecord._ui_left || '50%',
+        _ui_top: chipRecord._ui_top || '1%',
+        _ui_width: chipRecord._ui_width || '',
+        _ui_height: chipRecord._ui_height || '',
+      };
+
+    // Move UI override key if dataset code changed
+    if (oldKey !== nextKey && datasetChipUiOverrides[oldKey]) {
+      delete datasetChipUiOverrides[oldKey];
+    }
+    datasetChipUiOverrides[nextKey] = { ...existingUi };
+
+    // Preserve colour if dataset key changed
+    if (!formColourRegistry[formCode]) formColourRegistry[formCode] = {};
+    const oldColour = formColourRegistry[formCode][oldDs] || PALETTE[0];
+    if (oldDs !== nextDataset && formColourRegistry[formCode][oldDs]) {
+      delete formColourRegistry[formCode][oldDs];
+    }
+    formColourRegistry[formCode][nextDataset] = oldColour;
+
+    // Keep DATASET_LABELS in sync
+    if (nextDataset) {
+      DATASET_LABELS[nextDataset] = nextDisplayText;
+    }
+
+    // Update Store.datasetChips entry
+    const oldChipId = `datasetchip::${formCode}::${oldDs}`;
+    const nextChipId = `datasetchip::${formCode}::${nextDataset}`;
+
+    const fillHex = formColourRegistry[formCode][nextDataset] || PALETTE[0];
+    const clean = String(fillHex || '').replace('#', '').trim();
+    const fillRgb = clean.length === 6
+      ? [
+          parseInt(clean.slice(0, 2), 16),
+          parseInt(clean.slice(2, 4), 16),
+          parseInt(clean.slice(4, 6), 16),
+        ]
+      : [191, 255, 255];
+
+    const existingChip =
+      (Store.datasetChips || []).find(c => c.chip_id === oldChipId || c.chip_id === nextChipId) || {};
+
+    if (oldChipId !== nextChipId) {
+      Store.removeDatasetChip(oldChipId);
+    }
+
+    Store.upsertDatasetChip({
+      ...existingChip,
+      chip_id: nextChipId,
+      page: chipRecord.page || Store.currentPage,
+      dataset: nextDataset,
+      full_name: nextFullName,
+      display_text: nextDisplayText,
+      rect_pts: existingChip.rect_pts || null,
+      _ui_left: existingUi._ui_left || '50%',
+      _ui_top: existingUi._ui_top || '1%',
+      _ui_width: existingUi._ui_width || '',
+      _ui_height: existingUi._ui_height || '',
+      fill_hex: fillHex,
+      fill_rgb: fillRgb,
+      visible: true,
+      removed: false,
+      source: existingChip.source || chipRecord.source || 'AUTO',
+    });
+
+    // Update matching placeholder annotation record in Store.annotations
+    const placeholderId = chipRecord.annotation_id;
+    const idx = (Store.annotations || []).findIndex(r => r.annotation_id === placeholderId);
+    if (idx >= 0) {
+      Store.annotations[idx] = {
+        ...Store.annotations[idx],
+        form_code: formCode,
+        raw_variable: nextDisplayText,
+        sdtm_dataset: nextDataset,
+        sdtm_variable: '',
+        sdtm_label: nextDisplayText,
+        status: 'USER_CORRECTED',
+        _datasetCode: nextDataset,
+        _formCode: formCode,
+        _ui_left: existingUi._ui_left || '50%',
+        _ui_top: existingUi._ui_top || '1%',
+        _ui_width: existingUi._ui_width || '',
+        _ui_height: existingUi._ui_height || '',
+      };
+    }
+
+    // Update selected record
+    const nextRecord = {
+      ...chipRecord,
+      annotation_id: placeholderId,
+      form_code: formCode,
+      raw_variable: nextDisplayText,
+      sdtm_dataset: nextDataset,
+      sdtm_variable: '',
+      sdtm_label: nextDisplayText,
+      status: 'USER_CORRECTED',
+      _isDatasetChip: true,
+      _datasetCode: nextDataset,
+      _formCode: formCode,
+      _ui_left: existingUi._ui_left || '50%',
+      _ui_top: existingUi._ui_top || '1%',
+      _ui_width: existingUi._ui_width || '',
+      _ui_height: existingUi._ui_height || '',
+      full_name: nextFullName,
+    };
+
+    Store.setSelectedAnnotation(nextRecord);
+
+    if (typeof EditorState !== 'undefined' && EditorState.scheduleAutosave) {
+      EditorState.scheduleAutosave();
+    }
+
+    _refreshAnnotationLayer();
+    return nextRecord;
+  }
+
   // ─── RIGHT-CLICK ADD ANNOTATION ───────────────────────────────────────
 
   let pendingClickPts = null;
@@ -1845,6 +1982,7 @@ function _persistDatasetChipVisualState(rec, box) {
   redoGeometry,
   isUserCreated,
   updateUserAnnotation,
+  updateDatasetChip,
   updateFormColour,
 };
 })();
