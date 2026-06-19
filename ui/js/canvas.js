@@ -1415,7 +1415,10 @@ function _persistDatasetChipVisualState(rec, box) {
     box.style.paddingLeft = '7px';
     box.style.paddingRight = '7px';
     box.style.display = 'flex';
+    box.style.paddingBottom="4px";
+    box.style.paddingTop="4px";
     box.style.alignItems = 'center';
+    box.style.borderRadius="0px";
 
     applyBoxVisualStyle(box, rec);
 
@@ -1629,8 +1632,12 @@ function _persistDatasetChipVisualState(rec, box) {
       chip.style.color = '#000000';
       chip.style.fontSize = '11px';
       chip.style.fontWeight = '600';
-      chip.style.padding = '2px 6px';
-      chip.style.borderRadius = '2px';
+      chip.style.paddingTop = '2px';
+      chip.style.paddingRight = '6px';
+      chip.style.paddingBottom = '4px';
+      chip.style.paddingLeft = '6px';
+      chip.style.boxSizing = 'border-box';
+      chip.style.borderRadius = '0px';
       chip.style.pointerEvents = 'all';
       chip.style.cursor = 'grab';
       chip.style.whiteSpace = 'nowrap';
