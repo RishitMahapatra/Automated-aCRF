@@ -1430,7 +1430,8 @@ function _persistDatasetChipVisualState(rec, box) {
     labelSpan.style.overflow = 'visible';
     labelSpan.style.textOverflow = 'clip';
     labelSpan.style.pointerEvents = 'none';
-    box.appendChild(labelSpan);
+    labelSpan.style.paddingBottom = "3px";
+    box.appendChild(labelSpan);""
 
     const resizeHandle = document.createElement('div');
     resizeHandle.className = 'ann-resize-handle';
