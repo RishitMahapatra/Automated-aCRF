@@ -6,6 +6,10 @@
   <title>CRF Annotation Editor</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+  href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+  rel="stylesheet"
+/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles/main.css" />
 
@@ -301,155 +305,202 @@
       <!-- ── SIDEBAR ──────────────────────────────────────── -->
       <aside id="sidebar">
 
-        <!-- Upload -->
-        <div class="section-label">Upload</div>
-        <div id="drop-zone" class="drop-zone">
-          <div class="drop-icon">↑</div>
-          <div class="drop-text">Drop PDF here</div>
-          <div class="drop-sub">or click to browse</div>
-        </div>
-        <div id="file-loaded" class="file-loaded hidden">
-          <span class="file-icon">📄</span>
-          <span class="file-name mono" id="file-name-label">
-            —
-          </span>
-          <span class="file-pages" id="file-pages-label">
-            — pages
-          </span>
-          <button class="file-clear" id="btn-clear-file">
-            ×
-          </button>
-        </div>
+        <!-- Tabs -->
+<div class="sidebar-tabs-wrap">
+  <div class="sidebar-tabs chrome-tabs" id="sidebar-tabs">
+    <button class="sidebar-tab active" data-tab="workspace" id="tab-workspace">
+      <span class="material-symbols-outlined tab-icon">upload_file</span>
+      <span class="tab-label">Workspace</span>
+    </button>
+    <button class="sidebar-tab" data-tab="stats" id="tab-stats">
+      <span class="material-symbols-outlined tab-icon">monitoring</span>
+      <span class="tab-label">Stats</span>
+    </button>
+    <button class="sidebar-tab" data-tab="analysis" id="tab-analysis">
+      <span class="material-symbols-outlined tab-icon">analytics</span>
+      <span class="tab-label">Analysis</span>
+    </button>
+  </div>
+</div>
 
-        <!-- Session -->
-        <div class="section-label">Session</div>
-        <input
-          type="text"
-          id="session-input"
-          class="input"
-          placeholder="Session ID"
-          value=""
-        />
+<!-- TAB 1: Upload / Session / Pipeline -->
+<div class="sidebar-tab-panel active" id="sidebar-panel-workspace">
 
-        <!-- Pipeline -->
-        <div class="section-label">Pipeline</div>
-        <button class="btn btn-primary btn-full" id="btn-run">
-          <span class="btn-icon">▶</span>
-          Run Pipeline
-        </button>
-        <button class="btn btn-full" id="btn-restart-session" style="margin-top:8px;">
-          Restart Session
-        </button>
-        <div id="pipeline-steps" class="pipeline-steps">
-          <div class="pipeline-step" data-step="0">
-            <div class="step-dot" id="step-dot-0"></div>
-            <div class="step-line" id="step-line-0"></div>
-            <span class="step-name">Extract components</span>
-            <span class="step-status" id="step-status-0">
-              Waiting
-            </span>
-          </div>
-          <div class="pipeline-step" data-step="1">
-            <div class="step-dot" id="step-dot-1"></div>
-            <div class="step-line" id="step-line-1"></div>
-            <span class="step-name">Match SDTM</span>
-            <span class="step-status" id="step-status-1">
-              Waiting
-            </span>
-          </div>
-          <div class="pipeline-step" data-step="2">
-            <div class="step-dot" id="step-dot-2"></div>
-            <div class="step-line" id="step-line-2"></div>
-            <span class="step-name">Draw annotations</span>
-            <span class="step-status" id="step-status-2">
-              Waiting
-            </span>
-          </div>
-        </div>
+  <div class="section-label">Upload</div>
+  <div id="drop-zone" class="drop-zone">
+    <div class="drop-icon">↑</div>
+    <div class="drop-text">Drop PDF here</div>
+    <div class="drop-sub">or click to browse</div>
+  </div>
 
-        <!-- Navigation -->
-        <div class="section-label">Navigation</div>
-        <div class="nav-controls">
-          <button class="btn nav-btn" id="btn-prev">‹</button>
+  <div id="file-loaded" class="file-loaded hidden">
+    <span class="file-icon">📄</span>
+    <span class="file-name mono" id="file-name-label">—</span>
+    <span class="file-pages" id="file-pages-label">— pages</span>
+    <button class="file-clear" id="btn-clear-file">×</button>
+  </div>
 
-          <button class="btn nav-btn" id="btn-zoom-out" title="Zoom out">
-            −
-          </button>
+  <div class="section-label">Session</div>
+  <input
+    type="text"
+    id="session-input"
+    class="input"
+    placeholder="Session ID"
+    value=""
+  />
 
-          <span class="page-display" id="page-display">
-            — / —
-          </span>
+  <div class="section-label">Pipeline</div>
+  <button class="btn btn-primary btn-full" id="btn-run">
+    <span class="btn-icon">▶</span>
+    Run Pipeline
+  </button>
 
-          <button class="btn nav-btn" id="btn-zoom-in" title="Zoom in">
-            +
-          </button>
+  <button class="btn btn-full" id="btn-restart-session" style="margin-top:8px;">
+    Restart Session
+  </button>
 
-          <button class="btn nav-btn" id="btn-next">›</button>
-        </div>
-        <div class="goto-row">
-          <span class="goto-label">Go to</span>
-          <input
-            type="number"
-            id="goto-input"
-            class="input goto-input"
-            min="1"
-            placeholder="1"
-          />
-        </div>
+  <div id="pipeline-steps" class="pipeline-steps">
+    <div class="pipeline-step" data-step="0">
+      <div class="step-dot" id="step-dot-0"></div>
+      <div class="step-line" id="step-line-0"></div>
+      <span class="step-name">Extract components</span>
+      <span class="step-status" id="step-status-0">Waiting</span>
+    </div>
+    <div class="pipeline-step" data-step="1">
+      <div class="step-dot" id="step-dot-1"></div>
+      <div class="step-line" id="step-line-1"></div>
+      <span class="step-name">Match SDTM</span>
+      <span class="step-status" id="step-status-1">Waiting</span>
+    </div>
+    <div class="pipeline-step" data-step="2">
+      <div class="step-dot" id="step-dot-2"></div>
+      <div class="step-line" id="step-line-2"></div>
+      <span class="step-name">Draw annotations</span>
+      <span class="step-status" id="step-status-2">Waiting</span>
+    </div>
+  </div>
 
-        <!-- Zoom -->
-        
+</div>
 
-        <!-- Progress -->
-        <div class="section-label">Progress</div>
-        <div class="progress-ring-wrap">
-          <svg class="progress-ring" viewBox="0 0 68 68">
-            <circle
-              class="ring-track"
-              cx="34" cy="34" r="28"
-              fill="none"
-              stroke="#1C1F3A"
-              stroke-width="5"
-            />
-            <circle
-              class="ring-fill"
-              id="ring-fill"
-              cx="34" cy="34" r="28"
-              fill="none"
-              stroke="#8E54FF"
-              stroke-width="5"
-              stroke-linecap="round"
-              stroke-dasharray="175.9"
-              stroke-dashoffset="175.9"
-              transform="rotate(-90 34 34)"
-            />
-          </svg>
-          <div class="ring-center">
-            <span class="ring-pct" id="ring-pct">0%</span>
-            <span class="ring-label">resolved</span>
-          </div>
-        </div>
+<!-- TAB 2: Stats / Navigation -->
+<div class="sidebar-tab-panel" id="sidebar-panel-stats">
 
-        <div class="stat-grid" id="stat-grid">
-          <div class="stat-cell">
-            <span class="stat-num blue" id="stat-resolved">0</span>
-            <span class="stat-label">Resolved</span>
-          </div>
-          <div class="stat-cell">
-            <span class="stat-num orange" id="stat-unmapped">0</span>
-            <span class="stat-label">Unmapped</span>
-          </div>
-          <div class="stat-cell">
-            <span class="stat-num violet" id="stat-corrected">0</span>
-            <span class="stat-label">Corrected</span>
-          </div>
-          <div class="stat-cell">
-            <span class="stat-num muted" id="stat-removed">0</span>
-            <span class="stat-label">Removed</span>
-          </div>
-        </div>
+  <div class="section-label">Progress</div>
+  <div class="progress-ring-wrap">
+    <svg class="progress-ring" viewBox="0 0 68 68">
+      <circle
+        class="ring-track"
+        cx="34" cy="34" r="28"
+        fill="none"
+        stroke="#1C1F3A"
+        stroke-width="5"
+      />
+      <circle
+        class="ring-fill"
+        id="ring-fill"
+        cx="34" cy="34" r="28"
+        fill="none"
+        stroke="#8E54FF"
+        stroke-width="5"
+        stroke-linecap="round"
+        stroke-dasharray="175.9"
+        stroke-dashoffset="175.9"
+        transform="rotate(-90 34 34)"
+      />
+    </svg>
+    <div class="ring-center">
+      <span class="ring-pct" id="ring-pct">0%</span>
+      <span class="ring-label">resolved</span>
+    </div>
+  </div>
 
-        
+  <div class="stat-grid" id="stat-grid">
+    <div class="stat-cell">
+      <span class="stat-num blue" id="stat-resolved">0</span>
+      <span class="stat-label">Resolved</span>
+    </div>
+    <div class="stat-cell">
+      <span class="stat-num orange" id="stat-unmapped">0</span>
+      <span class="stat-label">Unmapped</span>
+    </div>
+    <div class="stat-cell">
+      <span class="stat-num violet" id="stat-corrected">0</span>
+      <span class="stat-label">Corrected</span>
+    </div>
+    <div class="stat-cell">
+      <span class="stat-num muted" id="stat-removed">0</span>
+      <span class="stat-label">Removed</span>
+    </div>
+  </div>
+
+  
+
+</div>
+
+<!-- TAB 3: Deep Analysis -->
+<div class="sidebar-tab-panel" id="sidebar-panel-analysis">
+
+  <div class="section-label">Deep Analysis</div>
+  <div class="analysis-card">
+    <div class="analysis-summary-row">
+      <div class="analysis-summary-item">
+        <span class="analysis-summary-num" id="analysis-total">0</span>
+        <span class="analysis-summary-label">Total</span>
+      </div>
+      <div class="analysis-summary-item">
+        <span class="analysis-summary-num" id="analysis-reviewed">0</span>
+        <span class="analysis-summary-label">Review</span>
+      </div>
+      <div class="analysis-summary-item">
+        <span class="analysis-summary-num" id="analysis-ignored">0</span>
+        <span class="analysis-summary-label">Ignored</span>
+      </div>
+    </div>
+
+    <div class="analysis-legend">
+      <div class="analysis-legend-row">
+        <span class="legend-pill legend-pill-review"></span>
+        <span class="muted small">Yellow / orange background = needs review</span>
+      </div>
+      <div class="analysis-legend-row">
+        <span class="legend-pill legend-pill-ignore"></span>
+        <span class="muted small">Green background = ignored / resolved</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Comments</div>
+  <textarea
+    id="analysis-comments"
+    class="analysis-comments"
+    placeholder="Add review comments, notes, or summary observations..."
+  ></textarea>
+
+  <div class="section-label">Unmapped Review Queue</div>
+  <div class="unmapped-queue">
+    <div class="unmapped-queue-header">
+      <span class="unmapped-queue-title">Queue</span>
+      <span class="unmapped-queue-summary" id="unmapped-queue-summary">0 unmapped</span>
+    </div>
+
+    <input
+      type="text"
+      id="unmapped-queue-search"
+      class="unmapped-queue-search"
+      placeholder="Search variable or page"
+    />
+
+    <div class="unmapped-queue-filters">
+      <button class="unmapped-filter-chip active" data-filter="all">All</button>
+      <button class="unmapped-filter-chip" data-filter="unreviewed">Unreviewed</button>
+      <button class="unmapped-filter-chip" data-filter="review">Review</button>
+      <button class="unmapped-filter-chip" data-filter="ignored">Ignored</button>
+    </div>
+
+    <div class="unmapped-queue-list" id="unmapped-queue-list"></div>
+  </div>
+
+</div>
       </aside>
 
       <div id="sidebar-resizer" class="sidebar-resizer" aria-label="Resize sidebar"></div>
@@ -517,9 +568,9 @@
       <!-- ── STICKY BOTTOM NAVIGATION ─────────────────────── -->
       <div id="sticky-nav" class="sticky-nav">
         <button class="btn nav-btn sticky-nav-btn" id="btn-prev-sticky">‹</button>
-        <span class="page-display sticky-page-display" id="page-display-sticky">
-          — / —
-        </span>
+        <button class="btn nav-btn sticky-nav-btn" id="btn-zoom-out-sticky" title="Zoom out">−</button>
+        <span class="page-display sticky-page-display" id="page-display-sticky">— / —</span>
+        <button class="btn nav-btn sticky-nav-btn" id="btn-zoom-in-sticky" title="Zoom in">+</button>
         <button class="btn nav-btn sticky-nav-btn" id="btn-next-sticky">›</button>
       </div>
 
