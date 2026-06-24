@@ -4,6 +4,11 @@ A desktop annotation and review tool for PDF Case Report Forms (**CRFs**) that h
 
 This application is designed around a simple workflow: load a CRF PDF, run the pipeline, review page-by-page annotations, correct what needs correction, and export the final annotated output.
 
+<p align="center">
+  <img width="959" height="505" alt="image" src="https://github.com/user-attachments/assets/5f87635a-3751-4f29-8557-1df97605e830" />
+</p>
+
+
 ## Overview
 
 The **CRF Annotation Editor** provides an interactive interface for working with annotated CRF PDFs. It combines:
@@ -86,6 +91,12 @@ The sidebar acts as the main control center for the session. It is used for:
 
 Depending on the build and layout version, the sidebar may include workspace controls, statistics, and review-related summary panels.
 
+<p align="center">
+<img width="237" height="453" alt="image" src="https://github.com/user-attachments/assets/1cc77988-549c-4f23-93d3-7cb21d80c2df" />
+</p>
+
+
+
 ### Canvas Area
 
 The canvas area displays the active CRF page and all visible annotations. It supports:
@@ -95,6 +106,10 @@ The canvas area displays the active CRF page and all visible annotations. It sup
 - **Visual inspection of mappings**
 - **Page-specific editing actions**
 - **Zoomed review** for detailed reading
+
+<p align="center">
+<img width="439" height="454" alt="image" src="https://github.com/user-attachments/assets/a26b79a5-18cf-415a-b422-b285cd299e01" />
+</p>
 
 ### Sticky Bottom Navigation
 
@@ -107,6 +122,10 @@ The sticky navigation bar keeps core controls accessible while reviewing long pa
 - **Page context indicators**
 
 This helps maintain flow during review without needing to return to the top of the interface.
+
+<p align="center">
+<img width="240" height="47" alt="image" src="https://github.com/user-attachments/assets/e4b365dd-3c0c-4ca7-b9e7-093dc7391e1b" />
+</p>
 
 ## Annotation Types and States
 
@@ -177,6 +196,10 @@ The tool may display summary metrics to help track review progress, such as:
 
 These indicators help users monitor how much review remains.
 
+<p align="center">
+<img width="241" height="185" alt="image" src="https://github.com/user-attachments/assets/6fd33f62-9ed9-42bd-a26e-ed42b469bfdd" />
+</p>
+
 ## Export
 
 When review is finished, the tool can generate an annotated PDF output. The exported file reflects the reviewed annotation state and is intended to preserve the final reviewed visual output.
@@ -186,6 +209,14 @@ Typical export flow:
 1. Choose **Export**  
 2. Confirm export settings (if applicable)  
 3. Save the annotated PDF for downstream use or documentation
+
+## Workflow Diagram
+
+The end-to-end workflow is illustrated below. The application reads the CRF PDF, classifies pages, extracts and links annotation data, resolves SDTM mappings where possible, and surfaces unresolved items for manual review in the editor.
+
+<p align="center">
+<img width="457" height="254" alt="image" src="https://github.com/user-attachments/assets/88fd0744-4ad0-4250-bf97-02ad6da6517d" />
+</p>
 
 ---
 
