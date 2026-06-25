@@ -77,6 +77,16 @@ The focus of the tool is **review and usability**, allowing users to quickly mov
 6. **Export the Final PDF**  
    When review is complete, export the annotated PDF to save the reviewed version.
 
+## Workflow Diagram
+
+The end-to-end workflow is illustrated below. The application reads the CRF PDF, classifies pages, extracts and links annotation data, resolves SDTM mappings where possible, and surfaces unresolved items for manual review in the editor.
+
+<p align="center">
+<img width="457" height="254" alt="image" src="https://github.com/user-attachments/assets/88fd0744-4ad0-4250-bf97-02ad6da6517d" />
+</p>
+
+
+
 ## User Interface Guide
 
 ### Sidebar
@@ -210,13 +220,6 @@ Typical export flow:
 2. Confirm export settings (if applicable)  
 3. Save the annotated PDF for downstream use or documentation
 
-## Workflow Diagram
-
-The end-to-end workflow is illustrated below. The application reads the CRF PDF, classifies pages, extracts and links annotation data, resolves SDTM mappings where possible, and surfaces unresolved items for manual review in the editor.
-
-<p align="center">
-<img width="457" height="254" alt="image" src="https://github.com/user-attachments/assets/88fd0744-4ad0-4250-bf97-02ad6da6517d" />
-</p>
 
 ---
 
