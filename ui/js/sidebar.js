@@ -756,8 +756,11 @@ async function _handleZoomChange(direction) {
 
       const records = Array.isArray(res.records) ? res.records : [];
 
-      // Queue contains: NEEDS_REVIEW (60-79% confidence) and UNMAPPED (<60%)
+      // Only FORM pages have user-actionable annotations; TABLE pages are reference-only
+      // Queue: NEEDS_REVIEW (60–79% confidence) and UNMAPPED (<60%)
       const queue = records.filter((r) => {
+        const pageType = String(r.page_type || 'FORM').toUpperCase();
+        if (pageType === 'TABLE') return false;
         const status = String(r.status || '').toUpperCase();
         return status === 'UNMAPPED' || status === 'NEEDS_REVIEW';
       });
@@ -770,8 +773,8 @@ async function _handleZoomChange(direction) {
 
       if (!queue.length) {
         listEl.innerHTML = `
-          <div class="muted small" style="padding:8px 2px;">
-            All annotations resolved
+          <div class="muted small" style="padding:8px 4px;">
+            All form annotations resolved
           </div>
         `;
         return;
@@ -783,46 +786,59 @@ async function _handleZoomChange(direction) {
         const statusUpper = String(rec.status || '').toUpperCase();
         const isNeedsReview = statusUpper === 'NEEDS_REVIEW';
 
-        // NEEDS_REVIEW = yellow (review), UNMAPPED = red (unreviewed)
         row.className = isNeedsReview
           ? 'unmapped-row unmapped-row-review'
           : 'unmapped-row unmapped-row-unmapped';
 
-        // Show SDTM variable (the annotation label), not raw CRF variable name
-        const sdtmDisplay = rec.sdtm_variable
-          ? (rec.sdtm_dataset ? `${rec.sdtm_dataset}.${rec.sdtm_variable}` : rec.sdtm_variable)
-          : null;
-
-        const displayVar = sdtmDisplay || rec.raw_variable || '—';
-
-        const domain = rec.sdtm_dataset || rec.domain_hint || rec.dataset || 'NA';
-
         const page = rec.page_number ?? rec.page ?? rec.page_num ?? '—';
+
+        // ── Primary label: SDTM annotation name ──────────────────
+        // NEEDS_REVIEW: sdtm_variable is the 60–79% suggestion
+        // UNMAPPED: use best_sdtm_variable (low-conf hint) if available
+        let sdtmLabel = '—';
+        let sdtmDataset = '';
+
+        if (isNeedsReview && rec.sdtm_variable) {
+          sdtmDataset = rec.sdtm_dataset || '';
+          sdtmLabel = sdtmDataset
+            ? `${sdtmDataset}.${rec.sdtm_variable}`
+            : rec.sdtm_variable;
+        } else if (!isNeedsReview && rec.best_sdtm_variable) {
+          sdtmDataset = rec.best_sdtm_dataset || '';
+          sdtmLabel = sdtmDataset
+            ? `${sdtmDataset}.${rec.best_sdtm_variable}`
+            : rec.best_sdtm_variable;
+        }
+
+        // Raw CRF variable shown as subtitle context
+        const rawVar = rec.raw_variable || '—';
 
         const confidencePct = rec.confidence != null
           ? `${Math.round(Number(rec.confidence) * 100)}%`
           : '';
 
         const statusText = isNeedsReview
-          ? `Needs Review${confidencePct ? ` · ${confidencePct}` : ''}`
-          : 'Unmapped';
+          ? `Needs Review · ${confidencePct}`
+          : `Unmapped${confidencePct ? ` · ${confidencePct} best` : ''}`;
 
         const filterStatus = isNeedsReview ? 'review' : 'unreviewed';
+        const domainBadge = sdtmDataset || (isNeedsReview ? rec.sdtm_dataset : rec.best_sdtm_dataset) || 'NA';
 
         row.dataset.queueStatus = filterStatus;
-        row.dataset.rawVar = String(displayVar || '');
-        row.dataset.domain = String(domain || '');
-        row.dataset.page = String(page || '');
+        row.dataset.rawVar = String(rawVar);
+        row.dataset.domain = String(domainBadge);
+        row.dataset.page = String(page);
         row.dataset.annotationId = String(rec.annotation_id || '');
 
         row.innerHTML = `
           <div class="unmapped-status-dot"></div>
           <div class="unmapped-row-left">
-            <span class="unmapped-var">${_escapeHtml(String(displayVar))}</span>
+            <span class="unmapped-var">${_escapeHtml(sdtmLabel)}</span>
             <div class="unmapped-meta">
-              <span class="unmapped-domain-badge">${_escapeHtml(String(domain))}</span>
-              <span>${_escapeHtml(statusText)}</span>
+              <span class="unmapped-domain-badge">${_escapeHtml(domainBadge)}</span>
+              <span class="unmapped-crf-var" title="CRF: ${_escapeHtml(rawVar)}">${_escapeHtml(statusText)}</span>
             </div>
+            <div class="unmapped-raw-hint">CRF: ${_escapeHtml(rawVar)}</div>
           </div>
           <span class="unmapped-page">p${_escapeHtml(String(page))}</span>
         `;
@@ -840,6 +856,7 @@ async function _handleZoomChange(direction) {
           }
 
           // Highlight the component band for this annotation in purple
+          // The band uses the component's full height/width from the PDF
           const annotationId = String(rec.annotation_id || '');
           if (annotationId && typeof Canvas !== 'undefined' && Canvas.highlightQueueAnnotation) {
             Canvas.highlightQueueAnnotation(annotationId);

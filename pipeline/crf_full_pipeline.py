@@ -651,6 +651,9 @@ def apply_confidence_thresholds(records, mapping):
             else:
                 rec["confidence"] = round(score, 4)
                 rec["status"] = "UNMAPPED"
+                # Store the best low-confidence suggestion so the queue can show it
+                rec["best_sdtm_dataset"] = best.sdtm_dataset
+                rec["best_sdtm_variable"] = best.sdtm_variable
         else:
             rec["confidence"] = 0.0
             rec["status"] = "UNMAPPED"

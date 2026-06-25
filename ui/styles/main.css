@@ -3916,7 +3916,8 @@ body.theme-light .theme-toggle-btn .theme-icon-moon {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 320px;
+  /* ~8 rows visible: row ~54px + 8px gap = 62px × 8 = 496px */
+  max-height: 496px;
   overflow-y: auto;
 }
 
@@ -4017,6 +4018,16 @@ body.theme-light .theme-toggle-btn .theme-icon-moon {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.unmapped-raw-hint {
+  font-size: 9px;
+  color: rgba(174, 181, 200, 0.60);
+  margin-top: 2px;
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .unmapped-page {
