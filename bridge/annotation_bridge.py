@@ -99,6 +99,32 @@ def get_annotation(session_id: str, annotation_id: str) -> dict | None:
 # UPDATE
 # =============================================================================
 
+def update_comment(session_id: str, annotation_id: str, comment: str) -> dict:
+    annotation_id = str(annotation_id or "").strip()
+    comment = str(comment or "").strip()
+
+    if not annotation_id:
+        return {"ok": False, "error": "Missing annotation_id"}
+
+    records = _load_records(session_id)
+
+    found = False
+    for rec in records:
+        if rec.get("annotation_id") == annotation_id:
+            if comment:
+                rec["comment"] = comment
+            else:
+                rec.pop("comment", None)
+            found = True
+            break
+
+    if not found:
+        return {"ok": False, "error": f"Not found: {annotation_id}"}
+
+    _save_records(session_id, records)
+    return {"ok": True, "annotation_id": annotation_id}
+
+
 def update_annotation(
     session_id: str,
     annotation_id: str,
@@ -206,12 +232,13 @@ def get_stats(session_id: str) -> dict:
     )
 
     active = total - removed
+    auto_resolved = actually_resolved - user_corrected  # pipeline RESOLVED only
     resolution_pct = round((actually_resolved / active) * 100, 1) if active > 0 else 0.0
 
     return {
         "total": total,
         "active": active,
-        "resolved": actually_resolved - user_corrected,
+        "resolved": auto_resolved,
         "user_corrected": user_corrected,
         "needs_review": needs_review,
         "unmapped": unmapped,

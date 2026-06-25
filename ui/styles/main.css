@@ -4036,3 +4036,55 @@ body.theme-light .theme-toggle-btn .theme-icon-moon {
   color: #D7DDEF;
   white-space: nowrap;
 }
+
+/* ── Queue section separator (Resolved section header) ───── */
+.queue-section-separator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: rgba(0, 230, 118, 0.80);
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.queue-section-separator::before,
+.queue-section-separator::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(0, 230, 118, 0.18);
+}
+
+/* ── Comment icon on queue row ───────────────────────────── */
+.queue-comment-icon {
+  font-size: 13px;
+  line-height: 1;
+  cursor: default;
+  flex-shrink: 0;
+  margin-left: 3px;
+  opacity: 0.70;
+  transition: opacity 0.15s;
+}
+
+.queue-comment-icon:hover {
+  opacity: 1;
+}
+
+/* ── Comment section in edit panel ──────────────────────── */
+.comment-section {
+  padding: 0 16px 16px;
+}
+
+.comment-textarea {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  font-size: 12px;
+  font-family: var(--font-ui);
+  margin-top: 6px;
+  line-height: 1.5;
+}

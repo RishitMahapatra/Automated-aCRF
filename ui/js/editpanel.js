@@ -121,10 +121,12 @@ const EditPanel = (() => {
     const panelEmpty = document.getElementById('panel-empty');
     const panelActive = document.getElementById('panel-active');
     const removeConfirm = document.getElementById('remove-confirm');
+    const commentInput = document.getElementById('panel-comment-input');
 
     if (panelActive) panelActive.classList.add('hidden');
     if (panelEmpty) panelEmpty.classList.remove('hidden');
     if (removeConfirm) removeConfirm.classList.add('hidden');
+    if (commentInput) commentInput.value = '';
 
     _clearSuggestions();
     _clearManualFields();
@@ -138,6 +140,17 @@ const EditPanel = (() => {
     if (typeof Canvas !== 'undefined' && Canvas.highlightSelected) {
       Canvas.highlightSelected();
     }
+  }
+
+  async function openForComment(annotationId) {
+    await open(annotationId);
+    setTimeout(() => {
+      const textarea = document.getElementById('panel-comment-input');
+      if (textarea) {
+        textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        textarea.focus();
+      }
+    }, 120);
   }
 
   function _showActivePanel() {
@@ -176,6 +189,11 @@ const EditPanel = (() => {
 
     if (statusDot) {
       statusDot.style.background = _statusColour(rec.status);
+    }
+
+    const commentInput = document.getElementById('panel-comment-input');
+    if (commentInput) {
+      commentInput.value = rec.comment || '';
     }
   }
 
@@ -416,6 +434,20 @@ const EditPanel = (() => {
     const btnRemoveConfirm = document.getElementById('btn-remove-confirm');
     const btnRemoveCancel = document.getElementById('btn-remove-cancel');
     const btnManualConfirm = document.getElementById('btn-manual-confirm');
+    const btnSaveComment = document.getElementById('btn-save-comment');
+
+    if (btnSaveComment) {
+      btnSaveComment.addEventListener('click', async () => {
+        if (!Store.selectedId) return;
+        const comment = (document.getElementById('panel-comment-input')?.value || '').trim();
+        const res = await window.pywebview.api.update_comment(Store.selectedId, comment);
+        if (res && res.ok) {
+          if (typeof Sidebar !== 'undefined' && Sidebar.refreshUnmappedQueue) {
+            await Sidebar.refreshUnmappedQueue();
+          }
+        }
+      });
+    }
 
     if (btnPanelClose) btnPanelClose.addEventListener('click', () => close());
     if (btnClosePanel) btnClosePanel.addEventListener('click', () => close());
@@ -1087,6 +1119,7 @@ await _refreshAfterUpdate({
   return {
     init,
     open,
+    openForComment,
     openDatasetChip,
     close,
     undo,

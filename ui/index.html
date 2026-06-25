@@ -453,7 +453,7 @@
       </div>
       <div class="analysis-summary-item">
         <span class="analysis-summary-num" id="analysis-ignored">0</span>
-        <span class="analysis-summary-label">Ignored</span>
+        <span class="analysis-summary-label">Resolved</span>
       </div>
     </div>
 
@@ -586,7 +586,7 @@
             </div>
           </div>
           <div class="panel-empty-title">
-            Select an annotation
+            Select an Annotation or Review Query
           </div>
           <div class="panel-empty-sub">
             Click any box on the PDF
@@ -774,6 +774,21 @@
             </div>
           </div>
 
+          <div class="divider"></div>
+
+          <!-- Comments -->
+          <div class="comment-section" id="comment-section">
+            <div class="section-label" style="padding:0;margin-top:4px">Comments</div>
+            <textarea
+              id="panel-comment-input"
+              class="input comment-textarea"
+              placeholder="Add a comment or note for this annotation..."
+            ></textarea>
+            <button class="btn btn-full" id="btn-save-comment" style="margin-top:6px;height:32px">
+              Save Comment
+            </button>
+          </div>
+
         </div>
       </aside>
 
@@ -853,7 +868,16 @@
   </div>
 </div>
 
-<script src="js/vendor/html2canvas.js"></script>  
+<!-- ── Queue Row Context Menu ──────────────────────────── -->
+<div id="queue-ctx-menu" class="ctx-menu hidden">
+  <button class="ctx-menu-item" id="qctx-resolve">Resolve</button>
+  <button class="ctx-menu-item" id="qctx-ignore">Ignore</button>
+  <button class="ctx-menu-item" id="qctx-mark-review">Mark for Review</button>
+  <button class="ctx-menu-item" id="qctx-add-comment">Add Comments</button>
+  <button class="ctx-menu-item ctx-menu-cancel" id="qctx-cancel">Cancel</button>
+</div>
+
+<script src="js/vendor/html2canvas.js"></script>
 <script src="js/store.js"></script>
 <script src="js/editor_state.js"></script>
 <script src="js/sidebar.js"></script>

@@ -4,6 +4,7 @@ const Sidebar = (() => {
   'use strict';
 
   let pipelineRunning = false;
+  let _queueCtxRec = null;
 
   function init() {
     console.log('[sidebar] init');
@@ -16,6 +17,7 @@ const Sidebar = (() => {
     _bindRestartSession();
     _bindAnalysisQueueFilters();
     _bindAnalysisQueueSearch();
+    _bindQueueContextMenu();
   }
 
   // ==========================================================
@@ -608,6 +610,7 @@ async function _handleZoomChange(direction) {
 
       Store.stats = {
         total: stats.total || 0,
+        active: stats.active || 0,
         resolved: stats.resolved || 0,
         user_corrected: stats.user_corrected || 0,
         needs_review: stats.needs_review || 0,
@@ -622,19 +625,15 @@ async function _handleZoomChange(direction) {
       _setText('stat-corrected', Store.stats.user_corrected);
       _setText('stat-removed', Store.stats.removed);
 
-      _setText('analysis-total', Store.stats.total);
-      // "Review" count = needs_review + unmapped (both go into Queue)
+      // Deep Analysis: use active (non-removed) records as total
+      _setText('analysis-total', Store.stats.active || Store.stats.total);
+      // "Review" = needs_review + unmapped (pending action)
       _setText('analysis-reviewed', (Store.stats.needs_review || 0) + (Store.stats.unmapped || 0));
+      // "Resolved" = resolved + user_corrected + not_submitted (all actioned/closed)
       _setText(
         'analysis-ignored',
         (Store.stats.resolved || 0) + (Store.stats.user_corrected || 0) + (Store.stats.not_submitted || 0)
       );
-
-      const queueSummary = document.getElementById('unmapped-queue-summary');
-      if (queueSummary) {
-        const pending = (Store.stats.needs_review || 0) + (Store.stats.unmapped || 0);
-        queueSummary.textContent = `${pending} pending`;
-      }
 
       _updateRing(Store.stats.resolution_pct);
     } catch (e) {
@@ -653,14 +652,10 @@ async function _handleZoomChange(direction) {
     _setText('analysis-ignored', 0);
 
     const queueSummary = document.getElementById('unmapped-queue-summary');
-    if (queueSummary) {
-      queueSummary.textContent = '0 pending';
-    }
+    if (queueSummary) queueSummary.textContent = '0 pending';
 
     const queueList = document.getElementById('unmapped-queue-list');
-    if (queueList) {
-      queueList.innerHTML = '';
-    }
+    if (queueList) queueList.innerHTML = '';
 
     _updateRing(0);
   }
@@ -728,12 +723,15 @@ async function _handleZoomChange(direction) {
     const rows = Array.from(listEl.querySelectorAll('.unmapped-row'));
     rows.forEach((row) => {
       const status = row.dataset.queueStatus || 'unreviewed';
+      const isResolved = status === 'resolved';
       const raw = (row.dataset.rawVar || '').toLowerCase();
       const domain = (row.dataset.domain || '').toLowerCase();
       const page = String(row.dataset.page || '').toLowerCase();
 
-      const matchesFilter =
-        activeFilter === 'all' ? true : status === activeFilter;
+      // Resolved section is always visible regardless of filter chips
+      const matchesFilter = isResolved
+        ? true
+        : (activeFilter === 'all' ? true : status === activeFilter);
 
       const matchesSearch =
         !query ||
@@ -746,6 +744,109 @@ async function _handleZoomChange(direction) {
     });
   }
 
+  function _buildQueueRow(rec) {
+    const row = document.createElement('div');
+
+    const statusUpper = String(rec.status || '').toUpperCase();
+    const isNeedsReview = statusUpper === 'NEEDS_REVIEW';
+    const isUnmapped = statusUpper === 'UNMAPPED';
+    const isResolved = statusUpper === 'USER_CORRECTED' || statusUpper === 'NOT_SUBMITTED';
+
+    let rowClass = 'unmapped-row';
+    if (isNeedsReview) rowClass += ' unmapped-row-review';
+    else if (isResolved) rowClass += ' unmapped-row-resolved';
+    else rowClass += ' unmapped-row-unmapped';
+
+    row.className = rowClass;
+
+    const page = rec.page_number ?? rec.page ?? rec.page_num ?? '—';
+
+    // Primary SDTM label
+    let sdtmLabel = '—';
+    let sdtmDataset = '';
+
+    if (isNeedsReview && rec.sdtm_variable) {
+      sdtmDataset = rec.sdtm_dataset || '';
+      sdtmLabel = sdtmDataset ? `${sdtmDataset}.${rec.sdtm_variable}` : rec.sdtm_variable;
+    } else if (isUnmapped && rec.best_sdtm_variable) {
+      sdtmDataset = rec.best_sdtm_dataset || '';
+      sdtmLabel = sdtmDataset ? `${sdtmDataset}.${rec.best_sdtm_variable}` : rec.best_sdtm_variable;
+    } else if (isResolved) {
+      sdtmDataset = rec.sdtm_dataset || '';
+      if (rec.sdtm_variable) {
+        sdtmLabel = sdtmDataset ? `${sdtmDataset}.${rec.sdtm_variable}` : rec.sdtm_variable;
+      } else {
+        sdtmLabel = statusUpper === 'NOT_SUBMITTED' ? 'Not Submitted' : '—';
+      }
+    }
+
+    const rawVar = rec.raw_variable || '—';
+    const confidencePct = rec.confidence != null
+      ? `${Math.round(Number(rec.confidence) * 100)}%`
+      : '';
+
+    let statusText = '';
+    if (isNeedsReview) statusText = `Needs Review · ${confidencePct}`;
+    else if (isUnmapped) statusText = `Unmapped${confidencePct ? ` · ${confidencePct} best` : ''}`;
+    else if (statusUpper === 'USER_CORRECTED') statusText = 'Resolved';
+    else if (statusUpper === 'NOT_SUBMITTED') statusText = 'Ignored';
+
+    const filterStatus = isNeedsReview ? 'review' : isUnmapped ? 'unreviewed' : 'resolved';
+    const domainBadge = sdtmDataset || 'NA';
+
+    row.dataset.queueStatus = filterStatus;
+    row.dataset.rawVar = String(rawVar);
+    row.dataset.domain = String(domainBadge);
+    row.dataset.page = String(page);
+    row.dataset.annotationId = String(rec.annotation_id || '');
+
+    const hasComment = !!(rec.comment && String(rec.comment).trim());
+    const commentIconHtml = hasComment
+      ? `<span class="queue-comment-icon" title="${_escapeHtml(String(rec.comment || '').trim())}">&#x1F4AC;</span>`
+      : '';
+
+    row.innerHTML = `
+      <div class="unmapped-status-dot"></div>
+      <div class="unmapped-row-left">
+        <span class="unmapped-var">${_escapeHtml(sdtmLabel)}</span>
+        <div class="unmapped-meta">
+          <span class="unmapped-domain-badge">${_escapeHtml(domainBadge)}</span>
+          <span class="unmapped-crf-var">${_escapeHtml(statusText)}</span>
+        </div>
+        <div class="unmapped-raw-hint">RAW: ${_escapeHtml(rawVar)}</div>
+      </div>
+      ${commentIconHtml}
+      <span class="unmapped-page">p${_escapeHtml(String(page))}</span>
+    `;
+
+    row.addEventListener('click', async (e) => {
+      if (e.target.classList.contains('queue-comment-icon')) return;
+
+      const numericPage = Number(page);
+      if (!numericPage || Number.isNaN(numericPage)) return;
+
+      Store.currentPage = numericPage;
+      _updatePageDisplay();
+      _updateNavPageCount();
+
+      if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
+        await Canvas.loadPage(Store.currentPage);
+      }
+
+      const annotationId = String(rec.annotation_id || '');
+      if (annotationId && typeof Canvas !== 'undefined' && Canvas.highlightQueueAnnotation) {
+        Canvas.highlightQueueAnnotation(annotationId);
+      }
+    });
+
+    row.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      _showQueueContextMenu(e.clientX, e.clientY, rec);
+    });
+
+    return row;
+  }
+
   async function refreshUnmappedQueue() {
     try {
       const res = await window.pywebview.api.get_annotations();
@@ -756,119 +857,185 @@ async function _handleZoomChange(direction) {
 
       const records = Array.isArray(res.records) ? res.records : [];
 
-      // Only FORM pages have user-actionable annotations; TABLE pages are reference-only
-      // Queue: NEEDS_REVIEW (60–79% confidence) and UNMAPPED (<60%)
-      const queue = records.filter((r) => {
-        const pageType = String(r.page_type || 'FORM').toUpperCase();
-        if (pageType === 'TABLE') return false;
-        const status = String(r.status || '').toUpperCase();
-        return status === 'UNMAPPED' || status === 'NEEDS_REVIEW';
+      // FORM pages only — TABLE pages are reference-only
+      const formRecords = records.filter((r) => {
+        return String(r.page_type || 'FORM').toUpperCase() !== 'TABLE';
+      });
+
+      // Active queue: NEEDS_REVIEW + UNMAPPED (pending user action)
+      const activeQueue = formRecords.filter((r) => {
+        const s = String(r.status || '').toUpperCase();
+        return s === 'UNMAPPED' || s === 'NEEDS_REVIEW';
+      });
+
+      // Resolved queue: user-actioned items
+      const resolvedQueue = formRecords.filter((r) => {
+        const s = String(r.status || '').toUpperCase();
+        return s === 'USER_CORRECTED' || s === 'NOT_SUBMITTED';
       });
 
       if (summaryEl) {
-        summaryEl.textContent = `${queue.length} pending`;
+        summaryEl.textContent = `${activeQueue.length} pending`;
       }
 
       listEl.innerHTML = '';
 
-      if (!queue.length) {
-        listEl.innerHTML = `
-          <div class="muted small" style="padding:8px 4px;">
-            All form annotations resolved
-          </div>
-        `;
+      if (!activeQueue.length && !resolvedQueue.length) {
+        listEl.innerHTML = `<div class="muted small" style="padding:8px 4px;">All form annotations resolved</div>`;
         return;
       }
 
-      queue.slice(0, 300).forEach((rec) => {
-        const row = document.createElement('div');
-
-        const statusUpper = String(rec.status || '').toUpperCase();
-        const isNeedsReview = statusUpper === 'NEEDS_REVIEW';
-
-        row.className = isNeedsReview
-          ? 'unmapped-row unmapped-row-review'
-          : 'unmapped-row unmapped-row-unmapped';
-
-        const page = rec.page_number ?? rec.page ?? rec.page_num ?? '—';
-
-        // ── Primary label: SDTM annotation name ──────────────────
-        // NEEDS_REVIEW: sdtm_variable is the 60–79% suggestion
-        // UNMAPPED: use best_sdtm_variable (low-conf hint) if available
-        let sdtmLabel = '—';
-        let sdtmDataset = '';
-
-        if (isNeedsReview && rec.sdtm_variable) {
-          sdtmDataset = rec.sdtm_dataset || '';
-          sdtmLabel = sdtmDataset
-            ? `${sdtmDataset}.${rec.sdtm_variable}`
-            : rec.sdtm_variable;
-        } else if (!isNeedsReview && rec.best_sdtm_variable) {
-          sdtmDataset = rec.best_sdtm_dataset || '';
-          sdtmLabel = sdtmDataset
-            ? `${sdtmDataset}.${rec.best_sdtm_variable}`
-            : rec.best_sdtm_variable;
-        }
-
-        // Raw CRF variable shown as subtitle context
-        const rawVar = rec.raw_variable || '—';
-
-        const confidencePct = rec.confidence != null
-          ? `${Math.round(Number(rec.confidence) * 100)}%`
-          : '';
-
-        const statusText = isNeedsReview
-          ? `Needs Review · ${confidencePct}`
-          : `Unmapped${confidencePct ? ` · ${confidencePct} best` : ''}`;
-
-        const filterStatus = isNeedsReview ? 'review' : 'unreviewed';
-        const domainBadge = sdtmDataset || (isNeedsReview ? rec.sdtm_dataset : rec.best_sdtm_dataset) || 'NA';
-
-        row.dataset.queueStatus = filterStatus;
-        row.dataset.rawVar = String(rawVar);
-        row.dataset.domain = String(domainBadge);
-        row.dataset.page = String(page);
-        row.dataset.annotationId = String(rec.annotation_id || '');
-
-        row.innerHTML = `
-          <div class="unmapped-status-dot"></div>
-          <div class="unmapped-row-left">
-            <span class="unmapped-var">${_escapeHtml(sdtmLabel)}</span>
-            <div class="unmapped-meta">
-              <span class="unmapped-domain-badge">${_escapeHtml(domainBadge)}</span>
-              <span class="unmapped-crf-var" title="CRF: ${_escapeHtml(rawVar)}">${_escapeHtml(statusText)}</span>
-            </div>
-            <div class="unmapped-raw-hint">CRF: ${_escapeHtml(rawVar)}</div>
-          </div>
-          <span class="unmapped-page">p${_escapeHtml(String(page))}</span>
-        `;
-
-        row.addEventListener('click', async () => {
-          const numericPage = Number(page);
-          if (!numericPage || Number.isNaN(numericPage)) return;
-
-          Store.currentPage = numericPage;
-          _updatePageDisplay();
-          _updateNavPageCount();
-
-          if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
-            await Canvas.loadPage(Store.currentPage);
-          }
-
-          // Highlight the component band for this annotation in purple
-          // The band uses the component's full height/width from the PDF
-          const annotationId = String(rec.annotation_id || '');
-          if (annotationId && typeof Canvas !== 'undefined' && Canvas.highlightQueueAnnotation) {
-            Canvas.highlightQueueAnnotation(annotationId);
-          }
+      if (!activeQueue.length) {
+        const emptyMsg = document.createElement('div');
+        emptyMsg.className = 'muted small';
+        emptyMsg.style.padding = '8px 4px';
+        emptyMsg.textContent = 'No pending items';
+        listEl.appendChild(emptyMsg);
+      } else {
+        activeQueue.slice(0, 300).forEach((rec) => {
+          listEl.appendChild(_buildQueueRow(rec));
         });
+      }
 
-        listEl.appendChild(row);
-      });
+      // Resolved section
+      if (resolvedQueue.length > 0) {
+        const sep = document.createElement('div');
+        sep.className = 'queue-section-separator';
+        sep.innerHTML = `<span>Resolved (${resolvedQueue.length})</span>`;
+        listEl.appendChild(sep);
+
+        resolvedQueue.slice(0, 100).forEach((rec) => {
+          listEl.appendChild(_buildQueueRow(rec));
+        });
+      }
 
       _applyQueueFilters();
     } catch (e) {
       console.error('[sidebar] refreshUnmappedQueue error:', e);
+    }
+  }
+
+  // Queue context menu
+  function _bindQueueContextMenu() {
+    const menu = document.getElementById('queue-ctx-menu');
+    if (!menu) return;
+
+    document.addEventListener('click', (e) => {
+      if (!menu.classList.contains('hidden') && !menu.contains(e.target)) {
+        menu.classList.add('hidden');
+      }
+    });
+
+    document.getElementById('qctx-resolve')?.addEventListener('click', async () => {
+      if (!_queueCtxRec) return;
+      menu.classList.add('hidden');
+      await _resolveQueueItem(_queueCtxRec);
+      _queueCtxRec = null;
+    });
+
+    document.getElementById('qctx-ignore')?.addEventListener('click', async () => {
+      if (!_queueCtxRec) return;
+      menu.classList.add('hidden');
+      await _ignoreQueueItem(_queueCtxRec);
+      _queueCtxRec = null;
+    });
+
+    document.getElementById('qctx-mark-review')?.addEventListener('click', async () => {
+      if (!_queueCtxRec) return;
+      menu.classList.add('hidden');
+      await _markForReviewQueueItem(_queueCtxRec);
+      _queueCtxRec = null;
+    });
+
+    document.getElementById('qctx-add-comment')?.addEventListener('click', () => {
+      if (!_queueCtxRec) return;
+      menu.classList.add('hidden');
+      _openCommentForRecord(_queueCtxRec);
+      _queueCtxRec = null;
+    });
+
+    document.getElementById('qctx-cancel')?.addEventListener('click', () => {
+      menu.classList.add('hidden');
+      _queueCtxRec = null;
+    });
+  }
+
+  function _showQueueContextMenu(x, y, rec) {
+    _queueCtxRec = rec;
+    const menu = document.getElementById('queue-ctx-menu');
+    if (!menu) return;
+
+    const statusUpper = String(rec.status || '').toUpperCase();
+    const isAlreadyResolved = statusUpper === 'USER_CORRECTED' || statusUpper === 'NOT_SUBMITTED';
+
+    const resolveBtn = document.getElementById('qctx-resolve');
+    const ignoreBtn = document.getElementById('qctx-ignore');
+    const markReviewBtn = document.getElementById('qctx-mark-review');
+
+    if (resolveBtn) resolveBtn.style.display = isAlreadyResolved ? 'none' : '';
+    if (ignoreBtn) ignoreBtn.style.display = isAlreadyResolved ? 'none' : '';
+    if (markReviewBtn) markReviewBtn.style.display = '';
+
+    menu.style.left = `${Math.min(x, window.innerWidth - 190)}px`;
+    menu.style.top = `${Math.min(y, window.innerHeight - 220)}px`;
+    menu.classList.remove('hidden');
+  }
+
+  async function _resolveQueueItem(rec) {
+    const annotationId = String(rec.annotation_id || '');
+    if (!annotationId) return;
+
+    const dataset = rec.sdtm_dataset || rec.best_sdtm_dataset || '';
+    const variable = rec.sdtm_variable || rec.best_sdtm_variable || '';
+    const label = rec.sdtm_label || '';
+
+    const res = await window.pywebview.api.update_annotation(
+      annotationId, 'USER_CORRECTED', dataset, variable, label
+    );
+
+    if (res && res.ok) {
+      await refreshStats();
+      await refreshUnmappedQueue();
+    }
+  }
+
+  async function _ignoreQueueItem(rec) {
+    const annotationId = String(rec.annotation_id || '');
+    if (!annotationId) return;
+
+    const res = await window.pywebview.api.update_annotation(
+      annotationId, 'NOT_SUBMITTED', '', '', 'Not Submitted'
+    );
+
+    if (res && res.ok) {
+      await refreshStats();
+      await refreshUnmappedQueue();
+    }
+  }
+
+  async function _markForReviewQueueItem(rec) {
+    const annotationId = String(rec.annotation_id || '');
+    if (!annotationId) return;
+
+    const dataset = rec.sdtm_dataset || rec.best_sdtm_dataset || '';
+    const variable = rec.sdtm_variable || rec.best_sdtm_variable || '';
+
+    const res = await window.pywebview.api.update_annotation(
+      annotationId, 'NEEDS_REVIEW', dataset, variable, rec.sdtm_label || ''
+    );
+
+    if (res && res.ok) {
+      await refreshStats();
+      await refreshUnmappedQueue();
+    }
+  }
+
+  function _openCommentForRecord(rec) {
+    const annotationId = String(rec.annotation_id || '');
+    if (!annotationId) return;
+
+    if (typeof EditPanel !== 'undefined' && EditPanel.openForComment) {
+      EditPanel.openForComment(annotationId);
     }
   }
 
@@ -889,4 +1056,5 @@ async function _handleZoomChange(direction) {
     goNext,
     isPipelineRunning: () => pipelineRunning,
   };
+
 })();
