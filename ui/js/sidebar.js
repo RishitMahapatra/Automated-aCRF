@@ -783,9 +783,13 @@ async function _handleZoomChange(direction) {
     if (isNeedsReview && rec.sdtm_variable) {
       sdtmDataset = rec.sdtm_dataset || '';
       sdtmLabel = sdtmDataset ? `${sdtmDataset}.${rec.sdtm_variable}` : rec.sdtm_variable;
+    } else if (isNeedsReview) {
+      sdtmLabel = `Unmapped (${rec.raw_variable || '—'})`;
     } else if (isUnmapped && rec.best_sdtm_variable) {
       sdtmDataset = rec.best_sdtm_dataset || '';
       sdtmLabel = sdtmDataset ? `${sdtmDataset}.${rec.best_sdtm_variable}` : rec.best_sdtm_variable;
+    } else if (isUnmapped) {
+      sdtmLabel = `Unmapped (${rec.raw_variable || '—'})`;
     } else if (isResolved) {
       sdtmDataset = rec.sdtm_dataset || '';
       if (rec.sdtm_variable) {

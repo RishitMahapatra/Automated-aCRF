@@ -120,13 +120,9 @@ const EditPanel = (() => {
 
     const panelEmpty = document.getElementById('panel-empty');
     const panelActive = document.getElementById('panel-active');
-    const removeConfirm = document.getElementById('remove-confirm');
-    const commentInput = document.getElementById('panel-comment-input');
 
     if (panelActive) panelActive.classList.add('hidden');
     if (panelEmpty) panelEmpty.classList.remove('hidden');
-    if (removeConfirm) removeConfirm.classList.add('hidden');
-    if (commentInput) commentInput.value = '';
 
     _clearSuggestions();
     _clearManualFields();
@@ -140,17 +136,6 @@ const EditPanel = (() => {
     if (typeof Canvas !== 'undefined' && Canvas.highlightSelected) {
       Canvas.highlightSelected();
     }
-  }
-
-  async function openForComment(annotationId) {
-    await open(annotationId);
-    setTimeout(() => {
-      const textarea = document.getElementById('panel-comment-input');
-      if (textarea) {
-        textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        textarea.focus();
-      }
-    }, 120);
   }
 
   function _showActivePanel() {
@@ -191,10 +176,6 @@ const EditPanel = (() => {
       statusDot.style.background = _statusColour(rec.status);
     }
 
-    const commentInput = document.getElementById('panel-comment-input');
-    if (commentInput) {
-      commentInput.value = rec.comment || '';
-    }
   }
 
   function _populateDatasetRecord(rec) {
@@ -431,23 +412,7 @@ const EditPanel = (() => {
     const btnNotSubmitted = document.getElementById('btn-not-submitted');
     const btnClear = document.getElementById('btn-clear');
     const btnRemove = document.getElementById('btn-remove');
-    const btnRemoveConfirm = document.getElementById('btn-remove-confirm');
-    const btnRemoveCancel = document.getElementById('btn-remove-cancel');
     const btnManualConfirm = document.getElementById('btn-manual-confirm');
-    const btnSaveComment = document.getElementById('btn-save-comment');
-
-    if (btnSaveComment) {
-      btnSaveComment.addEventListener('click', async () => {
-        if (!Store.selectedId) return;
-        const comment = (document.getElementById('panel-comment-input')?.value || '').trim();
-        const res = await window.pywebview.api.update_comment(Store.selectedId, comment);
-        if (res && res.ok) {
-          if (typeof Sidebar !== 'undefined' && Sidebar.refreshUnmappedQueue) {
-            await Sidebar.refreshUnmappedQueue();
-          }
-        }
-      });
-    }
 
     if (btnPanelClose) btnPanelClose.addEventListener('click', () => close());
     if (btnClosePanel) btnClosePanel.addEventListener('click', () => close());
@@ -491,38 +456,24 @@ const EditPanel = (() => {
     if (btnRemove) {
       btnRemove.addEventListener('click', () => {
         if (currentMode !== 'annotation') return;
-        const removeConfirm = document.getElementById('remove-confirm');
-        if (removeConfirm) removeConfirm.classList.remove('hidden');
-      });
-    }
-
-    if (btnRemoveConfirm) {
-      btnRemoveConfirm.addEventListener('click', async () => {
-        if (currentMode !== 'annotation') return;
         if (!Store.selectedRecord) return;
-
-        const removeConfirm = document.getElementById('remove-confirm');
-        if (removeConfirm) removeConfirm.classList.add('hidden');
-
-        await _applyAndTrack({
-          before: _snapshotFromRecord(Store.selectedRecord),
-          after: {
-            annotation_id: Store.selectedId,
-            status: 'REMOVED',
-            sdtm_dataset: '',
-            sdtm_variable: '',
-            sdtm_label: '',
-          },
-        }, false);
-
-        close();
-      });
-    }
-
-    if (btnRemoveCancel) {
-      btnRemoveCancel.addEventListener('click', () => {
-        const removeConfirm = document.getElementById('remove-confirm');
-        if (removeConfirm) removeConfirm.classList.add('hidden');
+        const rec = Store.selectedRecord;
+        const annotationId = Store.selectedId;
+        window._removeConfirmCallback = async () => {
+          await _applyAndTrack({
+            before: _snapshotFromRecord(rec),
+            after: {
+              annotation_id: annotationId,
+              status: 'REMOVED',
+              sdtm_dataset: '',
+              sdtm_variable: '',
+              sdtm_label: '',
+            },
+          }, false);
+          close();
+        };
+        const dlg = document.getElementById('ann-remove-confirm');
+        if (dlg) dlg.classList.remove('hidden');
       });
     }
 
@@ -627,6 +578,17 @@ const EditPanel = (() => {
       colourHdr.addEventListener('click', () => {
         colourBody.classList.toggle('hidden');
         if (colourChevron) colourChevron.classList.toggle('open');
+      });
+    }
+
+    const actionsHdr = document.getElementById('expander-actions-hdr');
+    const actionsBody = document.getElementById('expander-actions-body');
+    const actionsChevron = actionsHdr?.querySelector('.expander-chevron');
+
+    if (actionsHdr && actionsBody) {
+      actionsHdr.addEventListener('click', () => {
+        actionsBody.classList.toggle('hidden');
+        if (actionsChevron) actionsChevron.classList.toggle('open');
       });
     }
 
@@ -1119,7 +1081,6 @@ await _refreshAfterUpdate({
   return {
     init,
     open,
-    openForComment,
     openDatasetChip,
     close,
     undo,

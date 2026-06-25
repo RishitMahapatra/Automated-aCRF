@@ -742,51 +742,28 @@
           </div>
           <div class="divider"></div>
 
-          <!-- Action buttons -->
-          <div class="action-grid">
-            <button class="btn" id="btn-not-submitted">
-              Not Submitted
-            </button>
-            <button class="btn" id="btn-clear">
-              Clear Mapping
-            </button>
-            <button class="btn btn-danger" id="btn-remove">
-              Remove
-            </button>
-            <button class="btn" id="btn-close-panel">
-              Close
-            </button>
-          </div>
-
-          <!-- Remove confirm -->
-          <div id="remove-confirm" class="remove-confirm hidden">
-            <span class="orange small">
-              Remove permanently?
-            </span>
-            <div class="remove-confirm-btns">
-              <button class="btn btn-danger-solid"
-                id="btn-remove-confirm">
-                Confirm
-              </button>
-              <button class="btn" id="btn-remove-cancel">
-                Cancel
-              </button>
+          <!-- Actions (collapsible) -->
+          <div class="expander" id="expander-actions">
+            <div class="expander-header" id="expander-actions-hdr">
+              <span class="expander-chevron">›</span>
+              <span class="expander-label">Actions</span>
             </div>
-          </div>
-
-          <div class="divider"></div>
-
-          <!-- Comments -->
-          <div class="comment-section" id="comment-section">
-            <div class="section-label" style="padding:0;margin-top:4px">Comments</div>
-            <textarea
-              id="panel-comment-input"
-              class="input comment-textarea"
-              placeholder="Add a comment or note for this annotation..."
-            ></textarea>
-            <button class="btn btn-full" id="btn-save-comment" style="margin-top:6px;height:32px">
-              Save Comment
-            </button>
+            <div class="expander-body hidden" id="expander-actions-body">
+              <div class="action-grid">
+                <button class="btn" id="btn-not-submitted">
+                  Not Submitted
+                </button>
+                <button class="btn" id="btn-clear">
+                  Clear Mapping
+                </button>
+                <button class="btn btn-danger" id="btn-remove">
+                  Remove
+                </button>
+                <button class="btn" id="btn-close-panel">
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
 
         </div>
@@ -877,7 +854,7 @@
 
 <!-- ── Queue Row Context Menu ──────────────────────────── -->
 <div id="queue-ctx-menu" class="ctx-menu hidden">
-  <button class="ctx-menu-item" id="qctx-resolve">Resolve</button>
+  <button class="ctx-menu-item" id="qctx-resolve">Resolved</button>
   <button class="ctx-menu-item" id="qctx-ignore">Ignore</button>
   <button class="ctx-menu-item" id="qctx-mark-review">Mark for Review</button>
   <button class="ctx-menu-item" id="qctx-convert-unmapped">Convert to Unmapped</button>

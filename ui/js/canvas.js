@@ -551,6 +551,14 @@ function updateDatasetChip(chipRecord, fields = {}) {
     document.getElementById('ctx-remove-annotation')?.addEventListener('click', () => {
       ctxMenu.classList.add('hidden');
       if (!pendingAnnotationCtxRec) return;
+      const rec = pendingAnnotationCtxRec;
+      window._removeConfirmCallback = async () => {
+        await window.pywebview.api.update_annotation(rec.annotation_id, 'REMOVED', '', '', '');
+        if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
+        if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
+        if (typeof EditPanel !== 'undefined' && EditPanel.close) EditPanel.close();
+        pendingAnnotationCtxRec = null;
+      };
       const dlg = document.getElementById('ann-remove-confirm');
       if (dlg) dlg.classList.remove('hidden');
     });
@@ -558,14 +566,10 @@ function updateDatasetChip(chipRecord, fields = {}) {
     // Remove confirm dialog bindings
     document.getElementById('ann-remove-confirm-btn')?.addEventListener('click', async () => {
       document.getElementById('ann-remove-confirm')?.classList.add('hidden');
-      if (!pendingAnnotationCtxRec) return;
-      await window.pywebview.api.update_annotation(
-        pendingAnnotationCtxRec.annotation_id, 'REMOVED', '', '', ''
-      );
-      if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
-      if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
-      if (typeof EditPanel !== 'undefined' && EditPanel.close) EditPanel.close();
-      pendingAnnotationCtxRec = null;
+      if (window._removeConfirmCallback) {
+        await window._removeConfirmCallback();
+        window._removeConfirmCallback = null;
+      }
     });
 
     document.getElementById('ann-remove-cancel-btn')?.addEventListener('click', () => {
