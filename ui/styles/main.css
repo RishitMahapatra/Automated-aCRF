@@ -3955,6 +3955,11 @@ body.theme-light .theme-toggle-btn .theme-icon-moon {
   border-color: rgba(0, 230, 118, 0.24);
 }
 
+.unmapped-row-unmapped {
+  background: rgba(220, 53, 69, 0.12);
+  border-color: rgba(220, 53, 69, 0.30);
+}
+
 .unmapped-status-dot {
   width: 8px;
   height: 8px;
@@ -3969,6 +3974,10 @@ body.theme-light .theme-toggle-btn .theme-icon-moon {
 
 .unmapped-row-resolved .unmapped-status-dot {
   background: var(--green);
+}
+
+.unmapped-row-unmapped .unmapped-status-dot {
+  background: #DC3545;
 }
 
 .unmapped-row-left {

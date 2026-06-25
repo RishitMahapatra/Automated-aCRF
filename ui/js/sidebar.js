@@ -610,6 +610,7 @@ async function _handleZoomChange(direction) {
         total: stats.total || 0,
         resolved: stats.resolved || 0,
         user_corrected: stats.user_corrected || 0,
+        needs_review: stats.needs_review || 0,
         unmapped: stats.unmapped || 0,
         not_submitted: stats.not_submitted || 0,
         removed: stats.removed || 0,
@@ -622,7 +623,8 @@ async function _handleZoomChange(direction) {
       _setText('stat-removed', Store.stats.removed);
 
       _setText('analysis-total', Store.stats.total);
-      _setText('analysis-reviewed', Store.stats.unmapped);
+      // "Review" count = needs_review + unmapped (both go into Queue)
+      _setText('analysis-reviewed', (Store.stats.needs_review || 0) + (Store.stats.unmapped || 0));
       _setText(
         'analysis-ignored',
         (Store.stats.resolved || 0) + (Store.stats.user_corrected || 0) + (Store.stats.not_submitted || 0)
@@ -630,7 +632,8 @@ async function _handleZoomChange(direction) {
 
       const queueSummary = document.getElementById('unmapped-queue-summary');
       if (queueSummary) {
-        queueSummary.textContent = `${Store.stats.unmapped || 0} unmapped`;
+        const pending = (Store.stats.needs_review || 0) + (Store.stats.unmapped || 0);
+        queueSummary.textContent = `${pending} pending`;
       }
 
       _updateRing(Store.stats.resolution_pct);
@@ -651,7 +654,7 @@ async function _handleZoomChange(direction) {
 
     const queueSummary = document.getElementById('unmapped-queue-summary');
     if (queueSummary) {
-      queueSummary.textContent = '0 unmapped';
+      queueSummary.textContent = '0 pending';
     }
 
     const queueList = document.getElementById('unmapped-queue-list');
@@ -753,13 +756,14 @@ async function _handleZoomChange(direction) {
 
       const records = Array.isArray(res.records) ? res.records : [];
 
+      // Queue contains: NEEDS_REVIEW (60-79% confidence) and UNMAPPED (<60%)
       const queue = records.filter((r) => {
         const status = String(r.status || '').toUpperCase();
-        return status === 'UNMAPPED' || status === 'NOT_SUBMITTED';
+        return status === 'UNMAPPED' || status === 'NEEDS_REVIEW';
       });
 
       if (summaryEl) {
-        summaryEl.textContent = `${queue.length} unmapped`;
+        summaryEl.textContent = `${queue.length} pending`;
       }
 
       listEl.innerHTML = '';
@@ -767,7 +771,7 @@ async function _handleZoomChange(direction) {
       if (!queue.length) {
         listEl.innerHTML = `
           <div class="muted small" style="padding:8px 2px;">
-            No unmapped variables
+            All annotations resolved
           </div>
         `;
         return;
@@ -777,49 +781,50 @@ async function _handleZoomChange(direction) {
         const row = document.createElement('div');
 
         const statusUpper = String(rec.status || '').toUpperCase();
-        const isIgnored = statusUpper === 'NOT_SUBMITTED';
+        const isNeedsReview = statusUpper === 'NEEDS_REVIEW';
 
-        row.className = isIgnored
-          ? 'unmapped-row unmapped-row-resolved'
-          : 'unmapped-row unmapped-row-review';
+        // NEEDS_REVIEW = yellow (review), UNMAPPED = red (unreviewed)
+        row.className = isNeedsReview
+          ? 'unmapped-row unmapped-row-review'
+          : 'unmapped-row unmapped-row-unmapped';
 
-        const rawVar =
-          rec.raw_variable ||
-          rec.sdtm_variable ||
-          rec.variable_name ||
-          rec.label ||
-          '—';
+        // Show SDTM variable (the annotation label), not raw CRF variable name
+        const sdtmDisplay = rec.sdtm_variable
+          ? (rec.sdtm_dataset ? `${rec.sdtm_dataset}.${rec.sdtm_variable}` : rec.sdtm_variable)
+          : null;
 
-        const domain =
-          rec.domain_hint ||
-          rec.sdtm_dataset ||
-          rec.dataset ||
-          'NA';
+        const displayVar = sdtmDisplay || rec.raw_variable || '—';
 
-        const page =
-          rec.page_number ??
-          rec.page ??
-          rec.page_num ??
-          '—';
+        const domain = rec.sdtm_dataset || rec.domain_hint || rec.dataset || 'NA';
 
-        const statusText = isIgnored ? 'Ignored' : 'Needs Review';
-        const filterStatus = isIgnored ? 'ignored' : 'review';
+        const page = rec.page_number ?? rec.page ?? rec.page_num ?? '—';
+
+        const confidencePct = rec.confidence != null
+          ? `${Math.round(Number(rec.confidence) * 100)}%`
+          : '';
+
+        const statusText = isNeedsReview
+          ? `Needs Review${confidencePct ? ` · ${confidencePct}` : ''}`
+          : 'Unmapped';
+
+        const filterStatus = isNeedsReview ? 'review' : 'unreviewed';
 
         row.dataset.queueStatus = filterStatus;
-        row.dataset.rawVar = String(rawVar || '');
+        row.dataset.rawVar = String(displayVar || '');
         row.dataset.domain = String(domain || '');
         row.dataset.page = String(page || '');
+        row.dataset.annotationId = String(rec.annotation_id || '');
 
         row.innerHTML = `
           <div class="unmapped-status-dot"></div>
           <div class="unmapped-row-left">
-            <span class="unmapped-var">${_escapeHtml(String(rawVar))}</span>
+            <span class="unmapped-var">${_escapeHtml(String(displayVar))}</span>
             <div class="unmapped-meta">
               <span class="unmapped-domain-badge">${_escapeHtml(String(domain))}</span>
               <span>${_escapeHtml(statusText)}</span>
             </div>
           </div>
-          <span class="unmapped-page">Page ${_escapeHtml(String(page))}</span>
+          <span class="unmapped-page">p${_escapeHtml(String(page))}</span>
         `;
 
         row.addEventListener('click', async () => {
@@ -830,11 +835,14 @@ async function _handleZoomChange(direction) {
           _updatePageDisplay();
           _updateNavPageCount();
 
-          const statsTab = document.getElementById('tab-stats');
-          if (statsTab) statsTab.click();
-
           if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
             await Canvas.loadPage(Store.currentPage);
+          }
+
+          // Highlight the component band for this annotation in purple
+          const annotationId = String(rec.annotation_id || '');
+          if (annotationId && typeof Canvas !== 'undefined' && Canvas.highlightQueueAnnotation) {
+            Canvas.highlightQueueAnnotation(annotationId);
           }
         });
 

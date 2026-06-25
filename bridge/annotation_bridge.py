@@ -190,17 +190,19 @@ def get_stats(session_id: str) -> dict:
     user_corrected = sum(1 for r in form_records if r.get("status") == "USER_CORRECTED")
     not_submitted = sum(1 for r in form_records if r.get("status") == "NOT_SUBMITTED")
     removed = sum(1 for r in form_records if r.get("status") == "REMOVED")
+    needs_review = sum(1 for r in form_records if r.get("status") == "NEEDS_REVIEW")
 
     unmapped = sum(
         1 for r in form_records
         if not r.get("sdtm_variable")
-        and r.get("status") not in ("NOT_SUBMITTED", "REMOVED", "USER_CORRECTED")
+        and r.get("status") not in ("NOT_SUBMITTED", "REMOVED", "USER_CORRECTED", "NEEDS_REVIEW")
     )
 
+    # NEEDS_REVIEW has a suggested SDTM variable but requires user confirmation — not counted as resolved
     actually_resolved = sum(
         1 for r in form_records
         if r.get("sdtm_variable")
-        and r.get("status") not in ("NOT_SUBMITTED", "REMOVED", "UNMAPPED")
+        and r.get("status") not in ("NOT_SUBMITTED", "REMOVED", "UNMAPPED", "NEEDS_REVIEW")
     )
 
     active = total - removed
@@ -211,6 +213,7 @@ def get_stats(session_id: str) -> dict:
         "active": active,
         "resolved": actually_resolved - user_corrected,
         "user_corrected": user_corrected,
+        "needs_review": needs_review,
         "unmapped": unmapped,
         "not_submitted": not_submitted,
         "removed": removed,

@@ -459,12 +459,16 @@
 
     <div class="analysis-legend">
       <div class="analysis-legend-row">
-        <span class="legend-pill legend-pill-review"></span>
-        <span class="muted small">Yellow / orange background = needs review</span>
+        <span class="legend-pill" style="background:rgba(0,180,90,0.55)"></span>
+        <span class="muted small">≥ 80% confidence → auto-annotated (RESOLVED)</span>
       </div>
       <div class="analysis-legend-row">
-        <span class="legend-pill legend-pill-ignore"></span>
-        <span class="muted small">Green background = ignored / resolved</span>
+        <span class="legend-pill legend-pill-review"></span>
+        <span class="muted small">60–79% confidence → NEEDS REVIEW (in Queue)</span>
+      </div>
+      <div class="analysis-legend-row">
+        <span class="legend-pill" style="background:rgba(220,53,69,0.55)"></span>
+        <span class="muted small">&lt; 60% confidence → UNMAPPED (in Queue)</span>
       </div>
     </div>
   </div>
@@ -476,25 +480,24 @@
     placeholder="Add review comments, notes, or summary observations..."
   ></textarea>
 
-  <div class="section-label">Unmapped Review Queue</div>
+  <div class="section-label">Review Queue</div>
   <div class="unmapped-queue">
     <div class="unmapped-queue-header">
       <span class="unmapped-queue-title">Queue</span>
-      <span class="unmapped-queue-summary" id="unmapped-queue-summary">0 unmapped</span>
+      <span class="unmapped-queue-summary" id="unmapped-queue-summary">0 pending</span>
     </div>
 
     <input
       type="text"
       id="unmapped-queue-search"
       class="unmapped-queue-search"
-      placeholder="Search variable or page"
+      placeholder="Search SDTM variable or page"
     />
 
     <div class="unmapped-queue-filters">
       <button class="unmapped-filter-chip active" data-filter="all">All</button>
-      <button class="unmapped-filter-chip" data-filter="unreviewed">Unreviewed</button>
-      <button class="unmapped-filter-chip" data-filter="review">Review</button>
-      <button class="unmapped-filter-chip" data-filter="ignored">Ignored</button>
+      <button class="unmapped-filter-chip" data-filter="unreviewed">Unmapped</button>
+      <button class="unmapped-filter-chip" data-filter="review">Needs Review</button>
     </div>
 
     <div class="unmapped-queue-list" id="unmapped-queue-list"></div>

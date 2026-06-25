@@ -1887,6 +1887,33 @@ function _persistDatasetChipVisualState(rec, box) {
     });
   }
 
+  /**
+   * Called from the queue sidebar when a queue item is clicked.
+   * Selects the annotation and highlights its component band (purple) using
+   * the component's full height/width dimensions rather than the small label box.
+   */
+  function highlightQueueAnnotation(annotationId) {
+    if (!annotationId) return;
+
+    const annotations = Store.annotations || [];
+    const rec = annotations.find(r => r.annotation_id === annotationId);
+
+    if (rec) {
+      Store.setSelectedAnnotation(rec);
+    } else {
+      // Record not on this page yet — just set the ID so band highlights on render
+      Store.selectedId = annotationId;
+    }
+
+    highlightSelected();
+
+    // Scroll the highlighted component band into the centre of the viewport
+    const band = document.querySelector(`.component-band[data-id="${CSS.escape(annotationId)}"]`);
+    if (band) {
+      band.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
   function updatePageMeta() {
     const records = Store.annotations || [];
     const first = records[0] || {};
@@ -1975,6 +2002,7 @@ function _persistDatasetChipVisualState(rec, box) {
   renderAnnotations,
   showEmpty,
   highlightSelected,
+  highlightQueueAnnotation,
   applyZoom,
   applyOverridesToRecord,
   applyLocalOverrides,
