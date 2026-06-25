@@ -4194,18 +4194,115 @@ body.theme-light .theme-toggle-btn .theme-icon-moon {
   cursor: pointer; line-height: 1;
 }
 .comment-dialog-close:hover { color: #fff; }
+.comment-textarea-wrap {
+  position: relative;
+  margin-bottom: 14px;
+}
 .comment-dialog-textarea {
   width: 100%;
-  min-height: 120px;
+  min-height: 140px;
   resize: none;
-  margin-bottom: 14px;
   line-height: 1.6;
   padding: 12px 14px;
+  display: block;
 }
-.comment-dialog-textarea::placeholder {
-  text-align: center;
-  color: rgba(139, 141, 153, 0.50);
+.comment-textarea-placeholder {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  color: rgba(139, 141, 153, 0.45);
   font-style: italic;
   font-size: 12px;
+  text-align: center;
+  width: 100%;
+  padding: 0 14px;
+  transition: opacity 0.15s ease;
+  white-space: nowrap;
 }
 .comment-dialog-actions { display: flex; gap: 8px; }
+/* ── Queue Inner Tabs (Active / Resolved) ──────────────── */
+.queue-inner-tabs {
+  display: flex;
+  gap: 0;
+  margin: 8px 0 6px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(142, 84, 255, 0.22);
+}
+
+.queue-inner-tab {
+  flex: 1;
+  padding: 6px 0;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.queue-inner-tab + .queue-inner-tab {
+  border-left: 1px solid rgba(142, 84, 255, 0.22);
+}
+
+.queue-inner-tab.active {
+  background: rgba(142, 84, 255, 0.18);
+  color: #C4B5FD;
+}
+
+.queue-inner-tab:not(.active):hover {
+  background: rgba(142, 84, 255, 0.08);
+  color: var(--body);
+}
+
+/* ── Queue panes ───────────────────────────────────────── */
+.queue-pane { display: flex; flex-direction: column; gap: 0; }
+
+/* ── Queue list scrollbar — purple theme ───────────────── */
+.unmapped-queue-list::-webkit-scrollbar { width: 5px; }
+.unmapped-queue-list::-webkit-scrollbar-track { background: transparent; }
+.unmapped-queue-list::-webkit-scrollbar-thumb {
+  background: rgba(142, 84, 255, 0.40);
+  border-radius: 4px;
+  min-height: 24px;
+}
+.unmapped-queue-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(142, 84, 255, 0.70);
+}
+
+/* ── Pipeline Progress Bar ─────────────────────────────── */
+.pipeline-progress-wrap {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pipeline-progress-track {
+  width: 100%;
+  height: 4px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.pipeline-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #8E54FF, #3DB7FF);
+  border-radius: 4px;
+  box-shadow: 0 0 8px rgba(142, 84, 255, 0.6);
+  transition: width 0.5s ease;
+}
+
+.pipeline-progress-label {
+  font-size: 10px;
+  color: var(--muted);
+  font-style: italic;
+  letter-spacing: 0.2px;
+}

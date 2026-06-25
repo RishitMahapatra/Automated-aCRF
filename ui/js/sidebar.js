@@ -14,6 +14,8 @@ const Sidebar = (() => {
     PE:'#9E2ECC', EG:'#2ECCAA', QS:'#CC9E2E', SC:'#2EAACC',
   };
 
+  let _progressInterval = null;
+
   function init() {
     console.log('[sidebar] init');
     _bindTabs();
@@ -25,6 +27,7 @@ const Sidebar = (() => {
     _bindRestartSession();
     _bindAnalysisQueueFilters();
     _bindAnalysisQueueSearch();
+    _bindQueueInnerTabs();
     _bindQueueContextMenu();
     _bindCommentCallout();
     _bindCommentDialog();
@@ -326,6 +329,8 @@ const Sidebar = (() => {
         btnRun.disabled = true;
         btnRun.innerHTML = '<span class="btn-icon"> </span> Running...';
 
+        _startProgress('Extracting components...');
+
         const result = await window.pywebview.api.run_pipeline();
 
         _setPipelineStepDone(0);
@@ -334,12 +339,14 @@ const Sidebar = (() => {
         _setPipelineStepRunning(2);
 
         if (!result || !result.ok) {
+          _errorProgress();
           _setPipelineStepError(2);
           alert('Pipeline failed: ' + (result?.error || 'Unknown error'));
           return;
         }
 
         _setPipelineStepDone(2);
+        _completeProgress();
 
         const pageRes = await window.pywebview.api.get_page_count();
         if (pageRes && pageRes.ok) {
@@ -370,6 +377,64 @@ const Sidebar = (() => {
         btnRun.innerHTML = '<span class="btn-icon">▶</span> Run Pipeline';
       }
     });
+  }
+
+  function _startProgress(label) {
+    const wrap = document.getElementById('pipeline-progress-wrap');
+    const bar = document.getElementById('pipeline-progress-bar');
+    const lbl = document.getElementById('pipeline-progress-label');
+    if (!wrap || !bar) return;
+    clearInterval(_progressInterval);
+    _progressInterval = null;
+    bar.style.transition = 'none';
+    bar.style.width = '0%';
+    bar.style.background = '';
+    if (lbl) lbl.textContent = label || 'Running...';
+    wrap.classList.remove('hidden');
+    let val = 0;
+    setTimeout(() => {
+      bar.style.transition = 'width 0.5s ease';
+      _progressInterval = setInterval(() => {
+        if (val < 78) {
+          val += Math.random() * 4 + 0.5;
+          if (val > 78) val = 78;
+          bar.style.width = `${val}%`;
+          if (lbl) {
+            if (val < 30) lbl.textContent = 'Extracting components...';
+            else if (val < 60) lbl.textContent = 'Matching SDTM variables...';
+            else lbl.textContent = 'Drawing annotations...';
+          }
+        }
+      }, 400);
+    }, 50);
+  }
+
+  function _completeProgress() {
+    clearInterval(_progressInterval);
+    _progressInterval = null;
+    const bar = document.getElementById('pipeline-progress-bar');
+    const wrap = document.getElementById('pipeline-progress-wrap');
+    const lbl = document.getElementById('pipeline-progress-label');
+    if (bar) { bar.style.transition = 'width 0.3s ease'; bar.style.width = '100%'; }
+    if (lbl) lbl.textContent = 'Pipeline complete!';
+    setTimeout(() => {
+      if (wrap) wrap.classList.add('hidden');
+      if (bar) { bar.style.transition = 'none'; bar.style.width = '0%'; }
+    }, 1200);
+  }
+
+  function _errorProgress() {
+    clearInterval(_progressInterval);
+    _progressInterval = null;
+    const bar = document.getElementById('pipeline-progress-bar');
+    const wrap = document.getElementById('pipeline-progress-wrap');
+    const lbl = document.getElementById('pipeline-progress-label');
+    if (bar) bar.style.background = '#DC3545';
+    if (lbl) lbl.textContent = 'Pipeline failed';
+    setTimeout(() => {
+      if (wrap) wrap.classList.add('hidden');
+      if (bar) { bar.style.background = ''; bar.style.width = '0%'; }
+    }, 2000);
   }
 
   function _setPipelineControlsLocked(locked) {
@@ -664,8 +729,10 @@ async function _handleZoomChange(direction) {
     const queueSummary = document.getElementById('unmapped-queue-summary');
     if (queueSummary) queueSummary.textContent = '0 pending';
 
-    const queueList = document.getElementById('unmapped-queue-list');
-    if (queueList) queueList.innerHTML = '';
+    const activeList = document.getElementById('unmapped-queue-list-active');
+    const resolvedList = document.getElementById('unmapped-queue-list-resolved');
+    if (activeList) activeList.innerHTML = '';
+    if (resolvedList) resolvedList.innerHTML = '';
 
     _updateRing(0);
   }
@@ -698,6 +765,19 @@ async function _handleZoomChange(direction) {
   // ANALYSIS / UNMAPPED QUEUE
   // ==========================================================
 
+  function _bindQueueInnerTabs() {
+    const tabs = Array.from(document.querySelectorAll('.queue-inner-tab'));
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        tabs.forEach((t) => t.classList.remove('active'));
+        tab.classList.add('active');
+        const key = tab.dataset.queueTab;
+        document.getElementById('queue-pane-active')?.classList.toggle('hidden', key !== 'active');
+        document.getElementById('queue-pane-resolved')?.classList.toggle('hidden', key !== 'resolved');
+      });
+    });
+  }
+
   function _bindAnalysisQueueFilters() {
     const chips = Array.from(document.querySelectorAll('.unmapped-filter-chip'));
     if (!chips.length) return;
@@ -721,7 +801,7 @@ async function _handleZoomChange(direction) {
   }
 
   function _applyQueueFilters() {
-    const listEl = document.getElementById('unmapped-queue-list');
+    const listEl = document.getElementById('unmapped-queue-list-active');
     if (!listEl) return;
 
     const activeFilter =
@@ -733,16 +813,11 @@ async function _handleZoomChange(direction) {
     const rows = Array.from(listEl.querySelectorAll('.qr-row'));
     rows.forEach((row) => {
       const status = row.dataset.queueStatus || 'unreviewed';
-      const isResolved = status === 'resolved';
       const raw = (row.dataset.rawVar || '').toLowerCase();
       const domain = (row.dataset.domain || '').toLowerCase();
       const page = String(row.dataset.page || '').toLowerCase();
 
-      // Resolved section is always visible regardless of filter chips
-      const matchesFilter = isResolved
-        ? true
-        : (activeFilter === 'all' ? true : status === activeFilter);
-
+      const matchesFilter = activeFilter === 'all' ? true : status === activeFilter;
       const matchesSearch =
         !query ||
         raw.includes(query) ||
@@ -897,9 +972,26 @@ async function _handleZoomChange(direction) {
     const dialog = document.getElementById('comment-dialog');
     if (!dialog) return;
 
+    const input = document.getElementById('comment-dialog-input');
+    const placeholder = document.getElementById('comment-dialog-placeholder');
+
+    const updatePlaceholder = () => {
+      if (placeholder && input) {
+        placeholder.style.opacity = input.value ? '0' : '1';
+      }
+    };
+
+    if (input) {
+      input.addEventListener('input', updatePlaceholder);
+      input.addEventListener('focus', updatePlaceholder);
+      input.addEventListener('blur', updatePlaceholder);
+    }
+
     const closeDialog = () => {
       dialog.classList.add('hidden');
       _currentCommentRec = null;
+      if (input) input.value = '';
+      if (placeholder) placeholder.style.opacity = '1';
     };
 
     document.getElementById('comment-dialog-close')?.addEventListener('click', closeDialog);
@@ -911,7 +1003,6 @@ async function _handleZoomChange(direction) {
 
     document.getElementById('comment-dialog-save')?.addEventListener('click', async () => {
       if (!_currentCommentRec) return;
-      const input = document.getElementById('comment-dialog-input');
       const comment = input ? input.value : '';
       try {
         await window.pywebview.api.update_comment(
@@ -930,10 +1021,11 @@ async function _handleZoomChange(direction) {
   async function refreshUnmappedQueue() {
     try {
       const res = await window.pywebview.api.get_annotations();
-      const listEl = document.getElementById('unmapped-queue-list');
+      const activeListEl = document.getElementById('unmapped-queue-list-active');
+      const resolvedListEl = document.getElementById('unmapped-queue-list-resolved');
       const summaryEl = document.getElementById('unmapped-queue-summary');
 
-      if (!listEl || !res || !res.ok) return;
+      if (!activeListEl || !res || !res.ok) return;
 
       const records = Array.isArray(res.records) ? res.records : [];
 
@@ -958,35 +1050,26 @@ async function _handleZoomChange(direction) {
         summaryEl.textContent = `${activeQueue.length} pending`;
       }
 
-      listEl.innerHTML = '';
-
-      if (!activeQueue.length && !resolvedQueue.length) {
-        listEl.innerHTML = `<div class="muted small" style="padding:8px 4px;">All form annotations resolved</div>`;
-        return;
-      }
-
+      // Populate active pane
+      activeListEl.innerHTML = '';
       if (!activeQueue.length) {
-        const emptyMsg = document.createElement('div');
-        emptyMsg.className = 'muted small';
-        emptyMsg.style.padding = '8px 4px';
-        emptyMsg.textContent = 'No pending items';
-        listEl.appendChild(emptyMsg);
+        activeListEl.innerHTML = `<div class="muted small" style="padding:8px 4px;">No pending items</div>`;
       } else {
         activeQueue.slice(0, 300).forEach((rec) => {
-          listEl.appendChild(_buildQueueRow(rec));
+          activeListEl.appendChild(_buildQueueRow(rec));
         });
       }
 
-      // Resolved section
-      if (resolvedQueue.length > 0) {
-        const sep = document.createElement('div');
-        sep.className = 'queue-section-separator';
-        sep.innerHTML = `<span>Resolved (${resolvedQueue.length})</span>`;
-        listEl.appendChild(sep);
-
-        resolvedQueue.slice(0, 100).forEach((rec) => {
-          listEl.appendChild(_buildQueueRow(rec));
-        });
+      // Populate resolved pane
+      if (resolvedListEl) {
+        resolvedListEl.innerHTML = '';
+        if (!resolvedQueue.length) {
+          resolvedListEl.innerHTML = `<div class="muted small" style="padding:8px 4px;">No resolved items yet</div>`;
+        } else {
+          resolvedQueue.slice(0, 300).forEach((rec) => {
+            resolvedListEl.appendChild(_buildQueueRow(rec));
+          });
+        }
       }
 
       _applyQueueFilters();
@@ -1128,12 +1211,14 @@ async function _handleZoomChange(direction) {
     const dialog = document.getElementById('comment-dialog');
     const titleEl = document.getElementById('comment-dialog-title');
     const input = document.getElementById('comment-dialog-input');
+    const placeholder = document.getElementById('comment-dialog-placeholder');
     if (!dialog || !input) return;
 
     _currentCommentRec = rec;
     const label = rec.sdtm_variable || rec.best_sdtm_variable || rec.raw_variable || 'Annotation';
     if (titleEl) titleEl.textContent = `Comment — ${label}`;
     input.value = rec.comment || '';
+    if (placeholder) placeholder.style.opacity = input.value ? '0' : '1';
     dialog.classList.remove('hidden');
     setTimeout(() => input.focus(), 50);
   }

@@ -355,6 +355,14 @@
     Run Pipeline
   </button>
 
+  <!-- Progress bar -->
+  <div id="pipeline-progress-wrap" class="pipeline-progress-wrap hidden">
+    <div class="pipeline-progress-track">
+      <div id="pipeline-progress-bar" class="pipeline-progress-bar"></div>
+    </div>
+    <span class="pipeline-progress-label" id="pipeline-progress-label">Running...</span>
+  </div>
+
   <button class="btn btn-full" id="btn-restart-session" style="margin-top:8px;">
     Restart Session
   </button>
@@ -480,20 +488,32 @@
       <span class="unmapped-queue-summary" id="unmapped-queue-summary">0 pending</span>
     </div>
 
-    <input
-      type="text"
-      id="unmapped-queue-search"
-      class="unmapped-queue-search"
-      placeholder="Search SDTM variable or page"
-    />
-
-    <div class="unmapped-queue-filters">
-      <button class="unmapped-filter-chip active" data-filter="all">All</button>
-      <button class="unmapped-filter-chip" data-filter="unreviewed">Unmapped</button>
-      <button class="unmapped-filter-chip" data-filter="review">Needs Review</button>
+    <!-- Inner tabs: Active / Resolved -->
+    <div class="queue-inner-tabs" id="queue-inner-tabs">
+      <button class="queue-inner-tab active" data-queue-tab="active">Active</button>
+      <button class="queue-inner-tab" data-queue-tab="resolved">Resolved</button>
     </div>
 
-    <div class="unmapped-queue-list" id="unmapped-queue-list"></div>
+    <!-- Active pane: search + filter chips + list -->
+    <div id="queue-pane-active" class="queue-pane">
+      <input
+        type="text"
+        id="unmapped-queue-search"
+        class="unmapped-queue-search"
+        placeholder="Search SDTM variable or page"
+      />
+      <div class="unmapped-queue-filters">
+        <button class="unmapped-filter-chip active" data-filter="all">All</button>
+        <button class="unmapped-filter-chip" data-filter="unreviewed">Unmapped</button>
+        <button class="unmapped-filter-chip" data-filter="review">Needs Review</button>
+      </div>
+      <div class="unmapped-queue-list" id="unmapped-queue-list-active"></div>
+    </div>
+
+    <!-- Resolved pane -->
+    <div id="queue-pane-resolved" class="queue-pane hidden">
+      <div class="unmapped-queue-list" id="unmapped-queue-list-resolved"></div>
+    </div>
   </div>
 
 </div>
@@ -795,7 +815,7 @@
     <!-- Type selection -->
     <div class="add-ann-section">
       <label class="add-ann-label">Type</label>
-      <div class="add-ann-radio-row">
+      <div class="add-ann-radio-row" style="flex-wrap:wrap;gap:10px 16px;">
         <label class="add-ann-radio">
           <input type="radio" name="add-ann-type" value="variable" checked />
           <span>Variable</span>
@@ -803,6 +823,14 @@
         <label class="add-ann-radio">
           <input type="radio" name="add-ann-type" value="dataset" />
           <span>Dataset</span>
+        </label>
+        <label class="add-ann-radio">
+          <input type="radio" name="add-ann-type" value="unmapped" />
+          <span>Unmapped</span>
+        </label>
+        <label class="add-ann-radio">
+          <input type="radio" name="add-ann-type" value="not_submitted" />
+          <span>Not Submitted</span>
         </label>
       </div>
     </div>
@@ -841,6 +869,22 @@
       </div>
     </div>
 
+    <!-- Unmapped fields -->
+    <div id="add-ann-unmapped-fields" class="add-ann-fields hidden">
+      <div class="add-ann-section">
+        <label class="add-ann-label">Raw Variable Name</label>
+        <input type="text" id="add-ann-unmapped-var" class="input" placeholder="e.g. DRGDICTV" />
+      </div>
+    </div>
+
+    <!-- Not Submitted fields -->
+    <div id="add-ann-ns-fields" class="add-ann-fields hidden">
+      <div class="add-ann-section">
+        <label class="add-ann-label">Raw Variable Name</label>
+        <input type="text" id="add-ann-ns-var" class="input" placeholder="e.g. DRGDICTV" />
+      </div>
+    </div>
+
     <!-- Actions -->
     <div class="add-ann-actions">
       <button class="btn btn-primary" id="add-ann-confirm">Create</button>
@@ -874,7 +918,10 @@
       <span class="comment-dialog-title" id="comment-dialog-title">Add Comment</span>
       <button class="comment-dialog-close" id="comment-dialog-close">×</button>
     </div>
-    <textarea id="comment-dialog-input" class="input comment-dialog-textarea" placeholder="Type your comment..."></textarea>
+    <div class="comment-textarea-wrap">
+      <textarea id="comment-dialog-input" class="input comment-dialog-textarea"></textarea>
+      <div class="comment-textarea-placeholder" id="comment-dialog-placeholder">Type your comment...</div>
+    </div>
     <div class="comment-dialog-actions">
       <button class="btn btn-primary" id="comment-dialog-save">Save</button>
       <button class="btn" id="comment-dialog-cancel">Cancel</button>

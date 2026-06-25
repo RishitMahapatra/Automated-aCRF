@@ -615,14 +615,13 @@ function updateDatasetChip(chipRecord, fields = {}) {
   function _toggleAddAnnFields(type) {
     const varFields = document.getElementById('add-ann-variable-fields');
     const dsFields = document.getElementById('add-ann-dataset-fields');
+    const unmappedFields = document.getElementById('add-ann-unmapped-fields');
+    const nsFields = document.getElementById('add-ann-ns-fields');
 
-    if (type === 'variable') {
-      if (varFields) varFields.classList.remove('hidden');
-      if (dsFields) dsFields.classList.add('hidden');
-    } else {
-      if (varFields) varFields.classList.add('hidden');
-      if (dsFields) dsFields.classList.remove('hidden');
-    }
+    if (varFields) varFields.classList.toggle('hidden', type !== 'variable');
+    if (dsFields) dsFields.classList.toggle('hidden', type !== 'dataset');
+    if (unmappedFields) unmappedFields.classList.toggle('hidden', type !== 'unmapped');
+    if (nsFields) nsFields.classList.toggle('hidden', type !== 'not_submitted');
   }
 
   function _getSelectedAddType() {
@@ -652,8 +651,12 @@ function updateDatasetChip(chipRecord, fields = {}) {
     const type = _getSelectedAddType();
     if (type === 'variable') {
       _createVariableAnnotation();
-    } else {
+    } else if (type === 'dataset') {
       _createDatasetAnnotation();
+    } else if (type === 'unmapped') {
+      _createStatusAnnotation('unmapped');
+    } else if (type === 'not_submitted') {
+      _createStatusAnnotation('not_submitted');
     }
   }
 
@@ -843,6 +846,75 @@ function updateDatasetChip(chipRecord, fields = {}) {
 
     if (typeof EditorState !== 'undefined' && EditorState.scheduleAutosave) {
       EditorState.scheduleAutosave();
+    }
+  }
+
+  function _createStatusAnnotation(type) {
+    const inputId = type === 'unmapped' ? 'add-ann-unmapped-var' : 'add-ann-ns-var';
+    const rawVar = (document.getElementById(inputId)?.value || '').trim().toUpperCase();
+
+    if (!rawVar) { _showAddError('Raw variable name is required.'); return; }
+    if (/\s/.test(rawVar)) { _showAddError('Variable name cannot contain spaces.'); return; }
+
+    const status = type === 'unmapped' ? 'UNMAPPED' : 'NOT_SUBMITTED';
+    const records = Store.annotations || [];
+    const first = records[0] || {};
+    const formCode = (first.form_code || 'UNKNOWN').toUpperCase();
+
+    const annotationId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const fontSizePts = 7.0;
+    const padX = 6.0;
+    const padY = 5.0;
+    const textWidthPts = Math.max(20, 0.60 * fontSizePts * rawVar.length + 3.0);
+    const boxW = textWidthPts + padX * 6.0;
+    const boxH = fontSizePts + padY * 2;
+
+    const x0 = _clamp(pendingClickPts.x_pts - boxW / 2, 0, Store.pageWidthPts - boxW);
+    const y0 = _clamp(pendingClickPts.y_pts - boxH / 2, 0, Store.pageHeightPts - boxH);
+    const x1 = x0 + boxW;
+    const y1 = y0 + boxH;
+
+    const newRec = {
+      annotation_id: annotationId,
+      page: Store.currentPage,
+      page_type: 'FORM',
+      form_code: formCode,
+      component: '',
+      raw_variable: rawVar,
+      sdtm_dataset: '',
+      sdtm_variable: '',
+      sdtm_label: status === 'NOT_SUBMITTED' ? 'Not Submitted' : '',
+      status,
+      x0_pts: x0,
+      y0_pts: y0,
+      x1_pts: x1,
+      y1_pts: y1,
+      confidence: 0.0,
+      _isUserCreated: true,
+      _hasGeometryOverride: true,
+    };
+
+    annotationGeometryOverrides[annotationId] = { x0_pts: x0, y0_pts: y0, x1_pts: x1, y1_pts: y1 };
+    Store.annotations.push(newRec);
+    _addUserAnnotation(newRec);
+
+    _pushGeometryUndo({
+      type: 'add-annotation',
+      id: annotationId,
+      record: { ...newRec },
+    });
+
+    Store.selectedId = annotationId;
+    Store.setSelectedAnnotation(newRec);
+    highlightSelected();
+    _closeAddAnnotationDialog();
+
+    if (typeof EditorState !== 'undefined' && EditorState.scheduleAutosave) {
+      EditorState.scheduleAutosave();
+    }
+
+    if (typeof Sidebar !== 'undefined' && Sidebar.refreshUnmappedQueue) {
+      Sidebar.refreshUnmappedQueue();
     }
   }
 
