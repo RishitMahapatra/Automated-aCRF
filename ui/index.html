@@ -310,7 +310,7 @@
   <div class="sidebar-tabs chrome-tabs" id="sidebar-tabs">
     <button class="sidebar-tab active" data-tab="workspace" id="tab-workspace">
       <span class="material-symbols-outlined tab-icon">upload_file</span>
-      <span class="tab-label">Workspace</span>
+      <span class="tab-label">Upload</span>
     </button>
     <button class="sidebar-tab" data-tab="stats" id="tab-stats">
       <span class="material-symbols-outlined tab-icon">monitoring</span>
@@ -473,10 +473,10 @@
     </div>
   </div>
 
-  <div class="section-label">Review Queue</div>
+  <div class="section-label">Review Section</div>
   <div class="unmapped-queue">
     <div class="unmapped-queue-header">
-      <span class="unmapped-queue-title">Queue</span>
+      <span class="unmapped-queue-title">Queries</span>
       <span class="unmapped-queue-summary" id="unmapped-queue-summary">0 pending</span>
     </div>
 
@@ -796,7 +796,14 @@
   </div>
   <!-- ── Right-click Context Menu ────────────────────────── -->
 <div id="ctx-menu" class="ctx-menu hidden">
+  <!-- Blank canvas items -->
   <button class="ctx-menu-item" id="ctx-add-annotation">Add Annotation</button>
+  <!-- Annotation-specific items (hidden for blank canvas) -->
+  <button class="ctx-menu-item" id="ctx-edit-annotation" style="display:none">Edit Annotation</button>
+  <button class="ctx-menu-item" id="ctx-mark-unmapped" style="display:none">Mark as Unmapped</button>
+  <button class="ctx-menu-item" id="ctx-mark-not-submitted" style="display:none">Mark as Not Submitted</button>
+  <button class="ctx-menu-item" id="ctx-add-to-review" style="display:none">Add to Review</button>
+  <button class="ctx-menu-item ctx-menu-cancel" id="ctx-remove-annotation" style="display:none">Remove Annotation</button>
   <button class="ctx-menu-item ctx-menu-cancel" id="ctx-cancel">Cancel</button>
 </div>
 
@@ -873,8 +880,46 @@
   <button class="ctx-menu-item" id="qctx-resolve">Resolve</button>
   <button class="ctx-menu-item" id="qctx-ignore">Ignore</button>
   <button class="ctx-menu-item" id="qctx-mark-review">Mark for Review</button>
+  <button class="ctx-menu-item" id="qctx-convert-unmapped">Convert to Unmapped</button>
   <button class="ctx-menu-item" id="qctx-add-comment">Add Comments</button>
   <button class="ctx-menu-item ctx-menu-cancel" id="qctx-cancel">Cancel</button>
+</div>
+
+<!-- ── Comment Callout Popup ───────────────────────────── -->
+<div id="comment-callout" class="comment-callout hidden">
+  <div class="comment-callout-text" id="comment-callout-text"></div>
+</div>
+
+<!-- ── Comment Dialog ─────────────────────────────────── -->
+<div id="comment-dialog" class="comment-dialog-overlay hidden">
+  <div class="comment-dialog">
+    <div class="comment-dialog-header">
+      <span class="comment-dialog-title" id="comment-dialog-title">Add Comment</span>
+      <button class="comment-dialog-close" id="comment-dialog-close">×</button>
+    </div>
+    <textarea id="comment-dialog-input" class="input comment-dialog-textarea" placeholder="Type your comment..."></textarea>
+    <div class="comment-dialog-actions">
+      <button class="btn btn-primary" id="comment-dialog-save">Save</button>
+      <button class="btn" id="comment-dialog-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Annotation Remove Confirm Dialog ───────────────── -->
+<div id="ann-remove-confirm" class="add-ann-overlay hidden">
+  <div class="add-ann-dialog" style="min-width:280px;max-width:340px">
+    <div class="add-ann-header">
+      <span class="add-ann-title">Remove Annotation?</span>
+      <button class="add-ann-close" id="ann-remove-close">×</button>
+    </div>
+    <div style="font-size:13px;color:#C8CCEC;margin-bottom:16px">
+      This will permanently remove the annotation from this session.
+    </div>
+    <div class="add-ann-actions">
+      <button class="btn btn-danger-solid" id="ann-remove-confirm-btn">Remove</button>
+      <button class="btn" id="ann-remove-cancel-btn">Cancel</button>
+    </div>
+  </div>
 </div>
 
 <script src="js/vendor/html2canvas.js"></script>

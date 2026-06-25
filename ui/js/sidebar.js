@@ -5,6 +5,14 @@ const Sidebar = (() => {
 
   let pipelineRunning = false;
   let _queueCtxRec = null;
+  let _currentCommentRec = null;
+  let _commentCalloutVisible = false;
+
+  const DOMAIN_BADGE_COLORS = {
+    DM:'#3B6FD4', CM:'#2E9E5B', AE:'#D4522E', LB:'#7B42CC',
+    VS:'#CC4275', EX:'#CC8A2E', MH:'#2E9E9E', DS:'#8E9E2E',
+    PE:'#9E2ECC', EG:'#2ECCAA', QS:'#CC9E2E', SC:'#2EAACC',
+  };
 
   function init() {
     console.log('[sidebar] init');
@@ -18,6 +26,8 @@ const Sidebar = (() => {
     _bindAnalysisQueueFilters();
     _bindAnalysisQueueSearch();
     _bindQueueContextMenu();
+    _bindCommentCallout();
+    _bindCommentDialog();
   }
 
   // ==========================================================
@@ -720,7 +730,7 @@ async function _handleZoomChange(direction) {
       .trim()
       .toLowerCase();
 
-    const rows = Array.from(listEl.querySelectorAll('.unmapped-row'));
+    const rows = Array.from(listEl.querySelectorAll('.qr-row'));
     rows.forEach((row) => {
       const status = row.dataset.queueStatus || 'unreviewed';
       const isResolved = status === 'resolved';
@@ -752,12 +762,17 @@ async function _handleZoomChange(direction) {
     const isUnmapped = statusUpper === 'UNMAPPED';
     const isResolved = statusUpper === 'USER_CORRECTED' || statusUpper === 'NOT_SUBMITTED';
 
-    let rowClass = 'unmapped-row';
-    if (isNeedsReview) rowClass += ' unmapped-row-review';
-    else if (isResolved) rowClass += ' unmapped-row-resolved';
-    else rowClass += ' unmapped-row-unmapped';
+    // Status class suffix
+    let statusCls = 'unmapped';
+    if (isNeedsReview) statusCls = 'review';
+    else if (isResolved) statusCls = 'resolved';
 
-    row.className = rowClass;
+    // Status icon
+    let statusIcon = '';
+    if (isUnmapped) statusIcon = '<span style="color:#DC3545">&#9888;</span>';
+    else if (isNeedsReview) statusIcon = '<span style="color:#FFC107">&#9210;</span>';
+    else if (statusUpper === 'USER_CORRECTED') statusIcon = '<span style="color:#00E676">&#10003;</span>';
+    else if (statusUpper === 'NOT_SUBMITTED') statusIcon = '<span style="color:#888">&ndash;</span>';
 
     const page = rec.page_number ?? rec.page ?? rec.page_num ?? '—';
 
@@ -781,19 +796,11 @@ async function _handleZoomChange(direction) {
     }
 
     const rawVar = rec.raw_variable || '—';
-    const confidencePct = rec.confidence != null
-      ? `${Math.round(Number(rec.confidence) * 100)}%`
-      : '';
-
-    let statusText = '';
-    if (isNeedsReview) statusText = `Needs Review · ${confidencePct}`;
-    else if (isUnmapped) statusText = `Unmapped${confidencePct ? ` · ${confidencePct} best` : ''}`;
-    else if (statusUpper === 'USER_CORRECTED') statusText = 'Resolved';
-    else if (statusUpper === 'NOT_SUBMITTED') statusText = 'Ignored';
-
     const filterStatus = isNeedsReview ? 'review' : isUnmapped ? 'unreviewed' : 'resolved';
-    const domainBadge = sdtmDataset || 'NA';
+    const domainBadge = (sdtmDataset || 'NA').toUpperCase();
+    const badgeColor = DOMAIN_BADGE_COLORS[domainBadge] || '#5B6BA3';
 
+    row.className = `qr-row qr-status-${statusCls}`;
     row.dataset.queueStatus = filterStatus;
     row.dataset.rawVar = String(rawVar);
     row.dataset.domain = String(domainBadge);
@@ -801,26 +808,49 @@ async function _handleZoomChange(direction) {
     row.dataset.annotationId = String(rec.annotation_id || '');
 
     const hasComment = !!(rec.comment && String(rec.comment).trim());
-    const commentIconHtml = hasComment
-      ? `<span class="queue-comment-icon" title="${_escapeHtml(String(rec.comment || '').trim())}">&#x1F4AC;</span>`
+    const commentBtnHtml = hasComment
+      ? `<button class="qr-comment-btn" title="View comment">&#x1F4AC;</button>`
       : '';
 
     row.innerHTML = `
-      <div class="unmapped-status-dot"></div>
-      <div class="unmapped-row-left">
-        <span class="unmapped-var">${_escapeHtml(sdtmLabel)}</span>
-        <div class="unmapped-meta">
-          <span class="unmapped-domain-badge">${_escapeHtml(domainBadge)}</span>
-          <span class="unmapped-crf-var">${_escapeHtml(statusText)}</span>
-        </div>
-        <div class="unmapped-raw-hint">RAW: ${_escapeHtml(rawVar)}</div>
+      <div class="qr-left">
+        <span class="qr-status-icon">${statusIcon}</span>
       </div>
-      ${commentIconHtml}
-      <span class="unmapped-page">p${_escapeHtml(String(page))}</span>
+      <div class="qr-body">
+        <div class="qr-title-row">
+          <span class="qr-label">${_escapeHtml(sdtmLabel)}</span>
+          <span class="qr-domain-badge" style="background:${_escapeHtml(badgeColor)}">${_escapeHtml(domainBadge)}</span>
+        </div>
+        <div class="qr-sub">RAW: ${_escapeHtml(rawVar)}</div>
+      </div>
+      <div class="qr-actions">
+        ${commentBtnHtml}
+        <span class="qr-page-num">p${_escapeHtml(String(page))}</span>
+      </div>
     `;
 
+    // Bind comment button
+    if (hasComment) {
+      const commentBtn = row.querySelector('.qr-comment-btn');
+      if (commentBtn) {
+        commentBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const callout = document.getElementById('comment-callout');
+          const textEl = document.getElementById('comment-callout-text');
+          if (!callout || !textEl) return;
+          const comment = rec.comment || '';
+          textEl.textContent = comment;
+          const btnRect = commentBtn.getBoundingClientRect();
+          callout.style.top = `${btnRect.top - 8}px`;
+          callout.style.left = `${btnRect.right + 12}px`;
+          callout.classList.toggle('hidden');
+          _commentCalloutVisible = !callout.classList.contains('hidden');
+        });
+      }
+    }
+
     row.addEventListener('click', async (e) => {
-      if (e.target.classList.contains('queue-comment-icon')) return;
+      if (e.target.classList.contains('qr-comment-btn')) return;
 
       const numericPage = Number(page);
       if (!numericPage || Number.isNaN(numericPage)) return;
@@ -845,6 +875,52 @@ async function _handleZoomChange(direction) {
     });
 
     return row;
+  }
+
+  function _bindCommentCallout() {
+    document.addEventListener('click', (e) => {
+      const callout = document.getElementById('comment-callout');
+      if (!callout) return;
+      if (callout.classList.contains('hidden')) return;
+      if (!callout.contains(e.target) && !e.target.classList.contains('qr-comment-btn')) {
+        callout.classList.add('hidden');
+        _commentCalloutVisible = false;
+      }
+    });
+  }
+
+  function _bindCommentDialog() {
+    const dialog = document.getElementById('comment-dialog');
+    if (!dialog) return;
+
+    const closeDialog = () => {
+      dialog.classList.add('hidden');
+      _currentCommentRec = null;
+    };
+
+    document.getElementById('comment-dialog-close')?.addEventListener('click', closeDialog);
+    document.getElementById('comment-dialog-cancel')?.addEventListener('click', closeDialog);
+
+    dialog.addEventListener('click', (e) => {
+      if (e.target === dialog) closeDialog();
+    });
+
+    document.getElementById('comment-dialog-save')?.addEventListener('click', async () => {
+      if (!_currentCommentRec) return;
+      const input = document.getElementById('comment-dialog-input');
+      const comment = input ? input.value : '';
+      try {
+        await window.pywebview.api.update_comment(
+          String(_currentCommentRec.annotation_id || ''),
+          comment
+        );
+        await refreshStats();
+        await refreshUnmappedQueue();
+      } catch (e) {
+        console.error('[sidebar] save comment error:', e);
+      }
+      closeDialog();
+    });
   }
 
   async function refreshUnmappedQueue() {
@@ -947,6 +1023,16 @@ async function _handleZoomChange(direction) {
       _queueCtxRec = null;
     });
 
+    document.getElementById('qctx-convert-unmapped')?.addEventListener('click', async () => {
+      if (!_queueCtxRec) return;
+      menu.classList.add('hidden');
+      const res = await window.pywebview.api.update_annotation(
+        String(_queueCtxRec.annotation_id || ''), 'UNMAPPED', '', '', ''
+      );
+      if (res && res.ok) { await refreshStats(); await refreshUnmappedQueue(); }
+      _queueCtxRec = null;
+    });
+
     document.getElementById('qctx-add-comment')?.addEventListener('click', () => {
       if (!_queueCtxRec) return;
       menu.classList.add('hidden');
@@ -967,17 +1053,21 @@ async function _handleZoomChange(direction) {
 
     const statusUpper = String(rec.status || '').toUpperCase();
     const isAlreadyResolved = statusUpper === 'USER_CORRECTED' || statusUpper === 'NOT_SUBMITTED';
+    const isAlreadyUnmapped = statusUpper === 'UNMAPPED';
 
     const resolveBtn = document.getElementById('qctx-resolve');
     const ignoreBtn = document.getElementById('qctx-ignore');
     const markReviewBtn = document.getElementById('qctx-mark-review');
+    const convertUnmappedBtn = document.getElementById('qctx-convert-unmapped');
 
     if (resolveBtn) resolveBtn.style.display = isAlreadyResolved ? 'none' : '';
     if (ignoreBtn) ignoreBtn.style.display = isAlreadyResolved ? 'none' : '';
     if (markReviewBtn) markReviewBtn.style.display = '';
+    // Show "Convert to Unmapped" only for non-unmapped active items
+    if (convertUnmappedBtn) convertUnmappedBtn.style.display = (isAlreadyUnmapped || isAlreadyResolved) ? 'none' : '';
 
     menu.style.left = `${Math.min(x, window.innerWidth - 190)}px`;
-    menu.style.top = `${Math.min(y, window.innerHeight - 220)}px`;
+    menu.style.top = `${Math.min(y, window.innerHeight - 240)}px`;
     menu.classList.remove('hidden');
   }
 
@@ -1031,12 +1121,17 @@ async function _handleZoomChange(direction) {
   }
 
   function _openCommentForRecord(rec) {
-    const annotationId = String(rec.annotation_id || '');
-    if (!annotationId) return;
+    const dialog = document.getElementById('comment-dialog');
+    const titleEl = document.getElementById('comment-dialog-title');
+    const input = document.getElementById('comment-dialog-input');
+    if (!dialog || !input) return;
 
-    if (typeof EditPanel !== 'undefined' && EditPanel.openForComment) {
-      EditPanel.openForComment(annotationId);
-    }
+    _currentCommentRec = rec;
+    const label = rec.sdtm_variable || rec.best_sdtm_variable || rec.raw_variable || 'Annotation';
+    if (titleEl) titleEl.textContent = `Comment — ${label}`;
+    input.value = rec.comment || '';
+    dialog.classList.remove('hidden');
+    setTimeout(() => input.focus(), 50);
   }
 
   function _escapeHtml(str) {
