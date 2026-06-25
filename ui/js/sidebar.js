@@ -4,6 +4,15 @@ const Sidebar = (() => {
   'use strict';
 
   let pipelineRunning = false;
+  let _queueCtxRec = null;
+  let _currentCommentRec = null;
+  let _commentCalloutVisible = false;
+
+  const DOMAIN_BADGE_COLORS = {
+    DM:'#3B6FD4', CM:'#2E9E5B', AE:'#D4522E', LB:'#7B42CC',
+    VS:'#CC4275', EX:'#CC8A2E', MH:'#2E9E9E', DS:'#8E9E2E',
+    PE:'#9E2ECC', EG:'#2ECCAA', QS:'#CC9E2E', SC:'#2EAACC',
+  };
 
   function init() {
     console.log('[sidebar] init');
@@ -16,6 +25,9 @@ const Sidebar = (() => {
     _bindRestartSession();
     _bindAnalysisQueueFilters();
     _bindAnalysisQueueSearch();
+    _bindQueueContextMenu();
+    _bindCommentCallout();
+    _bindCommentDialog();
   }
 
   // ==========================================================
@@ -608,8 +620,10 @@ async function _handleZoomChange(direction) {
 
       Store.stats = {
         total: stats.total || 0,
+        active: stats.active || 0,
         resolved: stats.resolved || 0,
         user_corrected: stats.user_corrected || 0,
+        needs_review: stats.needs_review || 0,
         unmapped: stats.unmapped || 0,
         not_submitted: stats.not_submitted || 0,
         removed: stats.removed || 0,
@@ -621,17 +635,15 @@ async function _handleZoomChange(direction) {
       _setText('stat-corrected', Store.stats.user_corrected);
       _setText('stat-removed', Store.stats.removed);
 
-      _setText('analysis-total', Store.stats.total);
-      _setText('analysis-reviewed', Store.stats.unmapped);
+      // Deep Analysis: use active (non-removed) records as total
+      _setText('analysis-total', Store.stats.active || Store.stats.total);
+      // "Review" = needs_review + unmapped (pending action)
+      _setText('analysis-reviewed', (Store.stats.needs_review || 0) + (Store.stats.unmapped || 0));
+      // "Resolved" = resolved + user_corrected + not_submitted (all actioned/closed)
       _setText(
         'analysis-ignored',
         (Store.stats.resolved || 0) + (Store.stats.user_corrected || 0) + (Store.stats.not_submitted || 0)
       );
-
-      const queueSummary = document.getElementById('unmapped-queue-summary');
-      if (queueSummary) {
-        queueSummary.textContent = `${Store.stats.unmapped || 0} unmapped`;
-      }
 
       _updateRing(Store.stats.resolution_pct);
     } catch (e) {
@@ -650,14 +662,10 @@ async function _handleZoomChange(direction) {
     _setText('analysis-ignored', 0);
 
     const queueSummary = document.getElementById('unmapped-queue-summary');
-    if (queueSummary) {
-      queueSummary.textContent = '0 unmapped';
-    }
+    if (queueSummary) queueSummary.textContent = '0 pending';
 
     const queueList = document.getElementById('unmapped-queue-list');
-    if (queueList) {
-      queueList.innerHTML = '';
-    }
+    if (queueList) queueList.innerHTML = '';
 
     _updateRing(0);
   }
@@ -722,15 +730,18 @@ async function _handleZoomChange(direction) {
       .trim()
       .toLowerCase();
 
-    const rows = Array.from(listEl.querySelectorAll('.unmapped-row'));
+    const rows = Array.from(listEl.querySelectorAll('.qr-row'));
     rows.forEach((row) => {
       const status = row.dataset.queueStatus || 'unreviewed';
+      const isResolved = status === 'resolved';
       const raw = (row.dataset.rawVar || '').toLowerCase();
       const domain = (row.dataset.domain || '').toLowerCase();
       const page = String(row.dataset.page || '').toLowerCase();
 
-      const matchesFilter =
-        activeFilter === 'all' ? true : status === activeFilter;
+      // Resolved section is always visible regardless of filter chips
+      const matchesFilter = isResolved
+        ? true
+        : (activeFilter === 'all' ? true : status === activeFilter);
 
       const matchesSearch =
         !query ||
@@ -740,6 +751,175 @@ async function _handleZoomChange(direction) {
         (`page ${page}`).includes(query);
 
       row.style.display = matchesFilter && matchesSearch ? '' : 'none';
+    });
+  }
+
+  function _buildQueueRow(rec) {
+    const row = document.createElement('div');
+
+    const statusUpper = String(rec.status || '').toUpperCase();
+    const isNeedsReview = statusUpper === 'NEEDS_REVIEW';
+    const isUnmapped = statusUpper === 'UNMAPPED';
+    const isResolved = statusUpper === 'USER_CORRECTED' || statusUpper === 'NOT_SUBMITTED';
+
+    // Status class suffix
+    let statusCls = 'unmapped';
+    if (isNeedsReview) statusCls = 'review';
+    else if (isResolved) statusCls = 'resolved';
+
+    // Status icon
+    let statusIcon = '';
+    if (isUnmapped) statusIcon = '<span style="color:#DC3545">&#9888;</span>';
+    else if (isNeedsReview) statusIcon = '<span style="color:#FFC107">&#9210;</span>';
+    else if (statusUpper === 'USER_CORRECTED') statusIcon = '<span style="color:#00E676">&#10003;</span>';
+    else if (statusUpper === 'NOT_SUBMITTED') statusIcon = '<span style="color:#888">&ndash;</span>';
+
+    const page = rec.page_number ?? rec.page ?? rec.page_num ?? '—';
+
+    // Primary SDTM label
+    let sdtmLabel = '—';
+    let sdtmDataset = '';
+
+    if (isNeedsReview && rec.sdtm_variable) {
+      sdtmDataset = rec.sdtm_dataset || '';
+      sdtmLabel = sdtmDataset ? `${sdtmDataset}.${rec.sdtm_variable}` : rec.sdtm_variable;
+    } else if (isUnmapped && rec.best_sdtm_variable) {
+      sdtmDataset = rec.best_sdtm_dataset || '';
+      sdtmLabel = sdtmDataset ? `${sdtmDataset}.${rec.best_sdtm_variable}` : rec.best_sdtm_variable;
+    } else if (isResolved) {
+      sdtmDataset = rec.sdtm_dataset || '';
+      if (rec.sdtm_variable) {
+        sdtmLabel = sdtmDataset ? `${sdtmDataset}.${rec.sdtm_variable}` : rec.sdtm_variable;
+      } else {
+        sdtmLabel = statusUpper === 'NOT_SUBMITTED' ? 'Not Submitted' : '—';
+      }
+    }
+
+    const rawVar = rec.raw_variable || '—';
+    const filterStatus = isNeedsReview ? 'review' : isUnmapped ? 'unreviewed' : 'resolved';
+    const domainBadge = (sdtmDataset || 'NA').toUpperCase();
+    const badgeColor = DOMAIN_BADGE_COLORS[domainBadge] || '#5B6BA3';
+
+    row.className = `qr-row qr-status-${statusCls}`;
+    row.dataset.queueStatus = filterStatus;
+    row.dataset.rawVar = String(rawVar);
+    row.dataset.domain = String(domainBadge);
+    row.dataset.page = String(page);
+    row.dataset.annotationId = String(rec.annotation_id || '');
+
+    const hasComment = !!(rec.comment && String(rec.comment).trim());
+    const commentBtnHtml = hasComment
+      ? `<button class="qr-comment-btn" title="View comment">&#x1F4AC;</button>`
+      : '';
+
+    row.innerHTML = `
+      <div class="qr-left">
+        <span class="qr-status-icon">${statusIcon}</span>
+      </div>
+      <div class="qr-body">
+        <div class="qr-title-row">
+          <span class="qr-label">${_escapeHtml(sdtmLabel)}</span>
+          <span class="qr-domain-badge" style="background:${_escapeHtml(badgeColor)}">${_escapeHtml(domainBadge)}</span>
+        </div>
+        <div class="qr-sub">RAW: ${_escapeHtml(rawVar)}</div>
+      </div>
+      <div class="qr-actions">
+        ${commentBtnHtml}
+        <span class="qr-page-num">p${_escapeHtml(String(page))}</span>
+      </div>
+    `;
+
+    // Bind comment button
+    if (hasComment) {
+      const commentBtn = row.querySelector('.qr-comment-btn');
+      if (commentBtn) {
+        commentBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const callout = document.getElementById('comment-callout');
+          const textEl = document.getElementById('comment-callout-text');
+          if (!callout || !textEl) return;
+          const comment = rec.comment || '';
+          textEl.textContent = comment;
+          const btnRect = commentBtn.getBoundingClientRect();
+          callout.style.top = `${btnRect.top - 8}px`;
+          callout.style.left = `${btnRect.right + 12}px`;
+          callout.classList.toggle('hidden');
+          _commentCalloutVisible = !callout.classList.contains('hidden');
+        });
+      }
+    }
+
+    row.addEventListener('click', async (e) => {
+      if (e.target.classList.contains('qr-comment-btn')) return;
+
+      const numericPage = Number(page);
+      if (!numericPage || Number.isNaN(numericPage)) return;
+
+      Store.currentPage = numericPage;
+      _updatePageDisplay();
+      _updateNavPageCount();
+
+      if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
+        await Canvas.loadPage(Store.currentPage);
+      }
+
+      const annotationId = String(rec.annotation_id || '');
+      if (annotationId && typeof Canvas !== 'undefined' && Canvas.highlightQueueAnnotation) {
+        Canvas.highlightQueueAnnotation(annotationId);
+      }
+    });
+
+    row.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      _showQueueContextMenu(e.clientX, e.clientY, rec);
+    });
+
+    return row;
+  }
+
+  function _bindCommentCallout() {
+    document.addEventListener('click', (e) => {
+      const callout = document.getElementById('comment-callout');
+      if (!callout) return;
+      if (callout.classList.contains('hidden')) return;
+      if (!callout.contains(e.target) && !e.target.classList.contains('qr-comment-btn')) {
+        callout.classList.add('hidden');
+        _commentCalloutVisible = false;
+      }
+    });
+  }
+
+  function _bindCommentDialog() {
+    const dialog = document.getElementById('comment-dialog');
+    if (!dialog) return;
+
+    const closeDialog = () => {
+      dialog.classList.add('hidden');
+      _currentCommentRec = null;
+    };
+
+    document.getElementById('comment-dialog-close')?.addEventListener('click', closeDialog);
+    document.getElementById('comment-dialog-cancel')?.addEventListener('click', closeDialog);
+
+    dialog.addEventListener('click', (e) => {
+      if (e.target === dialog) closeDialog();
+    });
+
+    document.getElementById('comment-dialog-save')?.addEventListener('click', async () => {
+      if (!_currentCommentRec) return;
+      const input = document.getElementById('comment-dialog-input');
+      const comment = input ? input.value : '';
+      try {
+        await window.pywebview.api.update_comment(
+          String(_currentCommentRec.annotation_id || ''),
+          comment
+        );
+        await refreshStats();
+        await refreshUnmappedQueue();
+      } catch (e) {
+        console.error('[sidebar] save comment error:', e);
+      }
+      closeDialog();
     });
   }
 
@@ -753,98 +933,205 @@ async function _handleZoomChange(direction) {
 
       const records = Array.isArray(res.records) ? res.records : [];
 
-      const queue = records.filter((r) => {
-        const status = String(r.status || '').toUpperCase();
-        return status === 'UNMAPPED' || status === 'NOT_SUBMITTED';
+      // FORM pages only — TABLE pages are reference-only
+      const formRecords = records.filter((r) => {
+        return String(r.page_type || 'FORM').toUpperCase() !== 'TABLE';
+      });
+
+      // Active queue: NEEDS_REVIEW + UNMAPPED (pending user action)
+      const activeQueue = formRecords.filter((r) => {
+        const s = String(r.status || '').toUpperCase();
+        return s === 'UNMAPPED' || s === 'NEEDS_REVIEW';
+      });
+
+      // Resolved queue: user-actioned items
+      const resolvedQueue = formRecords.filter((r) => {
+        const s = String(r.status || '').toUpperCase();
+        return s === 'USER_CORRECTED' || s === 'NOT_SUBMITTED';
       });
 
       if (summaryEl) {
-        summaryEl.textContent = `${queue.length} unmapped`;
+        summaryEl.textContent = `${activeQueue.length} pending`;
       }
 
       listEl.innerHTML = '';
 
-      if (!queue.length) {
-        listEl.innerHTML = `
-          <div class="muted small" style="padding:8px 2px;">
-            No unmapped variables
-          </div>
-        `;
+      if (!activeQueue.length && !resolvedQueue.length) {
+        listEl.innerHTML = `<div class="muted small" style="padding:8px 4px;">All form annotations resolved</div>`;
         return;
       }
 
-      queue.slice(0, 300).forEach((rec) => {
-        const row = document.createElement('div');
-
-        const statusUpper = String(rec.status || '').toUpperCase();
-        const isIgnored = statusUpper === 'NOT_SUBMITTED';
-
-        row.className = isIgnored
-          ? 'unmapped-row unmapped-row-resolved'
-          : 'unmapped-row unmapped-row-review';
-
-        const rawVar =
-          rec.raw_variable ||
-          rec.sdtm_variable ||
-          rec.variable_name ||
-          rec.label ||
-          '—';
-
-        const domain =
-          rec.domain_hint ||
-          rec.sdtm_dataset ||
-          rec.dataset ||
-          'NA';
-
-        const page =
-          rec.page_number ??
-          rec.page ??
-          rec.page_num ??
-          '—';
-
-        const statusText = isIgnored ? 'Ignored' : 'Needs Review';
-        const filterStatus = isIgnored ? 'ignored' : 'review';
-
-        row.dataset.queueStatus = filterStatus;
-        row.dataset.rawVar = String(rawVar || '');
-        row.dataset.domain = String(domain || '');
-        row.dataset.page = String(page || '');
-
-        row.innerHTML = `
-          <div class="unmapped-status-dot"></div>
-          <div class="unmapped-row-left">
-            <span class="unmapped-var">${_escapeHtml(String(rawVar))}</span>
-            <div class="unmapped-meta">
-              <span class="unmapped-domain-badge">${_escapeHtml(String(domain))}</span>
-              <span>${_escapeHtml(statusText)}</span>
-            </div>
-          </div>
-          <span class="unmapped-page">Page ${_escapeHtml(String(page))}</span>
-        `;
-
-        row.addEventListener('click', async () => {
-          const numericPage = Number(page);
-          if (!numericPage || Number.isNaN(numericPage)) return;
-
-          Store.currentPage = numericPage;
-          _updatePageDisplay();
-          _updateNavPageCount();
-
-          const statsTab = document.getElementById('tab-stats');
-          if (statsTab) statsTab.click();
-
-          if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
-            await Canvas.loadPage(Store.currentPage);
-          }
+      if (!activeQueue.length) {
+        const emptyMsg = document.createElement('div');
+        emptyMsg.className = 'muted small';
+        emptyMsg.style.padding = '8px 4px';
+        emptyMsg.textContent = 'No pending items';
+        listEl.appendChild(emptyMsg);
+      } else {
+        activeQueue.slice(0, 300).forEach((rec) => {
+          listEl.appendChild(_buildQueueRow(rec));
         });
+      }
 
-        listEl.appendChild(row);
-      });
+      // Resolved section
+      if (resolvedQueue.length > 0) {
+        const sep = document.createElement('div');
+        sep.className = 'queue-section-separator';
+        sep.innerHTML = `<span>Resolved (${resolvedQueue.length})</span>`;
+        listEl.appendChild(sep);
+
+        resolvedQueue.slice(0, 100).forEach((rec) => {
+          listEl.appendChild(_buildQueueRow(rec));
+        });
+      }
 
       _applyQueueFilters();
     } catch (e) {
       console.error('[sidebar] refreshUnmappedQueue error:', e);
     }
+  }
+
+  // Queue context menu
+  function _bindQueueContextMenu() {
+    const menu = document.getElementById('queue-ctx-menu');
+    if (!menu) return;
+
+    document.addEventListener('click', (e) => {
+      if (!menu.classList.contains('hidden') && !menu.contains(e.target)) {
+        menu.classList.add('hidden');
+      }
+    });
+
+    document.getElementById('qctx-resolve')?.addEventListener('click', async () => {
+      if (!_queueCtxRec) return;
+      menu.classList.add('hidden');
+      await _resolveQueueItem(_queueCtxRec);
+      _queueCtxRec = null;
+    });
+
+    document.getElementById('qctx-ignore')?.addEventListener('click', async () => {
+      if (!_queueCtxRec) return;
+      menu.classList.add('hidden');
+      await _ignoreQueueItem(_queueCtxRec);
+      _queueCtxRec = null;
+    });
+
+    document.getElementById('qctx-mark-review')?.addEventListener('click', async () => {
+      if (!_queueCtxRec) return;
+      menu.classList.add('hidden');
+      await _markForReviewQueueItem(_queueCtxRec);
+      _queueCtxRec = null;
+    });
+
+    document.getElementById('qctx-convert-unmapped')?.addEventListener('click', async () => {
+      if (!_queueCtxRec) return;
+      menu.classList.add('hidden');
+      const res = await window.pywebview.api.update_annotation(
+        String(_queueCtxRec.annotation_id || ''), 'UNMAPPED', '', '', ''
+      );
+      if (res && res.ok) { await refreshStats(); await refreshUnmappedQueue(); }
+      _queueCtxRec = null;
+    });
+
+    document.getElementById('qctx-add-comment')?.addEventListener('click', () => {
+      if (!_queueCtxRec) return;
+      menu.classList.add('hidden');
+      _openCommentForRecord(_queueCtxRec);
+      _queueCtxRec = null;
+    });
+
+    document.getElementById('qctx-cancel')?.addEventListener('click', () => {
+      menu.classList.add('hidden');
+      _queueCtxRec = null;
+    });
+  }
+
+  function _showQueueContextMenu(x, y, rec) {
+    _queueCtxRec = rec;
+    const menu = document.getElementById('queue-ctx-menu');
+    if (!menu) return;
+
+    const statusUpper = String(rec.status || '').toUpperCase();
+    const isAlreadyResolved = statusUpper === 'USER_CORRECTED' || statusUpper === 'NOT_SUBMITTED';
+    const isAlreadyUnmapped = statusUpper === 'UNMAPPED';
+
+    const resolveBtn = document.getElementById('qctx-resolve');
+    const ignoreBtn = document.getElementById('qctx-ignore');
+    const markReviewBtn = document.getElementById('qctx-mark-review');
+    const convertUnmappedBtn = document.getElementById('qctx-convert-unmapped');
+
+    if (resolveBtn) resolveBtn.style.display = isAlreadyResolved ? 'none' : '';
+    if (ignoreBtn) ignoreBtn.style.display = isAlreadyResolved ? 'none' : '';
+    if (markReviewBtn) markReviewBtn.style.display = '';
+    // Show "Convert to Unmapped" only for non-unmapped active items
+    if (convertUnmappedBtn) convertUnmappedBtn.style.display = (isAlreadyUnmapped || isAlreadyResolved) ? 'none' : '';
+
+    menu.style.left = `${Math.min(x, window.innerWidth - 190)}px`;
+    menu.style.top = `${Math.min(y, window.innerHeight - 240)}px`;
+    menu.classList.remove('hidden');
+  }
+
+  async function _resolveQueueItem(rec) {
+    const annotationId = String(rec.annotation_id || '');
+    if (!annotationId) return;
+
+    const dataset = rec.sdtm_dataset || rec.best_sdtm_dataset || '';
+    const variable = rec.sdtm_variable || rec.best_sdtm_variable || '';
+    const label = rec.sdtm_label || '';
+
+    const res = await window.pywebview.api.update_annotation(
+      annotationId, 'USER_CORRECTED', dataset, variable, label
+    );
+
+    if (res && res.ok) {
+      await refreshStats();
+      await refreshUnmappedQueue();
+    }
+  }
+
+  async function _ignoreQueueItem(rec) {
+    const annotationId = String(rec.annotation_id || '');
+    if (!annotationId) return;
+
+    const res = await window.pywebview.api.update_annotation(
+      annotationId, 'NOT_SUBMITTED', '', '', 'Not Submitted'
+    );
+
+    if (res && res.ok) {
+      await refreshStats();
+      await refreshUnmappedQueue();
+    }
+  }
+
+  async function _markForReviewQueueItem(rec) {
+    const annotationId = String(rec.annotation_id || '');
+    if (!annotationId) return;
+
+    const dataset = rec.sdtm_dataset || rec.best_sdtm_dataset || '';
+    const variable = rec.sdtm_variable || rec.best_sdtm_variable || '';
+
+    const res = await window.pywebview.api.update_annotation(
+      annotationId, 'NEEDS_REVIEW', dataset, variable, rec.sdtm_label || ''
+    );
+
+    if (res && res.ok) {
+      await refreshStats();
+      await refreshUnmappedQueue();
+    }
+  }
+
+  function _openCommentForRecord(rec) {
+    const dialog = document.getElementById('comment-dialog');
+    const titleEl = document.getElementById('comment-dialog-title');
+    const input = document.getElementById('comment-dialog-input');
+    if (!dialog || !input) return;
+
+    _currentCommentRec = rec;
+    const label = rec.sdtm_variable || rec.best_sdtm_variable || rec.raw_variable || 'Annotation';
+    if (titleEl) titleEl.textContent = `Comment — ${label}`;
+    input.value = rec.comment || '';
+    dialog.classList.remove('hidden');
+    setTimeout(() => input.focus(), 50);
   }
 
   function _escapeHtml(str) {
@@ -864,4 +1151,5 @@ async function _handleZoomChange(direction) {
     goNext,
     isPipelineRunning: () => pipelineRunning,
   };
+
 })();

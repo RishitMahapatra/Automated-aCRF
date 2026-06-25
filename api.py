@@ -271,6 +271,16 @@ class Api:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
+    def update_comment(self, annotation_id, comment=""):
+        try:
+            return annotation_bridge.update_comment(
+                self._session_id,
+                annotation_id,
+                comment=str(comment or "").strip(),
+            )
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
     # ==========================================================================
     # EDITOR STATE SNAPSHOT
     # ==========================================================================

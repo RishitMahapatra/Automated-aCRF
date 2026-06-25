@@ -406,6 +406,31 @@ function updateDatasetChip(chipRecord, fields = {}) {
   // ─── RIGHT-CLICK ADD ANNOTATION ───────────────────────────────────────
 
   let pendingClickPts = null;
+  let pendingAnnotationCtxRec = null;
+
+  function _showAnnotationContextMenu(ctxMenu, x, y) {
+    document.getElementById('ctx-add-annotation').style.display = 'none';
+    document.getElementById('ctx-edit-annotation').style.display = '';
+    document.getElementById('ctx-mark-unmapped').style.display = '';
+    document.getElementById('ctx-mark-not-submitted').style.display = '';
+    document.getElementById('ctx-add-to-review').style.display = '';
+    document.getElementById('ctx-remove-annotation').style.display = '';
+    ctxMenu.style.left = `${Math.min(x, window.innerWidth - 200)}px`;
+    ctxMenu.style.top = `${Math.min(y, window.innerHeight - 250)}px`;
+    ctxMenu.classList.remove('hidden');
+  }
+
+  function _showBlankContextMenu(ctxMenu, x, y) {
+    document.getElementById('ctx-add-annotation').style.display = '';
+    document.getElementById('ctx-edit-annotation').style.display = 'none';
+    document.getElementById('ctx-mark-unmapped').style.display = 'none';
+    document.getElementById('ctx-mark-not-submitted').style.display = 'none';
+    document.getElementById('ctx-add-to-review').style.display = 'none';
+    document.getElementById('ctx-remove-annotation').style.display = 'none';
+    ctxMenu.style.left = `${x}px`;
+    ctxMenu.style.top = `${y}px`;
+    ctxMenu.classList.remove('hidden');
+  }
 
   function _bindContextMenu() {
     const canvasArea = document.getElementById('canvas-area');
@@ -424,30 +449,36 @@ function updateDatasetChip(chipRecord, fields = {}) {
       const first = records[0] || {};
       if ((first.page_type || 'FORM') === 'TABLE') return;
 
-      const pageWrap = document.getElementById('pdf-page-wrap');
-      if (!pageWrap) return;
+      // Check if right-clicked on an annotation box (not a dataset chip)
+      const annBox = e.target.closest('.ann-box:not(.ann-chip)');
 
-      const pageRect = pageWrap.getBoundingClientRect();
-      const zoom = Number(Store.zoomPct || 100) / 100;
+      if (annBox) {
+        // Clicked on annotation box — show annotation-specific menu
+        const annotationId = annBox.dataset.id;
+        pendingAnnotationCtxRec = (Store.annotations || []).find(r => r.annotation_id === annotationId) || null;
+        pendingClickPts = null;
+        _showAnnotationContextMenu(ctxMenu, e.clientX, e.clientY);
+      } else {
+        // Clicked on blank canvas or component band — show "Add Annotation" menu
+        pendingAnnotationCtxRec = null;
 
-      const clickXPx = (e.clientX - pageRect.left) / zoom;
-      const clickYPx = (e.clientY - pageRect.top) / zoom;
-
-      const naturalWidth = pageWrap.offsetWidth || 1;
-      const naturalHeight = pageWrap.offsetHeight || 1;
-
-      const x_pts = (clickXPx / naturalWidth) * Store.pageWidthPts;
-      const y_pts = (clickYPx / naturalHeight) * Store.pageHeightPts;
-
-      pendingClickPts = {
-        x_pts: _clamp(x_pts, 4, Store.pageWidthPts - 4),
-        y_pts: _clamp(y_pts, 4, Store.pageHeightPts - 4),
-        page: Store.currentPage,
-      };
-
-      ctxMenu.style.left = `${e.clientX}px`;
-      ctxMenu.style.top = `${e.clientY}px`;
-      ctxMenu.classList.remove('hidden');
+        const pageWrap = document.getElementById('pdf-page-wrap');
+        if (!pageWrap) return;
+        const pageRect = pageWrap.getBoundingClientRect();
+        const zoom = Number(Store.zoomPct || 100) / 100;
+        const clickXPx = (e.clientX - pageRect.left) / zoom;
+        const clickYPx = (e.clientY - pageRect.top) / zoom;
+        const naturalWidth = pageWrap.offsetWidth || 1;
+        const naturalHeight = pageWrap.offsetHeight || 1;
+        const x_pts = (clickXPx / naturalWidth) * Store.pageWidthPts;
+        const y_pts = (clickYPx / naturalHeight) * Store.pageHeightPts;
+        pendingClickPts = {
+          x_pts: _clamp(x_pts, 4, Store.pageWidthPts - 4),
+          y_pts: _clamp(y_pts, 4, Store.pageHeightPts - 4),
+          page: Store.currentPage,
+        };
+        _showBlankContextMenu(ctxMenu, e.clientX, e.clientY);
+      }
     });
 
     document.addEventListener('click', (e) => {
@@ -476,6 +507,74 @@ function updateDatasetChip(chipRecord, fields = {}) {
         ctxMenu.classList.add('hidden');
       });
     }
+
+    // Annotation-specific menu item actions
+    document.getElementById('ctx-edit-annotation')?.addEventListener('click', async () => {
+      ctxMenu.classList.add('hidden');
+      if (pendingAnnotationCtxRec && typeof EditPanel !== 'undefined' && EditPanel.open) {
+        await EditPanel.open(pendingAnnotationCtxRec.annotation_id);
+      }
+    });
+
+    document.getElementById('ctx-mark-unmapped')?.addEventListener('click', async () => {
+      ctxMenu.classList.add('hidden');
+      if (!pendingAnnotationCtxRec) return;
+      await window.pywebview.api.update_annotation(
+        pendingAnnotationCtxRec.annotation_id, 'UNMAPPED', '', '', ''
+      );
+      if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
+      if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
+    });
+
+    document.getElementById('ctx-mark-not-submitted')?.addEventListener('click', async () => {
+      ctxMenu.classList.add('hidden');
+      if (!pendingAnnotationCtxRec) return;
+      await window.pywebview.api.update_annotation(
+        pendingAnnotationCtxRec.annotation_id, 'NOT_SUBMITTED', '', '', 'Not Submitted'
+      );
+      if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
+      if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
+    });
+
+    document.getElementById('ctx-add-to-review')?.addEventListener('click', async () => {
+      ctxMenu.classList.add('hidden');
+      if (!pendingAnnotationCtxRec) return;
+      const rec = pendingAnnotationCtxRec;
+      await window.pywebview.api.update_annotation(
+        rec.annotation_id, 'NEEDS_REVIEW',
+        rec.sdtm_dataset || '', rec.sdtm_variable || '', rec.sdtm_label || ''
+      );
+      if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
+      if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
+    });
+
+    document.getElementById('ctx-remove-annotation')?.addEventListener('click', () => {
+      ctxMenu.classList.add('hidden');
+      if (!pendingAnnotationCtxRec) return;
+      const dlg = document.getElementById('ann-remove-confirm');
+      if (dlg) dlg.classList.remove('hidden');
+    });
+
+    // Remove confirm dialog bindings
+    document.getElementById('ann-remove-confirm-btn')?.addEventListener('click', async () => {
+      document.getElementById('ann-remove-confirm')?.classList.add('hidden');
+      if (!pendingAnnotationCtxRec) return;
+      await window.pywebview.api.update_annotation(
+        pendingAnnotationCtxRec.annotation_id, 'REMOVED', '', '', ''
+      );
+      if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
+      if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
+      if (typeof EditPanel !== 'undefined' && EditPanel.close) EditPanel.close();
+      pendingAnnotationCtxRec = null;
+    });
+
+    document.getElementById('ann-remove-cancel-btn')?.addEventListener('click', () => {
+      document.getElementById('ann-remove-confirm')?.classList.add('hidden');
+    });
+
+    document.getElementById('ann-remove-close')?.addEventListener('click', () => {
+      document.getElementById('ann-remove-confirm')?.classList.add('hidden');
+    });
   }
 
   function _openAddAnnotationDialog() {
@@ -1887,6 +1986,33 @@ function _persistDatasetChipVisualState(rec, box) {
     });
   }
 
+  /**
+   * Called from the queue sidebar when a queue item is clicked.
+   * Selects the annotation and highlights its component band (purple) using
+   * the component's full height/width dimensions rather than the small label box.
+   */
+  function highlightQueueAnnotation(annotationId) {
+    if (!annotationId) return;
+
+    const annotations = Store.annotations || [];
+    const rec = annotations.find(r => r.annotation_id === annotationId);
+
+    if (rec) {
+      Store.setSelectedAnnotation(rec);
+    } else {
+      // Record not on this page yet — just set the ID so band highlights on render
+      Store.selectedId = annotationId;
+    }
+
+    highlightSelected();
+
+    // Scroll the highlighted component band into the centre of the viewport
+    const band = document.querySelector(`.component-band[data-id="${CSS.escape(annotationId)}"]`);
+    if (band) {
+      band.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
   function updatePageMeta() {
     const records = Store.annotations || [];
     const first = records[0] || {};
@@ -1975,6 +2101,7 @@ function _persistDatasetChipVisualState(rec, box) {
   renderAnnotations,
   showEmpty,
   highlightSelected,
+  highlightQueueAnnotation,
   applyZoom,
   applyOverridesToRecord,
   applyLocalOverrides,

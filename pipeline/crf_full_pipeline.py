@@ -591,6 +591,75 @@ def link_form_to_table(master_records, mapping):
 
 
 # =============================================================================
+# CONFIDENCE THRESHOLDS
+# =============================================================================
+
+def apply_confidence_thresholds(records, mapping):
+    """
+    Score unresolved FORM records with TF-IDF and assign status:
+      >= 0.80  → RESOLVED   (auto-annotated)
+      0.60-0.79 → NEEDS_REVIEW (candidate shown, user must confirm)
+      < 0.60   → UNMAPPED   (no confident suggestion)
+    Records already resolved from the Excel exact-match keep confidence=1.0.
+    """
+    try:
+        from editor.confidence_engine import ConfidenceEngine
+        engine = ConfidenceEngine()
+        engine.build_from_mapping(mapping)
+    except Exception as exc:
+        print(f"[pipeline] confidence engine unavailable: {exc}")
+        engine = None
+
+    for rec in records:
+        if rec.get("page_type") != "FORM":
+            continue
+
+        if rec.get("sdtm_variable"):
+            rec["confidence"] = 1.0
+            rec["status"] = "RESOLVED"
+            continue
+
+        raw_var = rec.get("raw_variable")
+        if not raw_var or engine is None or not engine._is_built:
+            rec["confidence"] = 0.0
+            rec["status"] = "UNMAPPED"
+            continue
+
+        domain = rec.get("domain", "")
+        candidates = engine.get_candidates(
+            raw_variable=raw_var,
+            top_n=1,
+            min_score=0.0,
+            domain_hint=domain,
+        )
+
+        if candidates:
+            best = candidates[0]
+            score = best.score
+            if score >= 0.80:
+                rec["confidence"] = round(score, 4)
+                rec["status"] = "RESOLVED"
+                rec["sdtm_dataset"] = best.sdtm_dataset
+                rec["sdtm_variable"] = best.sdtm_variable
+                rec["sdtm_label"] = best.sdtm_label
+            elif score >= 0.60:
+                rec["confidence"] = round(score, 4)
+                rec["status"] = "NEEDS_REVIEW"
+                rec["sdtm_dataset"] = best.sdtm_dataset
+                rec["sdtm_variable"] = best.sdtm_variable
+                rec["sdtm_label"] = best.sdtm_label
+            else:
+                rec["confidence"] = round(score, 4)
+                rec["status"] = "UNMAPPED"
+                # Store the best low-confidence suggestion so the queue can show it
+                rec["best_sdtm_dataset"] = best.sdtm_dataset
+                rec["best_sdtm_variable"] = best.sdtm_variable
+        else:
+            rec["confidence"] = 0.0
+            rec["status"] = "UNMAPPED"
+
+
+# =============================================================================
 # APPLY USER CORRECTIONS
 # =============================================================================
 
@@ -650,6 +719,9 @@ def run_pipeline(pdf_path, session_id, corrections=None, progress_callback=None)
 
     linked, unlinked = link_form_to_table(master_records, mapping)
 
+    # Score unresolved records and set confidence-based status
+    apply_confidence_thresholds(master_records, mapping)
+
     if corrections:
         apply_corrections(master_records, corrections, mapping)
 
@@ -657,8 +729,9 @@ def run_pipeline(pdf_path, session_id, corrections=None, progress_callback=None)
         json.dump(master_records, f, indent=2, ensure_ascii=False)
 
     form_records = [r for r in master_records if r["page_type"] == "FORM"]
-    resolved = sum(1 for r in form_records if r.get("sdtm_variable"))
-    unresolved = sum(1 for r in form_records if not r.get("sdtm_variable"))
+    resolved = sum(1 for r in form_records if r.get("status") == "RESOLVED")
+    needs_review = sum(1 for r in form_records if r.get("status") == "NEEDS_REVIEW")
+    unresolved = sum(1 for r in form_records if r.get("status") == "UNMAPPED")
 
     summary_lines = [
         "CRF FULL PIPELINE SUMMARY",
@@ -668,7 +741,8 @@ def run_pipeline(pdf_path, session_id, corrections=None, progress_callback=None)
         f"Records: {len(master_records)}",
         f"FORM records : {len(form_records)}",
         f"Resolved     : {resolved}",
-        f"Unresolved   : {unresolved}",
+        f"Needs Review : {needs_review}",
+        f"Unmapped     : {unresolved}",
         f"Linked       : {linked}",
         f"Unlinked     : {unlinked}",
     ]
@@ -677,6 +751,7 @@ def run_pipeline(pdf_path, session_id, corrections=None, progress_callback=None)
     return {
         "records": master_records,
         "resolved": resolved,
+        "needs_review": needs_review,
         "unresolved": unresolved,
         "total": len(form_records),
         "linked": linked,

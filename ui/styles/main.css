@@ -3916,7 +3916,8 @@ body.theme-light .theme-toggle-btn .theme-icon-moon {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 320px;
+  /* ~8 rows visible: row ~54px + 8px gap = 62px × 8 = 496px */
+  max-height: 496px;
   overflow-y: auto;
 }
 
@@ -3955,6 +3956,11 @@ body.theme-light .theme-toggle-btn .theme-icon-moon {
   border-color: rgba(0, 230, 118, 0.24);
 }
 
+.unmapped-row-unmapped {
+  background: rgba(220, 53, 69, 0.12);
+  border-color: rgba(220, 53, 69, 0.30);
+}
+
 .unmapped-status-dot {
   width: 8px;
   height: 8px;
@@ -3969,6 +3975,10 @@ body.theme-light .theme-toggle-btn .theme-icon-moon {
 
 .unmapped-row-resolved .unmapped-status-dot {
   background: var(--green);
+}
+
+.unmapped-row-unmapped .unmapped-status-dot {
+  background: #DC3545;
 }
 
 .unmapped-row-left {
@@ -4010,9 +4020,176 @@ body.theme-light .theme-toggle-btn .theme-icon-moon {
   text-transform: uppercase;
 }
 
+.unmapped-raw-hint {
+  font-size: 9px;
+  color: rgba(174, 181, 200, 0.60);
+  margin-top: 2px;
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .unmapped-page {
   font-size: 11px;
   font-weight: 600;
   color: #D7DDEF;
   white-space: nowrap;
 }
+
+/* ── Queue section separator (Resolved section header) ───── */
+.queue-section-separator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: rgba(0, 230, 118, 0.80);
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.queue-section-separator::before,
+.queue-section-separator::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(0, 230, 118, 0.18);
+}
+
+/* ── Comment icon on queue row ───────────────────────────── */
+.queue-comment-icon {
+  font-size: 13px;
+  line-height: 1;
+  cursor: default;
+  flex-shrink: 0;
+  margin-left: 3px;
+  opacity: 0.70;
+  transition: opacity 0.15s;
+}
+
+.queue-comment-icon:hover {
+  opacity: 1;
+}
+
+/* ── Comment section in edit panel ──────────────────────── */
+.comment-section {
+  padding: 0 16px 16px;
+}
+
+.comment-textarea {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  font-size: 12px;
+  font-family: var(--font-ui);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+/* ── New Queue Row (qr-*) ──────────────────────────────── */
+.qr-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.06);
+  margin-bottom: 4px;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  position: relative;
+}
+.qr-row:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.18); }
+
+.qr-status-unmapped { background: rgba(220,53,69,0.10); border-color: rgba(220,53,69,0.25); }
+.qr-status-review   { background: rgba(255,193,7,0.10); border-color: rgba(255,193,7,0.25); }
+.qr-status-resolved { background: rgba(0,230,118,0.08); border-color: rgba(0,230,118,0.18); }
+
+.qr-left { display: flex; align-items: center; flex-shrink: 0; width: 18px; }
+
+.qr-status-icon { font-size: 13px; line-height: 1; }
+.qr-status-unmapped .qr-status-icon { color: #DC3545; }
+.qr-status-review   .qr-status-icon { color: #FFC107; }
+.qr-status-resolved .qr-status-icon { color: #00E676; }
+
+.qr-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+
+.qr-title-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+
+.qr-label {
+  font-size: 12px; font-weight: 700; color: #E0D6FF;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
+}
+.qr-domain-badge {
+  display: inline-flex; align-items: center; padding: 1px 5px;
+  border-radius: 3px; font-size: 9px; font-weight: 700; color: #fff;
+  flex-shrink: 0; letter-spacing: 0.3px; text-transform: uppercase;
+}
+.qr-sub {
+  font-size: 9px; color: rgba(174,181,200,0.55); font-style: italic;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.qr-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+.qr-comment-btn {
+  background: none; border: none; padding: 0; cursor: pointer;
+  font-size: 13px; line-height: 1; opacity: 0.70; transition: opacity 0.15s;
+}
+.qr-comment-btn:hover { opacity: 1; }
+
+.qr-page-num {
+  font-size: 10px; font-weight: 600; color: #D7DDEF; white-space: nowrap;
+}
+
+/* ── Comment Callout Popup ─────────────────────────────── */
+.comment-callout {
+  position: fixed; z-index: 9998;
+  background: #1E1A3A; border: 1px solid rgba(142,84,255,0.45);
+  border-radius: 8px; padding: 10px 12px;
+  min-width: 180px; max-width: 260px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.45);
+  font-size: 12px; color: #C8CCEC; line-height: 1.5;
+  word-wrap: break-word;
+}
+.comment-callout::before {
+  content: '';
+  position: absolute; left: -8px; top: 12px;
+  border-width: 7px 8px 7px 0;
+  border-style: solid;
+  border-color: transparent rgba(142,84,255,0.45) transparent transparent;
+}
+.comment-callout::after {
+  content: '';
+  position: absolute; left: -6px; top: 13px;
+  border-width: 6px 7px 6px 0;
+  border-style: solid;
+  border-color: transparent #1E1A3A transparent transparent;
+}
+
+/* ── Comment Dialog ────────────────────────────────────── */
+.comment-dialog-overlay {
+  position: fixed; inset: 0; z-index: 10001;
+  display: flex; align-items: center; justify-content: center;
+}
+.comment-dialog {
+  background: #1A1730; border: 1px solid rgba(142,84,255,0.4);
+  border-radius: 10px; padding: 18px 20px;
+  min-width: 300px; max-width: 380px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+}
+.comment-dialog-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 12px;
+}
+.comment-dialog-title { font-size: 14px; font-weight: 600; color: #E0D6FF; }
+.comment-dialog-close {
+  background: none; border: none; color: #888; font-size: 20px;
+  cursor: pointer; line-height: 1;
+}
+.comment-dialog-close:hover { color: #fff; }
+.comment-dialog-textarea { width: 100%; min-height: 80px; resize: vertical; margin-bottom: 12px; }
+.comment-dialog-actions { display: flex; gap: 8px; }

@@ -310,7 +310,7 @@
   <div class="sidebar-tabs chrome-tabs" id="sidebar-tabs">
     <button class="sidebar-tab active" data-tab="workspace" id="tab-workspace">
       <span class="material-symbols-outlined tab-icon">upload_file</span>
-      <span class="tab-label">Workspace</span>
+      <span class="tab-label">Upload</span>
     </button>
     <button class="sidebar-tab" data-tab="stats" id="tab-stats">
       <span class="material-symbols-outlined tab-icon">monitoring</span>
@@ -453,48 +453,44 @@
       </div>
       <div class="analysis-summary-item">
         <span class="analysis-summary-num" id="analysis-ignored">0</span>
-        <span class="analysis-summary-label">Ignored</span>
+        <span class="analysis-summary-label">Resolved</span>
       </div>
     </div>
 
     <div class="analysis-legend">
       <div class="analysis-legend-row">
-        <span class="legend-pill legend-pill-review"></span>
-        <span class="muted small">Yellow / orange background = needs review</span>
+        <span class="legend-pill" style="background:rgba(0,180,90,0.55)"></span>
+        <span class="muted small">≥ 80% confidence → auto-annotated (RESOLVED)</span>
       </div>
       <div class="analysis-legend-row">
-        <span class="legend-pill legend-pill-ignore"></span>
-        <span class="muted small">Green background = ignored / resolved</span>
+        <span class="legend-pill legend-pill-review"></span>
+        <span class="muted small">60–79% confidence → NEEDS REVIEW (in Queue)</span>
+      </div>
+      <div class="analysis-legend-row">
+        <span class="legend-pill" style="background:rgba(220,53,69,0.55)"></span>
+        <span class="muted small">&lt; 60% confidence → UNMAPPED (in Queue)</span>
       </div>
     </div>
   </div>
 
-  <div class="section-label">Comments</div>
-  <textarea
-    id="analysis-comments"
-    class="analysis-comments"
-    placeholder="Add review comments, notes, or summary observations..."
-  ></textarea>
-
-  <div class="section-label">Unmapped Review Queue</div>
+  <div class="section-label">Review Section</div>
   <div class="unmapped-queue">
     <div class="unmapped-queue-header">
-      <span class="unmapped-queue-title">Queue</span>
-      <span class="unmapped-queue-summary" id="unmapped-queue-summary">0 unmapped</span>
+      <span class="unmapped-queue-title">Queries</span>
+      <span class="unmapped-queue-summary" id="unmapped-queue-summary">0 pending</span>
     </div>
 
     <input
       type="text"
       id="unmapped-queue-search"
       class="unmapped-queue-search"
-      placeholder="Search variable or page"
+      placeholder="Search SDTM variable or page"
     />
 
     <div class="unmapped-queue-filters">
       <button class="unmapped-filter-chip active" data-filter="all">All</button>
-      <button class="unmapped-filter-chip" data-filter="unreviewed">Unreviewed</button>
-      <button class="unmapped-filter-chip" data-filter="review">Review</button>
-      <button class="unmapped-filter-chip" data-filter="ignored">Ignored</button>
+      <button class="unmapped-filter-chip" data-filter="unreviewed">Unmapped</button>
+      <button class="unmapped-filter-chip" data-filter="review">Needs Review</button>
     </div>
 
     <div class="unmapped-queue-list" id="unmapped-queue-list"></div>
@@ -590,7 +586,7 @@
             </div>
           </div>
           <div class="panel-empty-title">
-            Select an annotation
+            Select an Annotation or Review Query
           </div>
           <div class="panel-empty-sub">
             Click any box on the PDF
@@ -778,6 +774,21 @@
             </div>
           </div>
 
+          <div class="divider"></div>
+
+          <!-- Comments -->
+          <div class="comment-section" id="comment-section">
+            <div class="section-label" style="padding:0;margin-top:4px">Comments</div>
+            <textarea
+              id="panel-comment-input"
+              class="input comment-textarea"
+              placeholder="Add a comment or note for this annotation..."
+            ></textarea>
+            <button class="btn btn-full" id="btn-save-comment" style="margin-top:6px;height:32px">
+              Save Comment
+            </button>
+          </div>
+
         </div>
       </aside>
 
@@ -785,7 +796,14 @@
   </div>
   <!-- ── Right-click Context Menu ────────────────────────── -->
 <div id="ctx-menu" class="ctx-menu hidden">
+  <!-- Blank canvas items -->
   <button class="ctx-menu-item" id="ctx-add-annotation">Add Annotation</button>
+  <!-- Annotation-specific items (hidden for blank canvas) -->
+  <button class="ctx-menu-item" id="ctx-edit-annotation" style="display:none">Edit Annotation</button>
+  <button class="ctx-menu-item" id="ctx-mark-unmapped" style="display:none">Mark as Unmapped</button>
+  <button class="ctx-menu-item" id="ctx-mark-not-submitted" style="display:none">Mark as Not Submitted</button>
+  <button class="ctx-menu-item" id="ctx-add-to-review" style="display:none">Add to Review</button>
+  <button class="ctx-menu-item ctx-menu-cancel" id="ctx-remove-annotation" style="display:none">Remove Annotation</button>
   <button class="ctx-menu-item ctx-menu-cancel" id="ctx-cancel">Cancel</button>
 </div>
 
@@ -857,7 +875,54 @@
   </div>
 </div>
 
-<script src="js/vendor/html2canvas.js"></script>  
+<!-- ── Queue Row Context Menu ──────────────────────────── -->
+<div id="queue-ctx-menu" class="ctx-menu hidden">
+  <button class="ctx-menu-item" id="qctx-resolve">Resolve</button>
+  <button class="ctx-menu-item" id="qctx-ignore">Ignore</button>
+  <button class="ctx-menu-item" id="qctx-mark-review">Mark for Review</button>
+  <button class="ctx-menu-item" id="qctx-convert-unmapped">Convert to Unmapped</button>
+  <button class="ctx-menu-item" id="qctx-add-comment">Add Comments</button>
+  <button class="ctx-menu-item ctx-menu-cancel" id="qctx-cancel">Cancel</button>
+</div>
+
+<!-- ── Comment Callout Popup ───────────────────────────── -->
+<div id="comment-callout" class="comment-callout hidden">
+  <div class="comment-callout-text" id="comment-callout-text"></div>
+</div>
+
+<!-- ── Comment Dialog ─────────────────────────────────── -->
+<div id="comment-dialog" class="comment-dialog-overlay hidden">
+  <div class="comment-dialog">
+    <div class="comment-dialog-header">
+      <span class="comment-dialog-title" id="comment-dialog-title">Add Comment</span>
+      <button class="comment-dialog-close" id="comment-dialog-close">×</button>
+    </div>
+    <textarea id="comment-dialog-input" class="input comment-dialog-textarea" placeholder="Type your comment..."></textarea>
+    <div class="comment-dialog-actions">
+      <button class="btn btn-primary" id="comment-dialog-save">Save</button>
+      <button class="btn" id="comment-dialog-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Annotation Remove Confirm Dialog ───────────────── -->
+<div id="ann-remove-confirm" class="add-ann-overlay hidden">
+  <div class="add-ann-dialog" style="min-width:280px;max-width:340px">
+    <div class="add-ann-header">
+      <span class="add-ann-title">Remove Annotation?</span>
+      <button class="add-ann-close" id="ann-remove-close">×</button>
+    </div>
+    <div style="font-size:13px;color:#C8CCEC;margin-bottom:16px">
+      This will permanently remove the annotation from this session.
+    </div>
+    <div class="add-ann-actions">
+      <button class="btn btn-danger-solid" id="ann-remove-confirm-btn">Remove</button>
+      <button class="btn" id="ann-remove-cancel-btn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/vendor/html2canvas.js"></script>
 <script src="js/store.js"></script>
 <script src="js/editor_state.js"></script>
 <script src="js/sidebar.js"></script>
