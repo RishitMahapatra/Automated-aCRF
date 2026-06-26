@@ -29,7 +29,7 @@ const Sidebar = (() => {
     _bindAnalysisQueueSearch();
     _bindQueueInnerTabs();
     _bindQueueContextMenu();
-    _bindCommentCallout();
+    _bindCommentViewer();
     _bindCommentDialog();
   }
 
@@ -143,70 +143,100 @@ const Sidebar = (() => {
     const btnRestart = document.getElementById('btn-restart-session');
     if (!btnRestart) return;
 
-    btnRestart.addEventListener('click', async () => {
-      try {
-        if (pipelineRunning) return;
-
-        const res = await window.pywebview.api.restart_session();
-        if (!res || !res.ok) {
-          console.error('[sidebar] restart_session failed:', res?.error);
-          return;
-        }
-
-        Store.resetSession();
-
-        const dropZone = document.getElementById('drop-zone');
-        const fileLoaded = document.getElementById('file-loaded');
-        const sessionInput = document.getElementById('session-input');
-        const navSession = document.getElementById('nav-session');
-        const fileNameLabel = document.getElementById('file-name-label');
-        const filePagesLabel = document.getElementById('file-pages-label');
-        const pageDisplaySticky = document.getElementById('page-display-sticky');
-        const navPageCount = document.getElementById('nav-page-count'); 
-        const commentsBox = document.getElementById('analysis-comments');
-
-        if (dropZone) dropZone.classList.remove('hidden');
-        if (fileLoaded) fileLoaded.classList.add('hidden');
-        if (sessionInput) sessionInput.value = '';
-        if (navSession) navSession.textContent = 'No session';
-        if (fileNameLabel) fileNameLabel.textContent = '—';
-        if (filePagesLabel) filePagesLabel.textContent = '— pages';
-        if (pageDisplay) pageDisplay.textContent = '— / —';
-        if (pageDisplaySticky) pageDisplaySticky.textContent = '— / —';
-        if (navPageCount) navPageCount.textContent = '— / —';
-        
-        if (commentsBox) commentsBox.value = '';
-
-        _resetPipelineSteps();
-        _resetStatsDisplay();
-
-        clearInterval(_progressInterval);
-        _progressInterval = null;
-        const progressWrap = document.getElementById('pipeline-progress-wrap');
-        if (progressWrap) progressWrap.classList.add('hidden');
-
-        const btnRun = document.getElementById('btn-run');
-        if (btnRun) {
-          btnRun.disabled = false;
-          btnRun.innerHTML = '<span class="btn-icon">▶</span> Run Pipeline';
-        }
-
-        const pdfImg = document.getElementById('pdf-img');
-        const annotationLayerEl = document.getElementById('annotation-layer');
-        if (pdfImg) { pdfImg.removeAttribute('src'); pdfImg.src = ''; }
-        if (annotationLayerEl) annotationLayerEl.innerHTML = '';
-
-        if (typeof Canvas !== 'undefined' && Canvas.showEmpty) {
-          Canvas.showEmpty(true);
-        }
-
-        if (typeof EditPanel !== 'undefined' && EditPanel.close) {
-          EditPanel.close();
-        }
-      } catch (e) {
-        console.error('[sidebar] restart_session error:', e);
-      }
+    btnRestart.addEventListener('click', () => {
+      if (pipelineRunning) return;
+      const confirmOverlay = document.getElementById('restart-confirm-overlay');
+      if (confirmOverlay) confirmOverlay.classList.remove('hidden');
     });
+
+    document.getElementById('restart-confirm-cancel')?.addEventListener('click', () => {
+      document.getElementById('restart-confirm-overlay')?.classList.add('hidden');
+    });
+
+    document.getElementById('restart-confirm-yes')?.addEventListener('click', () => {
+      document.getElementById('restart-confirm-overlay')?.classList.add('hidden');
+      const saveOverlay = document.getElementById('restart-save-overlay');
+      if (saveOverlay) saveOverlay.classList.remove('hidden');
+    });
+
+    document.getElementById('restart-save-cancel')?.addEventListener('click', () => {
+      document.getElementById('restart-save-overlay')?.classList.add('hidden');
+    });
+
+    document.getElementById('restart-save-skip')?.addEventListener('click', async () => {
+      document.getElementById('restart-save-overlay')?.classList.add('hidden');
+      await _doRestartSession();
+    });
+
+    document.getElementById('restart-save-yes')?.addEventListener('click', async () => {
+      document.getElementById('restart-save-overlay')?.classList.add('hidden');
+      try {
+        const pageImages = Store.pageImages || {};
+        await window.pywebview.api.export_pdf_from_images(pageImages);
+      } catch (e) {
+        console.error('[sidebar] export before restart failed:', e);
+      }
+      await _doRestartSession();
+    });
+  }
+
+  async function _doRestartSession() {
+    try {
+      const res = await window.pywebview.api.restart_session();
+      if (!res || !res.ok) {
+        console.error('[sidebar] restart_session failed:', res?.error);
+        return;
+      }
+
+      Store.resetSession();
+      Store.sessionId = `session_${Date.now()}`;
+
+      const dropZone = document.getElementById('drop-zone');
+      const fileLoaded = document.getElementById('file-loaded');
+      const sessionInput = document.getElementById('session-input');
+      const navSession = document.getElementById('nav-session');
+      const fileNameLabel = document.getElementById('file-name-label');
+      const filePagesLabel = document.getElementById('file-pages-label');
+      const pageDisplaySticky = document.getElementById('page-display-sticky');
+      const navPageCount = document.getElementById('nav-page-count');
+      const commentsBox = document.getElementById('analysis-comments');
+
+      if (dropZone) dropZone.classList.remove('hidden');
+      if (fileLoaded) fileLoaded.classList.add('hidden');
+      if (sessionInput) sessionInput.value = '';
+      if (navSession) navSession.textContent = 'No session';
+      if (fileNameLabel) fileNameLabel.textContent = '—';
+      if (filePagesLabel) filePagesLabel.textContent = '— pages';
+      if (pageDisplaySticky) pageDisplaySticky.textContent = '— / —';
+      if (navPageCount) navPageCount.textContent = '— / —';
+      if (commentsBox) commentsBox.value = '';
+
+      _resetPipelineSteps();
+      _resetStatsDisplay();
+
+      clearInterval(_progressInterval);
+      _progressInterval = null;
+      const progressWrap = document.getElementById('pipeline-progress-wrap');
+      if (progressWrap) progressWrap.classList.add('hidden');
+
+      const btnRun = document.getElementById('btn-run');
+      if (btnRun) {
+        btnRun.disabled = false;
+        btnRun.innerHTML = '<span class="btn-icon">▶</span> Run Pipeline';
+      }
+
+      const pdfImg = document.getElementById('pdf-img');
+      const annotationLayerEl = document.getElementById('annotation-layer');
+      if (pdfImg) { pdfImg.removeAttribute('src'); pdfImg.src = ''; }
+      if (annotationLayerEl) annotationLayerEl.innerHTML = '';
+
+      if (typeof Canvas !== 'undefined' && Canvas.showEmpty) Canvas.showEmpty(true);
+      if (typeof EditPanel !== 'undefined' && EditPanel.close) EditPanel.close();
+
+      _closeCommentViewer();
+    } catch (e) {
+      console.error('[sidebar] _doRestartSession error:', e);
+    }
   }
 
   function _resetUiToInitialState() {
@@ -926,29 +956,18 @@ async function _handleZoomChange(direction) {
       </div>
     `;
 
-    // Bind comment button
+    // Bind comment button — right-click or left-click opens the comment viewer panel
     if (hasComment) {
       const commentBtn = row.querySelector('.qr-comment-btn');
       if (commentBtn) {
         commentBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          const callout = document.getElementById('comment-callout');
-          const textEl = document.getElementById('comment-callout-text');
-          if (!callout || !textEl) return;
-          const comment = rec.comment || '';
-          textEl.textContent = comment;
-          const btnRect = commentBtn.getBoundingClientRect();
-          const CALLOUT_HEIGHT = 140;
-          const goAbove = (window.innerHeight - btnRect.bottom) < CALLOUT_HEIGHT + 20;
-          callout.classList.toggle('above', goAbove);
-          if (goAbove) {
-            callout.style.top = `${btnRect.top - CALLOUT_HEIGHT - 10}px`;
-          } else {
-            callout.style.top = `${btnRect.top - 8}px`;
-          }
-          callout.style.left = `${btnRect.right + 12}px`;
-          callout.classList.toggle('hidden');
-          _commentCalloutVisible = !callout.classList.contains('hidden');
+          _openCommentViewer(rec);
+        });
+        commentBtn.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          _openCommentViewer(rec);
         });
       }
     }
@@ -981,16 +1000,21 @@ async function _handleZoomChange(direction) {
     return row;
   }
 
-  function _bindCommentCallout() {
-    document.addEventListener('click', (e) => {
-      const callout = document.getElementById('comment-callout');
-      if (!callout) return;
-      if (callout.classList.contains('hidden')) return;
-      if (!callout.contains(e.target) && !e.target.classList.contains('qr-comment-btn')) {
-        callout.classList.add('hidden');
-        _commentCalloutVisible = false;
-      }
-    });
+  function _bindCommentViewer() {
+    document.getElementById('comment-viewer-close')?.addEventListener('click', _closeCommentViewer);
+  }
+
+  function _openCommentViewer(rec) {
+    const viewer = document.getElementById('comment-viewer');
+    const body = document.getElementById('comment-viewer-body');
+    if (!viewer || !body) return;
+    body.textContent = rec.comment || '';
+    viewer.classList.remove('hidden');
+  }
+
+  function _closeCommentViewer() {
+    const viewer = document.getElementById('comment-viewer');
+    if (viewer) viewer.classList.add('hidden');
   }
 
   function _bindCommentDialog() {
@@ -1141,7 +1165,13 @@ async function _handleZoomChange(direction) {
       const res = await window.pywebview.api.update_annotation(
         String(_queueCtxRec.annotation_id || ''), 'UNMAPPED', '', '', ''
       );
-      if (res && res.ok) { await refreshStats(); await refreshUnmappedQueue(); }
+      if (res && res.ok) {
+        await refreshStats();
+        await refreshUnmappedQueue();
+        if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
+          await Canvas.loadPage(Store.currentPage);
+        }
+      }
       _queueCtxRec = null;
     });
 

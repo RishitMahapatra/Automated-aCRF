@@ -165,6 +165,13 @@
   color          : #FF6B6B;
   font-weight    : 500;
 }
+
+.add-ann-hint {
+  margin         : 4px 0 0;
+  font-size      : 12px;
+  color          : #8A80AD;
+  line-height    : 1.5;
+}
   /* ── Canvas area scrollbar — must be inline for pywebview ── */
   #canvas-area {
     overflow-x : hidden;
@@ -359,26 +366,6 @@
     Restart Session
   </button>
 
-  <div id="pipeline-steps" class="pipeline-steps">
-    <div class="pipeline-step" data-step="0">
-      <div class="step-dot" id="step-dot-0"></div>
-      <div class="step-line" id="step-line-0"></div>
-      <span class="step-name">Extract components</span>
-      <span class="step-status" id="step-status-0">Waiting</span>
-    </div>
-    <div class="pipeline-step" data-step="1">
-      <div class="step-dot" id="step-dot-1"></div>
-      <div class="step-line" id="step-line-1"></div>
-      <span class="step-name">Match SDTM</span>
-      <span class="step-status" id="step-status-1">Waiting</span>
-    </div>
-    <div class="pipeline-step" data-step="2">
-      <div class="step-dot" id="step-dot-2"></div>
-      <div class="step-line" id="step-line-2"></div>
-      <span class="step-name">Draw annotations</span>
-      <span class="step-status" id="step-status-2">Waiting</span>
-    </div>
-  </div>
 
 </div>
 
@@ -586,6 +573,7 @@
 
       <!-- ── EDIT PANEL ────────────────────────────────────── -->
       <aside id="edit-panel" class="edit-panel">
+        <div id="edit-panel-scroll">
 
         <!-- Empty state -->
         <div id="panel-empty" class="panel-empty">
@@ -784,6 +772,18 @@
           </div>
 
         </div>
+
+        </div><!-- /edit-panel-scroll -->
+
+        <!-- ── Comment Viewer Panel ─────────────────────────── -->
+        <div id="comment-viewer" class="comment-viewer hidden">
+          <div class="comment-viewer-header">
+            <span class="comment-viewer-title">Comment</span>
+            <button class="comment-viewer-close" id="comment-viewer-close">×</button>
+          </div>
+          <div class="comment-viewer-body" id="comment-viewer-body"></div>
+        </div>
+
       </aside>
 
     </div>
@@ -870,16 +870,16 @@
     <!-- Unmapped fields -->
     <div id="add-ann-unmapped-fields" class="add-ann-fields hidden">
       <div class="add-ann-section">
-        <label class="add-ann-label">Raw Variable Name</label>
-        <input type="text" id="add-ann-unmapped-var" class="input" placeholder="e.g. DRGDICTV" />
+        <label class="add-ann-label">Variable Name</label>
+        <p class="add-ann-hint">Annotation will be created at the clicked position and marked as Unmapped.</p>
       </div>
     </div>
 
     <!-- Not Submitted fields -->
     <div id="add-ann-ns-fields" class="add-ann-fields hidden">
       <div class="add-ann-section">
-        <label class="add-ann-label">Raw Variable Name</label>
-        <input type="text" id="add-ann-ns-var" class="input" placeholder="e.g. DRGDICTV" />
+        <label class="add-ann-label">Variable Name</label>
+        <p class="add-ann-hint">Annotation will be created at the clicked position and marked as Not Submitted.</p>
       </div>
     </div>
 
@@ -904,11 +904,6 @@
   <button class="ctx-menu-item ctx-menu-cancel" id="qctx-cancel">Cancel</button>
 </div>
 
-<!-- ── Comment Callout Popup ───────────────────────────── -->
-<div id="comment-callout" class="comment-callout hidden">
-  <div class="comment-callout-text" id="comment-callout-text"></div>
-</div>
-
 <!-- ── Comment Dialog ─────────────────────────────────── -->
 <div id="comment-dialog" class="comment-dialog-overlay hidden">
   <div class="comment-dialog">
@@ -923,6 +918,39 @@
     <div class="comment-dialog-actions">
       <button class="btn btn-primary" id="comment-dialog-save">Save</button>
       <button class="btn" id="comment-dialog-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Restart Confirm Dialog ──────────────────────────── -->
+<div id="restart-confirm-overlay" class="add-ann-overlay hidden">
+  <div class="add-ann-dialog" style="min-width:280px;max-width:360px">
+    <div class="add-ann-header">
+      <span class="add-ann-title">Restart Session?</span>
+    </div>
+    <div style="font-size:13px;color:#C8CCEC;margin-bottom:16px">
+      This will clear all annotations and reset the current session.
+    </div>
+    <div class="add-ann-actions">
+      <button class="btn btn-primary" id="restart-confirm-yes">Restart</button>
+      <button class="btn" id="restart-confirm-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Restart Save Dialog ─────────────────────────────── -->
+<div id="restart-save-overlay" class="add-ann-overlay hidden">
+  <div class="add-ann-dialog" style="min-width:280px;max-width:360px">
+    <div class="add-ann-header">
+      <span class="add-ann-title">Save Before Restarting?</span>
+    </div>
+    <div style="font-size:13px;color:#C8CCEC;margin-bottom:16px">
+      Would you like to export the current annotations before restarting?
+    </div>
+    <div class="add-ann-actions">
+      <button class="btn btn-primary" id="restart-save-yes">Save</button>
+      <button class="btn" id="restart-save-skip">Skip</button>
+      <button class="btn" id="restart-save-cancel">Cancel</button>
     </div>
   </div>
 </div>

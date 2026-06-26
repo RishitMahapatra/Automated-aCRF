@@ -861,13 +861,9 @@ function updateDatasetChip(chipRecord, fields = {}) {
   }
 
   function _createStatusAnnotation(type) {
-    const inputId = type === 'unmapped' ? 'add-ann-unmapped-var' : 'add-ann-ns-var';
-    const rawVar = (document.getElementById(inputId)?.value || '').trim().toUpperCase();
-
-    if (!rawVar) { _showAddError('Raw variable name is required.'); return; }
-    if (/\s/.test(rawVar)) { _showAddError('Variable name cannot contain spaces.'); return; }
-
     const status = type === 'unmapped' ? 'UNMAPPED' : 'NOT_SUBMITTED';
+    const displayLabel = status === 'NOT_SUBMITTED' ? 'NOT SUBMITTED' : 'UNMAPPED';
+
     const records = Store.annotations || [];
     const first = records[0] || {};
     const formCode = (first.form_code || 'UNKNOWN').toUpperCase();
@@ -876,7 +872,7 @@ function updateDatasetChip(chipRecord, fields = {}) {
     const fontSizePts = 7.0;
     const padX = 6.0;
     const padY = 5.0;
-    const textWidthPts = Math.max(20, 0.60 * fontSizePts * rawVar.length + 3.0);
+    const textWidthPts = Math.max(20, 0.60 * fontSizePts * displayLabel.length + 3.0);
     const boxW = textWidthPts + padX * 6.0;
     const boxH = fontSizePts + padY * 2;
 
@@ -891,7 +887,7 @@ function updateDatasetChip(chipRecord, fields = {}) {
       page_type: 'FORM',
       form_code: formCode,
       component: '',
-      raw_variable: rawVar,
+      raw_variable: '',
       sdtm_dataset: '',
       sdtm_variable: '',
       sdtm_label: status === 'NOT_SUBMITTED' ? 'Not Submitted' : '',

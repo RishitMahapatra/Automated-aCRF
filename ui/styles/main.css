@@ -938,16 +938,22 @@ html, body {
   min-width: var(--panel-w);
   background: var(--surface);
   border-left: 1px solid var(--border);
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
-#edit-panel::-webkit-scrollbar { width: 3px; }
-#edit-panel::-webkit-scrollbar-track { background: transparent; }
-#edit-panel::-webkit-scrollbar-thumb {
+#edit-panel-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+#edit-panel-scroll::-webkit-scrollbar { width: 3px; }
+#edit-panel-scroll::-webkit-scrollbar-track { background: transparent; }
+#edit-panel-scroll::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 2px;
 }
@@ -2360,16 +2366,22 @@ html, body {
   min-width: var(--panel-w);
   background: var(--surface);
   border-left: 1px solid var(--border);
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
-#edit-panel::-webkit-scrollbar { width: 3px; }
-#edit-panel::-webkit-scrollbar-track { background: transparent; }
-#edit-panel::-webkit-scrollbar-thumb {
+#edit-panel-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+#edit-panel-scroll::-webkit-scrollbar { width: 3px; }
+#edit-panel-scroll::-webkit-scrollbar-track { background: transparent; }
+#edit-panel-scroll::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 2px;
 }
@@ -4160,46 +4172,35 @@ body.theme-light .theme-toggle-btn .theme-icon-moon {
   font-size: 10px; font-weight: 600; color: #D7DDEF; white-space: nowrap;
 }
 
-/* ── Comment Callout Popup ─────────────────────────────── */
-.comment-callout {
-  position: fixed; z-index: 9998;
-  background: #1E1A3A; border: 1px solid rgba(142,84,255,0.45);
-  border-radius: 8px; padding: 10px 12px;
-  min-width: 180px; max-width: 260px;
-  max-height: 160px; overflow-y: auto;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.45);
-  font-size: 12px; color: #C8CCEC; line-height: 1.5;
-  word-wrap: break-word; word-break: break-word;
+/* ── Comment Viewer Panel ──────────────────────────────── */
+.comment-viewer {
+  background: #1A1730;
+  border-top: 1px solid rgba(142,84,255,0.35);
+  padding: 0;
+  max-height: 160px;
+  display: flex; flex-direction: column;
+  flex-shrink: 0;
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.3);
 }
-/* Arrow pointing left (default — callout is to the right of button) */
-.comment-callout:not(.above)::before {
-  content: '';
-  position: absolute; left: -8px; top: 12px;
-  border-width: 7px 8px 7px 0;
-  border-style: solid;
-  border-color: transparent rgba(142,84,255,0.45) transparent transparent;
+.comment-viewer-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px 6px;
+  border-bottom: 1px solid rgba(142,84,255,0.2);
+  flex-shrink: 0;
 }
-.comment-callout:not(.above)::after {
-  content: '';
-  position: absolute; left: -6px; top: 13px;
-  border-width: 6px 7px 6px 0;
-  border-style: solid;
-  border-color: transparent #1E1A3A transparent transparent;
+.comment-viewer-title {
+  font-size: 11px; font-weight: 600; color: #9B8FD4; text-transform: uppercase; letter-spacing: 0.05em;
 }
-/* Arrow pointing down-left (above variant — callout is above the button) */
-.comment-callout.above::before {
-  content: '';
-  position: absolute; left: 12px; bottom: -8px; top: auto;
-  border-width: 8px 7px 0 7px;
-  border-style: solid;
-  border-color: rgba(142,84,255,0.45) transparent transparent transparent;
+.comment-viewer-close {
+  background: none; border: none; color: #9B8FD4; cursor: pointer;
+  font-size: 16px; line-height: 1; padding: 0 2px;
+  transition: color 0.15s;
 }
-.comment-callout.above::after {
-  content: '';
-  position: absolute; left: 13px; bottom: -6px; top: auto;
-  border-width: 7px 6px 0 6px;
-  border-style: solid;
-  border-color: #1E1A3A transparent transparent transparent;
+.comment-viewer-close:hover { color: #E0E0FF; }
+.comment-viewer-body {
+  flex: 1; overflow-y: auto; padding: 8px 12px 10px;
+  font-size: 12px; color: #C8CCEC; line-height: 1.55;
+  white-space: pre-wrap; word-break: break-word;
 }
 
 /* ── Comment Dialog ────────────────────────────────────── */
