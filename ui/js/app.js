@@ -105,6 +105,10 @@ async function _captureAllPagesForExport() {
   const originalZoom = Number(Store.zoomPct || 100);
   const images = [];
 
+  // Hide navigation-only markers before capture
+  const markers = Array.from(document.querySelectorAll('.ann-review-marker'));
+  markers.forEach(m => { m.style.display = 'none'; });
+
   try {
     // Export at stable zoom for consistent capture
     if (Store.setZoom && typeof Canvas !== 'undefined' && Canvas.applyZoom) {
@@ -129,6 +133,9 @@ async function _captureAllPagesForExport() {
 
     return images;
   } finally {
+    // Restore markers after capture
+    markers.forEach(m => { m.style.display = ''; });
+
     if (typeof Canvas !== 'undefined' && Canvas.loadPage && originalPage) {
       await Canvas.loadPage(originalPage);
     }

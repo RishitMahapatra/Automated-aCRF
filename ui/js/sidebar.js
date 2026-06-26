@@ -145,8 +145,17 @@ const Sidebar = (() => {
 
     btnRestart.addEventListener('click', () => {
       if (pipelineRunning) return;
+      if (!Store.pdfLoaded) {
+        const noPdfOverlay = document.getElementById('restart-nopdf-overlay');
+        if (noPdfOverlay) noPdfOverlay.classList.remove('hidden');
+        return;
+      }
       const confirmOverlay = document.getElementById('restart-confirm-overlay');
       if (confirmOverlay) confirmOverlay.classList.remove('hidden');
+    });
+
+    document.getElementById('restart-nopdf-ok')?.addEventListener('click', () => {
+      document.getElementById('restart-nopdf-overlay')?.classList.add('hidden');
     });
 
     document.getElementById('restart-confirm-cancel')?.addEventListener('click', () => {
@@ -171,13 +180,24 @@ const Sidebar = (() => {
     document.getElementById('restart-save-yes')?.addEventListener('click', async () => {
       document.getElementById('restart-save-overlay')?.classList.add('hidden');
       try {
-        const pageImages = Store.pageImages || {};
-        await window.pywebview.api.export_pdf_from_images(pageImages);
+        if (Store.pipelineRan && typeof _captureAllPagesForExport === 'function') {
+          const pageImages = await _captureAllPagesForExport();
+          await window.pywebview.api.export_pdf_from_images(pageImages);
+        }
       } catch (e) {
         console.error('[sidebar] export before restart failed:', e);
       }
       await _doRestartSession();
     });
+  }
+
+  function _setRestartButtonState() {
+    const btn = document.getElementById('btn-restart-session');
+    if (!btn) return;
+    const shouldDisable = pipelineRunning;
+    btn.disabled = shouldDisable;
+    btn.style.opacity = shouldDisable ? '0.45' : '';
+    btn.style.pointerEvents = shouldDisable ? 'none' : '';
   }
 
   async function _doRestartSession() {
@@ -502,6 +522,8 @@ const Sidebar = (() => {
     if (sessionInput) {
       sessionInput.disabled = !!locked;
     }
+
+    _setRestartButtonState();
   }
 
   function _resetPipelineSteps() {
@@ -1010,11 +1032,12 @@ async function _handleZoomChange(direction) {
     if (!viewer || !body) return;
     body.textContent = rec.comment || '';
     viewer.classList.remove('hidden');
+    viewer.classList.add('comment-viewer-full');
   }
 
   function _closeCommentViewer() {
     const viewer = document.getElementById('comment-viewer');
-    if (viewer) viewer.classList.add('hidden');
+    if (viewer) { viewer.classList.add('hidden'); viewer.classList.remove('comment-viewer-full'); }
   }
 
   function _bindCommentDialog() {
@@ -1083,17 +1106,17 @@ async function _handleZoomChange(direction) {
         return String(r.page_type || 'FORM').toUpperCase() !== 'TABLE';
       });
 
-      // Active queue: NEEDS_REVIEW + UNMAPPED (pending user action)
-      const activeQueue = formRecords.filter((r) => {
-        const s = String(r.status || '').toUpperCase();
-        return s === 'UNMAPPED' || s === 'NEEDS_REVIEW';
-      });
+      const _isUserCreatedRec = (r) => String(r.annotation_id || '').startsWith('user_');
 
-      // Resolved queue: user-actioned items
-      const resolvedQueue = formRecords.filter((r) => {
-        const s = String(r.status || '').toUpperCase();
-        return s === 'USER_CORRECTED' || s === 'NOT_SUBMITTED';
-      });
+      // Active queue: NEEDS_REVIEW + UNMAPPED — pipeline items first, user-added last
+      const activeQueue = formRecords
+        .filter((r) => { const s = String(r.status || '').toUpperCase(); return s === 'UNMAPPED' || s === 'NEEDS_REVIEW'; })
+        .sort((a, b) => (_isUserCreatedRec(a) ? 1 : 0) - (_isUserCreatedRec(b) ? 1 : 0));
+
+      // Resolved queue: user-actioned items — pipeline items first, user-added last
+      const resolvedQueue = formRecords
+        .filter((r) => { const s = String(r.status || '').toUpperCase(); return s === 'USER_CORRECTED' || s === 'NOT_SUBMITTED'; })
+        .sort((a, b) => (_isUserCreatedRec(a) ? 1 : 0) - (_isUserCreatedRec(b) ? 1 : 0));
 
       if (summaryEl) {
         summaryEl.textContent = `${activeQueue.length} pending`;
