@@ -491,6 +491,12 @@
 
     <!-- Resolved pane -->
     <div id="queue-pane-resolved" class="queue-pane hidden">
+      <input
+        type="text"
+        id="resolved-queue-search"
+        class="unmapped-queue-search"
+        placeholder="Search variable or page"
+      />
       <div class="unmapped-queue-list" id="unmapped-queue-list-resolved"></div>
     </div>
   </div>
@@ -778,7 +784,7 @@
         <!-- ── Comment Viewer Panel ─────────────────────────── -->
         <div id="comment-viewer" class="comment-viewer hidden">
           <div class="comment-viewer-header">
-            <span class="comment-viewer-title">Comment</span>
+            <span class="comment-viewer-title">Comments</span>
             <button class="comment-viewer-close" id="comment-viewer-close">×</button>
           </div>
           <div class="comment-viewer-body" id="comment-viewer-body"></div>

@@ -182,10 +182,12 @@ const Sidebar = (() => {
       try {
         if (Store.pipelineRan && typeof _captureAllPagesForExport === 'function') {
           const pageImages = await _captureAllPagesForExport();
-          await window.pywebview.api.export_pdf_from_images(pageImages);
+          const saveRes = await window.pywebview.api.export_pdf_from_images(pageImages);
+          if (!saveRes || !saveRes.ok) return; // user cancelled save dialog — abort restart
         }
       } catch (e) {
         console.error('[sidebar] export before restart failed:', e);
+        return; // abort restart on error
       }
       await _doRestartSession();
     });
@@ -862,12 +864,17 @@ async function _handleZoomChange(direction) {
   }
 
   function _bindAnalysisQueueSearch() {
-    const input = document.getElementById('unmapped-queue-search');
-    if (!input) return;
+    document.getElementById('unmapped-queue-search')?.addEventListener('input', _applyQueueFilters);
+    document.getElementById('resolved-queue-search')?.addEventListener('input', _applyResolvedFilter);
+  }
 
-    input.addEventListener('input', () => {
-      _applyQueueFilters();
-    });
+  function _rowMatchesQuery(row, query) {
+    if (!query) return true;
+    const raw = (row.dataset.rawVar || '').toLowerCase();
+    const domain = (row.dataset.domain || '').toLowerCase();
+    const page = String(row.dataset.page || '').toLowerCase();
+    // Match any substring across fields
+    return raw.includes(query) || domain.includes(query) || page.includes(query);
   }
 
   function _applyQueueFilters() {
@@ -876,26 +883,21 @@ async function _handleZoomChange(direction) {
 
     const activeFilter =
       document.querySelector('.unmapped-filter-chip.active')?.dataset.filter || 'all';
-    const query = (document.getElementById('unmapped-queue-search')?.value || '')
-      .trim()
-      .toLowerCase();
+    const query = (document.getElementById('unmapped-queue-search')?.value || '').trim().toLowerCase();
 
-    const rows = Array.from(listEl.querySelectorAll('.qr-row'));
-    rows.forEach((row) => {
+    Array.from(listEl.querySelectorAll('.qr-row')).forEach((row) => {
       const status = row.dataset.queueStatus || 'unreviewed';
-      const raw = (row.dataset.rawVar || '').toLowerCase();
-      const domain = (row.dataset.domain || '').toLowerCase();
-      const page = String(row.dataset.page || '').toLowerCase();
+      const matchesFilter = activeFilter === 'all' || status === activeFilter;
+      row.style.display = matchesFilter && _rowMatchesQuery(row, query) ? '' : 'none';
+    });
+  }
 
-      const matchesFilter = activeFilter === 'all' ? true : status === activeFilter;
-      const matchesSearch =
-        !query ||
-        raw.includes(query) ||
-        domain.includes(query) ||
-        page.includes(query) ||
-        (`page ${page}`).includes(query);
-
-      row.style.display = matchesFilter && matchesSearch ? '' : 'none';
+  function _applyResolvedFilter() {
+    const listEl = document.getElementById('unmapped-queue-list-resolved');
+    if (!listEl) return;
+    const query = (document.getElementById('resolved-queue-search')?.value || '').trim().toLowerCase();
+    Array.from(listEl.querySelectorAll('.qr-row')).forEach((row) => {
+      row.style.display = _rowMatchesQuery(row, query) ? '' : 'none';
     });
   }
 
@@ -1302,14 +1304,12 @@ async function _handleZoomChange(direction) {
   }
 
   function highlightInQueue(annotationId, status) {
-    // Switch to the Review (analysis) tab
     const analysisTab = document.getElementById('tab-analysis');
     if (analysisTab) analysisTab.click();
 
     const statusUpper = String(status || '').toUpperCase();
     const isActive = statusUpper === 'UNMAPPED' || statusUpper === 'NEEDS_REVIEW';
 
-    // Switch inner tab accordingly
     const innerTabs = document.querySelectorAll('.queue-inner-tab');
     innerTabs.forEach((t) => {
       if ((isActive && t.dataset.queueTab === 'active') || (!isActive && t.dataset.queueTab === 'resolved')) {
@@ -1318,16 +1318,31 @@ async function _handleZoomChange(direction) {
     });
 
     setTimeout(() => {
-      const listEl = document.getElementById(
-        isActive ? 'unmapped-queue-list-active' : 'unmapped-queue-list-resolved'
-      );
-      if (!listEl) return;
-      const row = listEl.querySelector(`[data-annotation-id="${CSS.escape(annotationId)}"]`);
+      // Try primary list first, fall back to the other list if not found
+      const primaryId = isActive ? 'unmapped-queue-list-active' : 'unmapped-queue-list-resolved';
+      const fallbackId = isActive ? 'unmapped-queue-list-resolved' : 'unmapped-queue-list-active';
+
+      let row = document.getElementById(primaryId)?.querySelector(`[data-annotation-id="${CSS.escape(annotationId)}"]`);
+
+      if (!row) {
+        // Try fallback list and switch tab if needed
+        row = document.getElementById(fallbackId)?.querySelector(`[data-annotation-id="${CSS.escape(annotationId)}"]`);
+        if (row) {
+          innerTabs.forEach((t) => {
+            if ((!isActive && t.dataset.queueTab === 'active') || (isActive && t.dataset.queueTab === 'resolved')) {
+              t.click();
+            }
+          });
+        }
+      }
+
       if (!row) return;
+      // Ensure row is visible (not filtered out)
+      row.style.display = '';
       row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       row.classList.add('qr-highlighted');
       setTimeout(() => row.classList.remove('qr-highlighted'), 2200);
-    }, 120);
+    }, 200);
   }
 
   function _escapeHtml(str) {

@@ -1752,22 +1752,6 @@ function _persistDatasetChipVisualState(rec, box) {
     labelSpan.style.paddingBottom = "3px";
     box.appendChild(labelSpan);""
 
-    // Review status marker — excluded from PDF export via data-html2canvas-ignore
-    const annStatus = String(rec.status || '').toUpperCase();
-    if (annStatus === 'NEEDS_REVIEW') {
-      const marker = document.createElement('span');
-      marker.className = 'ann-review-marker ann-review-marker-warn';
-      marker.setAttribute('data-html2canvas-ignore', '');
-      marker.textContent = '⚠';
-      box.appendChild(marker);
-    } else if (annStatus === 'USER_CORRECTED') {
-      const marker = document.createElement('span');
-      marker.className = 'ann-review-marker ann-review-marker-ok';
-      marker.setAttribute('data-html2canvas-ignore', '');
-      marker.textContent = '✓';
-      box.appendChild(marker);
-    }
-
     const resizeHandle = document.createElement('div');
     resizeHandle.className = 'ann-resize-handle';
     resizeHandle.innerHTML = '↘';

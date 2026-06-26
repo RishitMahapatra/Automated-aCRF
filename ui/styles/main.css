@@ -820,7 +820,7 @@ html, body {
   cursor: pointer;
   pointer-events: all;
   transition: all 100ms ease;
-  overflow: visible;
+  overflow: hidden;
   white-space: nowrap;
 }
 
@@ -2250,7 +2250,7 @@ html, body {
   cursor: pointer;
   pointer-events: all;
   transition: all 100ms ease;
-  overflow: visible;
+  overflow: hidden;
   white-space: nowrap;
 }
 
@@ -2987,7 +2987,7 @@ html, body {
   align-items: center;
   justify-content: center;
   border-radius: 2px;
-  overflow: visible;
+  overflow: hidden;
   z-index: 10;
   transition: transform 0.08s ease, box-shadow 0.12s ease, filter 0.12s ease;
   padding: 0 3px;
@@ -3016,19 +3016,6 @@ html, body {
   line-height: 1;
 }
 
-/* Navigation-only review markers — hidden during PDF export */
-.ann-review-marker {
-  position: absolute;
-  top: -8px;
-  right: -7px;
-  font-size: 10px;
-  line-height: 1;
-  pointer-events: none;
-  z-index: 15;
-  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6));
-}
-.ann-review-marker-warn { color: #FFD700; }
-.ann-review-marker-ok   { color: #00E676; font-size: 12px; font-weight: 700; }
 
 /* RESOLVED */
 #annotation-layer .ann-box.resolved {
@@ -3950,6 +3937,7 @@ body.theme-light .theme-toggle-btn .theme-icon-moon {
   max-height: 280px;
   overflow-y: auto;
   padding-right: 2px;
+  padding-top: 6px;
 }
 
 .unmapped-row {
