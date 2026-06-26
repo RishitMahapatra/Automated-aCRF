@@ -7,6 +7,7 @@ const Sidebar = (() => {
   let _queueCtxRec = null;
   let _currentCommentRec = null;
   let _commentCalloutVisible = false;
+  let _datasetReviews = [];
 
   const DOMAIN_BADGE_COLORS = {
     DM:'#3B6FD4', CM:'#2E9E5B', AE:'#D4522E', LB:'#7B42CC',
@@ -241,10 +242,13 @@ const Sidebar = (() => {
       const progressWrap = document.getElementById('pipeline-progress-wrap');
       if (progressWrap) progressWrap.classList.add('hidden');
 
+      _datasetReviews = [];
+
       const btnRun = document.getElementById('btn-run');
       if (btnRun) {
         btnRun.disabled = false;
         btnRun.innerHTML = '<span class="btn-icon">▶</span> Run Pipeline';
+        btnRun.title = '';
       }
 
       const pdfImg = document.getElementById('pdf-img');
@@ -441,8 +445,16 @@ const Sidebar = (() => {
         pipelineRunning = false;
         _setPipelineControlsLocked(false);
 
-        btnRun.disabled = false;
-        btnRun.innerHTML = '<span class="btn-icon">▶</span> Run Pipeline';
+        if (Store.pipelineRan) {
+          // Keep frozen after a successful run — only restart clears this
+          btnRun.disabled = true;
+          btnRun.innerHTML = '<span class="btn-icon">✓</span> Pipeline Complete';
+          btnRun.title = 'Restart session to run again';
+        } else {
+          btnRun.disabled = false;
+          btnRun.innerHTML = '<span class="btn-icon">▶</span> Run Pipeline';
+          btnRun.title = '';
+        }
       }
     });
   }
@@ -873,8 +885,8 @@ async function _handleZoomChange(direction) {
     const raw = (row.dataset.rawVar || '').toLowerCase();
     const domain = (row.dataset.domain || '').toLowerCase();
     const page = String(row.dataset.page || '').toLowerCase();
-    // Match any substring across fields
-    return raw.includes(query) || domain.includes(query) || page.includes(query);
+    const sdtmLabel = (row.dataset.sdtmLabel || '').toLowerCase();
+    return raw.includes(query) || domain.includes(query) || page.includes(query) || sdtmLabel.includes(query);
   }
 
   function _applyQueueFilters() {
@@ -887,7 +899,14 @@ async function _handleZoomChange(direction) {
 
     Array.from(listEl.querySelectorAll('.qr-row')).forEach((row) => {
       const status = row.dataset.queueStatus || 'unreviewed';
-      const matchesFilter = activeFilter === 'all' || status === activeFilter;
+      let matchesFilter;
+      if (activeFilter === 'all') {
+        matchesFilter = true;
+      } else if (activeFilter === 'dataset') {
+        matchesFilter = row.dataset.isDataset === 'true';
+      } else {
+        matchesFilter = status === activeFilter && row.dataset.isDataset !== 'true';
+      }
       row.style.display = matchesFilter && _rowMatchesQuery(row, query) ? '' : 'none';
     });
   }
@@ -957,6 +976,8 @@ async function _handleZoomChange(direction) {
     row.dataset.domain = String(domainBadge);
     row.dataset.page = String(page);
     row.dataset.annotationId = String(rec.annotation_id || '');
+    row.dataset.sdtmLabel = String(sdtmLabel);
+    row.dataset.isDataset = rec.is_dataset_review ? 'true' : '';
 
     const hasComment = !!(rec.comment && String(rec.comment).trim());
     const commentBtnHtml = hasComment
@@ -1078,15 +1099,22 @@ async function _handleZoomChange(direction) {
     document.getElementById('comment-dialog-save')?.addEventListener('click', async () => {
       if (!_currentCommentRec) return;
       const comment = input ? input.value : '';
-      try {
-        await window.pywebview.api.update_comment(
-          String(_currentCommentRec.annotation_id || ''),
-          comment
-        );
-        await refreshStats();
+      if (_currentCommentRec.is_dataset_review) {
+        // Local-only record — update in _datasetReviews array
+        const idx = _datasetReviews.findIndex(r => r.annotation_id === _currentCommentRec.annotation_id);
+        if (idx >= 0) _datasetReviews[idx].comment = comment;
         await refreshUnmappedQueue();
-      } catch (e) {
-        console.error('[sidebar] save comment error:', e);
+      } else {
+        try {
+          await window.pywebview.api.update_comment(
+            String(_currentCommentRec.annotation_id || ''),
+            comment
+          );
+          await refreshStats();
+          await refreshUnmappedQueue();
+        } catch (e) {
+          console.error('[sidebar] save comment error:', e);
+        }
       }
       closeDialog();
     });
@@ -1110,15 +1138,29 @@ async function _handleZoomChange(direction) {
 
       const _isUserCreatedRec = (r) => String(r.annotation_id || '').startsWith('user_');
 
-      // Active queue: NEEDS_REVIEW + UNMAPPED — pipeline items first, user-added last
-      const activeQueue = formRecords
+      // Active queue: NEEDS_REVIEW + UNMAPPED — pipeline items first, user-added last; plus dataset reviews
+      const activeBackend = formRecords
         .filter((r) => { const s = String(r.status || '').toUpperCase(); return s === 'UNMAPPED' || s === 'NEEDS_REVIEW'; })
         .sort((a, b) => (_isUserCreatedRec(a) ? 1 : 0) - (_isUserCreatedRec(b) ? 1 : 0));
 
-      // Resolved queue: user-actioned items — pipeline items first, user-added last
-      const resolvedQueue = formRecords
+      const activeDatasetReviews = _datasetReviews.filter(r => {
+        const s = String(r.status || '').toUpperCase();
+        return s === 'NEEDS_REVIEW';
+      });
+
+      const activeQueue = [...activeBackend, ...activeDatasetReviews];
+
+      // Resolved queue: user-actioned items — pipeline items first, user-added last; plus resolved dataset reviews
+      const resolvedBackend = formRecords
         .filter((r) => { const s = String(r.status || '').toUpperCase(); return s === 'USER_CORRECTED' || s === 'NOT_SUBMITTED'; })
         .sort((a, b) => (_isUserCreatedRec(a) ? 1 : 0) - (_isUserCreatedRec(b) ? 1 : 0));
+
+      const resolvedDatasetReviews = _datasetReviews.filter(r => {
+        const s = String(r.status || '').toUpperCase();
+        return s === 'USER_CORRECTED' || s === 'NOT_SUBMITTED';
+      });
+
+      const resolvedQueue = [...resolvedBackend, ...resolvedDatasetReviews];
 
       if (summaryEl) {
         summaryEl.textContent = `${activeQueue.length} pending`;
@@ -1227,20 +1269,34 @@ async function _handleZoomChange(direction) {
     const markReviewBtn = document.getElementById('qctx-mark-review');
     const convertUnmappedBtn = document.getElementById('qctx-convert-unmapped');
 
+    const isDatasetReview = !!rec.is_dataset_review;
+
     if (resolveBtn) resolveBtn.style.display = isAlreadyResolved ? 'none' : '';
     if (ignoreBtn) ignoreBtn.style.display = isAlreadyResolved ? 'none' : '';
     if (markReviewBtn) markReviewBtn.style.display = '';
-    // Show "Convert to Unmapped" only for non-unmapped active items
-    if (convertUnmappedBtn) convertUnmappedBtn.style.display = (isAlreadyUnmapped || isAlreadyResolved) ? 'none' : '';
+    // Dataset reviews cannot be converted to unmapped
+    if (convertUnmappedBtn) convertUnmappedBtn.style.display =
+      (isAlreadyUnmapped || isAlreadyResolved || isDatasetReview) ? 'none' : '';
 
     menu.style.left = `${Math.min(x, window.innerWidth - 190)}px`;
     menu.style.top = `${Math.min(y, window.innerHeight - 240)}px`;
     menu.classList.remove('hidden');
   }
 
+  function _updateDatasetReviewStatus(annotationId, newStatus) {
+    const idx = _datasetReviews.findIndex(r => r.annotation_id === annotationId);
+    if (idx >= 0) _datasetReviews[idx].status = newStatus;
+  }
+
   async function _resolveQueueItem(rec) {
     const annotationId = String(rec.annotation_id || '');
     if (!annotationId) return;
+
+    if (rec.is_dataset_review) {
+      _updateDatasetReviewStatus(annotationId, 'USER_CORRECTED');
+      await refreshUnmappedQueue();
+      return;
+    }
 
     const dataset = rec.sdtm_dataset || rec.best_sdtm_dataset || '';
     const variable = rec.sdtm_variable || rec.best_sdtm_variable || '';
@@ -1260,6 +1316,12 @@ async function _handleZoomChange(direction) {
     const annotationId = String(rec.annotation_id || '');
     if (!annotationId) return;
 
+    if (rec.is_dataset_review) {
+      _updateDatasetReviewStatus(annotationId, 'NOT_SUBMITTED');
+      await refreshUnmappedQueue();
+      return;
+    }
+
     const res = await window.pywebview.api.update_annotation(
       annotationId, 'NOT_SUBMITTED', '', '', 'Not Submitted'
     );
@@ -1274,6 +1336,12 @@ async function _handleZoomChange(direction) {
     const annotationId = String(rec.annotation_id || '');
     if (!annotationId) return;
 
+    if (rec.is_dataset_review) {
+      _updateDatasetReviewStatus(annotationId, 'NEEDS_REVIEW');
+      await refreshUnmappedQueue();
+      return;
+    }
+
     const dataset = rec.sdtm_dataset || rec.best_sdtm_dataset || '';
     const variable = rec.sdtm_variable || rec.best_sdtm_variable || '';
 
@@ -1285,6 +1353,34 @@ async function _handleZoomChange(direction) {
       await refreshStats();
       await refreshUnmappedQueue();
     }
+  }
+
+  async function addDatasetReview(formCode, dsCode, dsLabel, page) {
+    const id = `dsreview_${String(formCode).toUpperCase()}_${String(dsCode).toUpperCase()}`;
+    // Don't duplicate — just highlight the existing entry
+    if (_datasetReviews.find(r => r.annotation_id === id)) {
+      document.getElementById('tab-analysis')?.click();
+      document.querySelector('.queue-inner-tab[data-queue-tab="active"]')?.click();
+      setTimeout(() => highlightInQueue(id, 'NEEDS_REVIEW'), 100);
+      return;
+    }
+    _datasetReviews.push({
+      annotation_id: id,
+      raw_variable: dsLabel || dsCode,
+      sdtm_dataset: String(dsCode).toUpperCase(),
+      sdtm_variable: '',
+      sdtm_label: dsLabel || dsCode,
+      status: 'NEEDS_REVIEW',
+      page: page || Store.currentPage,
+      form_code: String(formCode).toUpperCase(),
+      is_dataset_review: true,
+      comment: '',
+    });
+    await refreshUnmappedQueue();
+    // Switch to Analysis > Active tab so user sees the new item
+    document.getElementById('tab-analysis')?.click();
+    document.querySelector('.queue-inner-tab[data-queue-tab="active"]')?.click();
+    setTimeout(() => highlightInQueue(id, 'NEEDS_REVIEW'), 100);
   }
 
   function _openCommentForRecord(rec) {
@@ -1359,6 +1455,7 @@ async function _handleZoomChange(direction) {
     refreshStats,
     refreshUnmappedQueue,
     highlightInQueue,
+    addDatasetReview,
     goPrev,
     goNext,
     isPipelineRunning: () => pipelineRunning,

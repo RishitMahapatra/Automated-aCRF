@@ -485,6 +485,7 @@
         <button class="unmapped-filter-chip active" data-filter="all">All</button>
         <button class="unmapped-filter-chip" data-filter="unreviewed">Unmapped</button>
         <button class="unmapped-filter-chip" data-filter="review">Needs Review</button>
+        <button class="unmapped-filter-chip" data-filter="dataset">Dataset</button>
       </div>
       <div class="unmapped-queue-list" id="unmapped-queue-list-active"></div>
     </div>
@@ -806,6 +807,15 @@
   <button class="ctx-menu-item" id="ctx-show-in-queue" style="display:none">Show in Review Query</button>
   <button class="ctx-menu-item ctx-menu-cancel" id="ctx-remove-annotation" style="display:none">Remove Annotation</button>
   <button class="ctx-menu-item ctx-menu-cancel" id="ctx-cancel">Cancel</button>
+</div>
+
+<!-- ── Dataset Chip Context Menu ──────────────────────── -->
+<div id="ctx-menu-dataset" class="ctx-menu hidden">
+  <button class="ctx-menu-item" id="ctx-ds-edit">Edit Annotation</button>
+  <button class="ctx-menu-item" id="ctx-ds-add-review">Add to Review</button>
+  <button class="ctx-menu-item" id="ctx-ds-show-queue">Show in Review Query</button>
+  <button class="ctx-menu-item ctx-menu-cancel" id="ctx-ds-remove">Remove Annotation</button>
+  <button class="ctx-menu-item ctx-menu-cancel" id="ctx-ds-cancel">Cancel</button>
 </div>
 
 <!-- ── Add Annotation Dialog ──────────────────────────── -->

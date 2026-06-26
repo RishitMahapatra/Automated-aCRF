@@ -2904,7 +2904,7 @@ html, body {
     border-radius: 2px;
     transition: transform 0.1s ease, box-shadow 0.1s ease;
     z-index: 10;
-    overflow: hidden;
+    overflow: visible;
 }
 
 .ann-box:hover {
