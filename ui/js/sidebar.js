@@ -180,6 +180,17 @@ const Sidebar = (() => {
         _resetPipelineSteps();
         _resetStatsDisplay();
 
+        clearInterval(_progressInterval);
+        _progressInterval = null;
+        const progressWrap = document.getElementById('pipeline-progress-wrap');
+        if (progressWrap) progressWrap.classList.add('hidden');
+
+        const btnRun = document.getElementById('btn-run');
+        if (btnRun) {
+          btnRun.disabled = false;
+          btnRun.innerHTML = '<span class="btn-icon">▶</span> Run Pipeline';
+        }
+
         if (typeof Canvas !== 'undefined' && Canvas.showEmpty) {
           Canvas.showEmpty(true);
         }
@@ -710,7 +721,9 @@ async function _handleZoomChange(direction) {
         (Store.stats.resolved || 0) + (Store.stats.user_corrected || 0) + (Store.stats.not_submitted || 0)
       );
 
-      _updateRing(Store.stats.resolution_pct);
+      const allResolved = (Store.stats.resolved || 0) + (Store.stats.user_corrected || 0) + (Store.stats.not_submitted || 0);
+      const activePct = Store.stats.active > 0 ? Math.round(allResolved / Store.stats.active * 100) : 0;
+      _updateRing(Math.min(activePct, 100));
     } catch (e) {
       console.error('[sidebar] refreshStats error:', e);
     }

@@ -270,21 +270,10 @@ const EditPanel = (() => {
   }
 
   function _setSuggestionsVisible(show) {
-    const list = document.getElementById('suggestions-list');
-    if (!list) return;
-
-    const suggestionsLabel = list.previousElementSibling;
-    const dividerBelow = list.nextElementSibling;
-
-    if (suggestionsLabel && suggestionsLabel.classList.contains('section-label')) {
-      suggestionsLabel.classList.toggle('hidden', !show);
-    }
-
-    list.classList.toggle('hidden', !show);
-
-    if (dividerBelow && dividerBelow.classList.contains('divider')) {
-      dividerBelow.classList.toggle('hidden', !show);
-    }
+    const expander = document.getElementById('expander-suggestions');
+    const divider = document.getElementById('suggestions-divider');
+    if (expander) expander.classList.toggle('hidden', !show);
+    if (divider) divider.classList.toggle('hidden', !show);
   }
 
   function _setManualLabelsForDatasetMode(datasetRecord = null) {
@@ -559,6 +548,17 @@ const EditPanel = (() => {
   }
 
   function _bindExpanders() {
+    const suggestionsHdr = document.getElementById('expander-suggestions-hdr');
+    const suggestionsBody = document.getElementById('expander-suggestions-body');
+    const suggestionsChevron = suggestionsHdr?.querySelector('.expander-chevron');
+
+    if (suggestionsHdr && suggestionsBody) {
+      suggestionsHdr.addEventListener('click', () => {
+        suggestionsBody.classList.toggle('hidden');
+        if (suggestionsChevron) suggestionsChevron.classList.toggle('open');
+      });
+    }
+
     const manualHdr = document.getElementById('expander-manual-hdr');
     const manualBody = document.getElementById('expander-manual-body');
     const manualChevron = manualHdr?.querySelector('.expander-chevron');

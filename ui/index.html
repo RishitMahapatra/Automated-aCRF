@@ -285,14 +285,6 @@
           <span class="theme-icon theme-icon-sun">☀</span>
         </button>
         <div class="nav-divider"></div>
-        <span class="badge badge-form" id="nav-page-type">
-          FORM
-        </span>
-        <div class="nav-divider"></div>
-        <span class="nav-page-count" id="nav-page-count">
-          — / —
-        </span>
-        <div class="nav-divider"></div>
         <button class="nav-export-btn" id="btn-export-pdf">
           Export ↗
         </button>
@@ -314,11 +306,11 @@
     </button>
     <button class="sidebar-tab" data-tab="stats" id="tab-stats">
       <span class="material-symbols-outlined tab-icon">monitoring</span>
-      <span class="tab-label">Stats</span>
+      <span class="tab-label">Analytics</span>
     </button>
     <button class="sidebar-tab" data-tab="analysis" id="tab-analysis">
-      <span class="material-symbols-outlined tab-icon">analytics</span>
-      <span class="tab-label">Analysis</span>
+      <span class="material-symbols-outlined tab-icon">rate_review</span>
+      <span class="tab-label">Review</span>
     </button>
   </div>
 </div>
@@ -652,17 +644,22 @@
 
           <div class="divider"></div>
 
-          <!-- Suggestions -->
-          <div class="section-label" style="padding:0;margin-top:12px">
-            Suggestions
-          </div>
-          <div id="suggestions-list" class="suggestions-list">
-            <div class="suggestions-loading muted small">
-              Loading suggestions...
+          <!-- Suggestions (collapsible) -->
+          <div class="expander" id="expander-suggestions">
+            <div class="expander-header" id="expander-suggestions-hdr">
+              <span class="expander-chevron">›</span>
+              <span class="expander-label">Suggestions</span>
+            </div>
+            <div class="expander-body hidden" id="expander-suggestions-body">
+              <div id="suggestions-list" class="suggestions-list">
+                <div class="suggestions-loading muted small">
+                  Loading suggestions...
+                </div>
+              </div>
             </div>
           </div>
 
-          <div class="divider"></div>
+          <div class="divider" id="suggestions-divider"></div>
 
           <!-- Manual override -->
 <!-- Manual override -->

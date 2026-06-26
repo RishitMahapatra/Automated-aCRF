@@ -4201,6 +4201,8 @@ body.theme-light .theme-toggle-btn .theme-icon-moon {
 .comment-dialog-textarea {
   width: 100%;
   min-height: 140px;
+  height: auto;
+  margin: 0;
   resize: none;
   line-height: 1.6;
   padding: 12px 14px;
@@ -4216,10 +4218,11 @@ body.theme-light .theme-toggle-btn .theme-icon-moon {
   font-style: italic;
   font-size: 12px;
   text-align: center;
-  width: 100%;
+  width: calc(100% - 28px);
   padding: 0 14px;
   transition: opacity 0.15s ease;
-  white-space: nowrap;
+  white-space: normal;
+  overflow: hidden;
 }
 .comment-dialog-actions { display: flex; gap: 8px; }
 /* ── Queue Inner Tabs (Active / Resolved) ──────────────── */
