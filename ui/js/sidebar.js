@@ -606,6 +606,7 @@ function _bindNavigation() {
   const btnNextSticky = document.getElementById('btn-next-sticky');
   const btnZoomInSticky = document.getElementById('btn-zoom-in-sticky');
   const btnZoomOutSticky = document.getElementById('btn-zoom-out-sticky');
+  const pageDisplaySticky = document.getElementById('page-display-sticky');
 
   if (btnPrevSticky) {
     btnPrevSticky.addEventListener('click', async () => {
@@ -630,6 +631,99 @@ function _bindNavigation() {
       await _handleZoomChange(-1);
     });
   }
+
+  if (pageDisplaySticky) {
+    _bindPageNumberEdit(pageDisplaySticky);
+  }
+}
+
+function _bindPageNumberEdit(span) {
+  span.style.cursor = 'pointer';
+  span.title = 'Click to jump to page';
+
+  span.addEventListener('click', () => {
+    if (!Store.pipelineRan) return;
+    if (span.querySelector('input')) return; // already editing
+
+    const currentText = span.textContent || '';
+    span.textContent = '';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = String(Store.currentPage);
+    input.className = 'page-number-input';
+    input.style.cssText = 'width:3.5em;text-align:center;font-size:inherit;font-family:inherit;border:1px solid #888;border-radius:3px;padding:1px 4px;background:#fff;color:#222;';
+    input.setAttribute('aria-label', 'Page number');
+
+    const hint = document.createElement('span');
+    hint.className = 'page-number-hint';
+    hint.style.cssText = 'color:#c00;font-size:0.78em;margin-left:4px;white-space:nowrap;';
+    hint.textContent = '';
+
+    span.appendChild(input);
+    span.appendChild(hint);
+    input.select();
+
+    function _revert() {
+      span.textContent = currentText;
+    }
+
+    async function _commit() {
+      const raw = input.value.trim();
+      const num = parseInt(raw, 10);
+      if (!raw || isNaN(num) || !/^\d+$/.test(raw)) {
+        hint.textContent = 'invalid page number';
+        input.select();
+        return;
+      }
+      const page = Math.max(1, Math.min(Store.pageCount || 1, num));
+      span.textContent = currentText; // restore first
+      if (page !== Store.currentPage) {
+        Store.currentPage = page;
+        _updatePageDisplay();
+        _updateNavPageCount();
+        if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
+          await Canvas.loadPage(Store.currentPage);
+        }
+      }
+    }
+
+    input.addEventListener('input', () => {
+      const raw = input.value;
+      if (raw !== '' && !/^\d*$/.test(raw)) {
+        hint.textContent = 'invalid page number';
+      } else {
+        hint.textContent = '';
+      }
+    });
+
+    input.addEventListener('keydown', async (e) => {
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (ctrl && e.key.toLowerCase() === 'z') {
+        // Let browser handle native text undo inside this field
+        e.stopPropagation();
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        await _commit();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        _revert();
+      }
+    });
+
+    input.addEventListener('blur', async () => {
+      // Only revert if hint is empty (valid) or user typed nothing
+      const raw = input.value.trim();
+      if (!span.contains(input)) return; // already cleaned up
+      if (!raw || !/^\d+$/.test(raw)) {
+        _revert();
+      } else {
+        await _commit();
+      }
+    });
+  });
 }
 
 async function _handleZoomChange(direction) {
@@ -1232,9 +1326,26 @@ async function _handleZoomChange(direction) {
     document.getElementById('qctx-convert-unmapped')?.addEventListener('click', async () => {
       if (!_queueCtxRec) return;
       menu.classList.add('hidden');
-      const res = await window.pywebview.api.update_annotation(
-        String(_queueCtxRec.annotation_id || ''), 'UNMAPPED', '', '', ''
-      );
+      const rec = _queueCtxRec;
+      const annotationId = String(rec.annotation_id || '');
+
+      if (typeof Canvas !== 'undefined' && Canvas.pushUndoAction) {
+        Canvas.pushUndoAction({
+          type: 'status-change',
+          id: annotationId,
+          beforeStatus: rec.status || '',
+          beforeDataset: rec.sdtm_dataset || '',
+          beforeVariable: rec.sdtm_variable || '',
+          beforeLabel: rec.sdtm_label || '',
+          afterStatus: 'UNMAPPED',
+          afterDataset: '',
+          afterVariable: '',
+          afterLabel: '',
+          isUserCreated: false,
+        });
+      }
+
+      const res = await window.pywebview.api.update_annotation(annotationId, 'UNMAPPED', '', '', '');
       if (res && res.ok) {
         await refreshStats();
         await refreshUnmappedQueue();
@@ -1305,6 +1416,22 @@ async function _handleZoomChange(direction) {
     const variable = rec.sdtm_variable || rec.best_sdtm_variable || '';
     const label = rec.sdtm_label || '';
 
+    if (typeof Canvas !== 'undefined' && Canvas.pushUndoAction) {
+      Canvas.pushUndoAction({
+        type: 'status-change',
+        id: annotationId,
+        beforeStatus: rec.status || '',
+        beforeDataset: rec.sdtm_dataset || '',
+        beforeVariable: rec.sdtm_variable || '',
+        beforeLabel: rec.sdtm_label || '',
+        afterStatus: 'USER_CORRECTED',
+        afterDataset: dataset,
+        afterVariable: variable,
+        afterLabel: label,
+        isUserCreated: false,
+      });
+    }
+
     const res = await window.pywebview.api.update_annotation(
       annotationId, 'USER_CORRECTED', dataset, variable, label
     );
@@ -1323,6 +1450,22 @@ async function _handleZoomChange(direction) {
       _updateDatasetReviewStatus(annotationId, 'NOT_SUBMITTED');
       await refreshUnmappedQueue();
       return;
+    }
+
+    if (typeof Canvas !== 'undefined' && Canvas.pushUndoAction) {
+      Canvas.pushUndoAction({
+        type: 'status-change',
+        id: annotationId,
+        beforeStatus: rec.status || '',
+        beforeDataset: rec.sdtm_dataset || '',
+        beforeVariable: rec.sdtm_variable || '',
+        beforeLabel: rec.sdtm_label || '',
+        afterStatus: 'NOT_SUBMITTED',
+        afterDataset: '',
+        afterVariable: '',
+        afterLabel: 'Not Submitted',
+        isUserCreated: false,
+      });
     }
 
     const res = await window.pywebview.api.update_annotation(
@@ -1347,6 +1490,22 @@ async function _handleZoomChange(direction) {
 
     const dataset = rec.sdtm_dataset || rec.best_sdtm_dataset || '';
     const variable = rec.sdtm_variable || rec.best_sdtm_variable || '';
+
+    if (typeof Canvas !== 'undefined' && Canvas.pushUndoAction) {
+      Canvas.pushUndoAction({
+        type: 'status-change',
+        id: annotationId,
+        beforeStatus: rec.status || '',
+        beforeDataset: rec.sdtm_dataset || '',
+        beforeVariable: rec.sdtm_variable || '',
+        beforeLabel: rec.sdtm_label || '',
+        afterStatus: 'NEEDS_REVIEW',
+        afterDataset: dataset,
+        afterVariable: variable,
+        afterLabel: rec.sdtm_label || '',
+        isUserCreated: false,
+      });
+    }
 
     const res = await window.pywebview.api.update_annotation(
       annotationId, 'NEEDS_REVIEW', dataset, variable, rec.sdtm_label || ''
