@@ -664,11 +664,17 @@ function _bindPageNumberEdit(span) {
     span.appendChild(hint);
     input.select();
 
+    // Flag prevents double-commit when Enter fires both keydown and blur
+    let handled = false;
+
     function _revert() {
+      if (handled) return;
+      handled = true;
       span.textContent = currentText;
     }
 
     async function _commit() {
+      if (handled) return;
       const raw = input.value.trim();
       const num = parseInt(raw, 10);
       if (!raw || isNaN(num) || !/^\d+$/.test(raw)) {
@@ -676,15 +682,13 @@ function _bindPageNumberEdit(span) {
         input.select();
         return;
       }
+      handled = true;
       const page = Math.max(1, Math.min(Store.pageCount || 1, num));
-      span.textContent = currentText; // restore first
-      if (page !== Store.currentPage) {
-        Store.currentPage = page;
-        _updatePageDisplay();
-        _updateNavPageCount();
-        if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
-          await Canvas.loadPage(Store.currentPage);
-        }
+      Store.currentPage = page;
+      _updatePageDisplay();
+      _updateNavPageCount();
+      if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
+        await Canvas.loadPage(Store.currentPage);
       }
     }
 
@@ -714,9 +718,8 @@ function _bindPageNumberEdit(span) {
     });
 
     input.addEventListener('blur', async () => {
-      // Only revert if hint is empty (valid) or user typed nothing
+      if (handled) return; // already committed or reverted
       const raw = input.value.trim();
-      if (!span.contains(input)) return; // already cleaned up
       if (!raw || !/^\d+$/.test(raw)) {
         _revert();
       } else {
