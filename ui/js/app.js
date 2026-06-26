@@ -3,10 +3,10 @@
  * ------------
  * Main frontend bootstrap for the PyWebView CRF Annotation Editor.
  */
-const SIDEBAR_MIN_WIDTH = 220;
+const SIDEBAR_MIN_WIDTH = 160;
 const SIDEBAR_MAX_WIDTH = 520;
 
-const EDIT_PANEL_MIN_WIDTH = 260;
+const EDIT_PANEL_MIN_WIDTH = 200;
 const EDIT_PANEL_MAX_WIDTH = 560;
 
 

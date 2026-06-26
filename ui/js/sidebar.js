@@ -7,12 +7,15 @@ const Sidebar = (() => {
   let _queueCtxRec = null;
   let _currentCommentRec = null;
   let _commentCalloutVisible = false;
+  let _datasetReviews = [];
 
   const DOMAIN_BADGE_COLORS = {
     DM:'#3B6FD4', CM:'#2E9E5B', AE:'#D4522E', LB:'#7B42CC',
     VS:'#CC4275', EX:'#CC8A2E', MH:'#2E9E9E', DS:'#8E9E2E',
     PE:'#9E2ECC', EG:'#2ECCAA', QS:'#CC9E2E', SC:'#2EAACC',
   };
+
+  let _progressInterval = null;
 
   function init() {
     console.log('[sidebar] init');
@@ -25,8 +28,9 @@ const Sidebar = (() => {
     _bindRestartSession();
     _bindAnalysisQueueFilters();
     _bindAnalysisQueueSearch();
+    _bindQueueInnerTabs();
     _bindQueueContextMenu();
-    _bindCommentCallout();
+    _bindCommentViewer();
     _bindCommentDialog();
   }
 
@@ -140,54 +144,125 @@ const Sidebar = (() => {
     const btnRestart = document.getElementById('btn-restart-session');
     if (!btnRestart) return;
 
-    btnRestart.addEventListener('click', async () => {
+    btnRestart.addEventListener('click', () => {
+      if (pipelineRunning) return;
+      if (!Store.pdfLoaded) {
+        const noPdfOverlay = document.getElementById('restart-nopdf-overlay');
+        if (noPdfOverlay) noPdfOverlay.classList.remove('hidden');
+        return;
+      }
+      const confirmOverlay = document.getElementById('restart-confirm-overlay');
+      if (confirmOverlay) confirmOverlay.classList.remove('hidden');
+    });
+
+    document.getElementById('restart-nopdf-ok')?.addEventListener('click', () => {
+      document.getElementById('restart-nopdf-overlay')?.classList.add('hidden');
+    });
+
+    document.getElementById('restart-confirm-cancel')?.addEventListener('click', () => {
+      document.getElementById('restart-confirm-overlay')?.classList.add('hidden');
+    });
+
+    document.getElementById('restart-confirm-yes')?.addEventListener('click', () => {
+      document.getElementById('restart-confirm-overlay')?.classList.add('hidden');
+      const saveOverlay = document.getElementById('restart-save-overlay');
+      if (saveOverlay) saveOverlay.classList.remove('hidden');
+    });
+
+    document.getElementById('restart-save-cancel')?.addEventListener('click', () => {
+      document.getElementById('restart-save-overlay')?.classList.add('hidden');
+    });
+
+    document.getElementById('restart-save-skip')?.addEventListener('click', async () => {
+      document.getElementById('restart-save-overlay')?.classList.add('hidden');
+      await _doRestartSession();
+    });
+
+    document.getElementById('restart-save-yes')?.addEventListener('click', async () => {
+      document.getElementById('restart-save-overlay')?.classList.add('hidden');
       try {
-        if (pipelineRunning) return;
-
-        const res = await window.pywebview.api.restart_session();
-        if (!res || !res.ok) {
-          console.error('[sidebar] restart_session failed:', res?.error);
-          return;
-        }
-
-        Store.resetSession();
-
-        const dropZone = document.getElementById('drop-zone');
-        const fileLoaded = document.getElementById('file-loaded');
-        const sessionInput = document.getElementById('session-input');
-        const navSession = document.getElementById('nav-session');
-        const fileNameLabel = document.getElementById('file-name-label');
-        const filePagesLabel = document.getElementById('file-pages-label');
-        const pageDisplaySticky = document.getElementById('page-display-sticky');
-        const navPageCount = document.getElementById('nav-page-count'); 
-        const commentsBox = document.getElementById('analysis-comments');
-
-        if (dropZone) dropZone.classList.remove('hidden');
-        if (fileLoaded) fileLoaded.classList.add('hidden');
-        if (sessionInput) sessionInput.value = '';
-        if (navSession) navSession.textContent = 'No session';
-        if (fileNameLabel) fileNameLabel.textContent = '—';
-        if (filePagesLabel) filePagesLabel.textContent = '— pages';
-        if (pageDisplay) pageDisplay.textContent = '— / —';
-        if (pageDisplaySticky) pageDisplaySticky.textContent = '— / —';
-        if (navPageCount) navPageCount.textContent = '— / —';
-        
-        if (commentsBox) commentsBox.value = '';
-
-        _resetPipelineSteps();
-        _resetStatsDisplay();
-
-        if (typeof Canvas !== 'undefined' && Canvas.showEmpty) {
-          Canvas.showEmpty(true);
-        }
-
-        if (typeof EditPanel !== 'undefined' && EditPanel.close) {
-          EditPanel.close();
+        if (Store.pipelineRan && typeof _captureAllPagesForExport === 'function') {
+          const pageImages = await _captureAllPagesForExport();
+          const saveRes = await window.pywebview.api.export_pdf_from_images(pageImages);
+          if (!saveRes || !saveRes.ok) return; // user cancelled save dialog — abort restart
         }
       } catch (e) {
-        console.error('[sidebar] restart_session error:', e);
+        console.error('[sidebar] export before restart failed:', e);
+        return; // abort restart on error
       }
+      await _doRestartSession();
     });
+  }
+
+  function _setRestartButtonState() {
+    const btn = document.getElementById('btn-restart-session');
+    if (!btn) return;
+    const shouldDisable = pipelineRunning;
+    btn.disabled = shouldDisable;
+    btn.style.opacity = shouldDisable ? '0.45' : '';
+    btn.style.pointerEvents = shouldDisable ? 'none' : '';
+  }
+
+  async function _doRestartSession() {
+    try {
+      const res = await window.pywebview.api.restart_session();
+      if (!res || !res.ok) {
+        console.error('[sidebar] restart_session failed:', res?.error);
+        return;
+      }
+
+      Store.resetSession();
+      Store.sessionId = `session_${Date.now()}`;
+
+      const dropZone = document.getElementById('drop-zone');
+      const fileLoaded = document.getElementById('file-loaded');
+      const sessionInput = document.getElementById('session-input');
+      const navSession = document.getElementById('nav-session');
+      const fileNameLabel = document.getElementById('file-name-label');
+      const filePagesLabel = document.getElementById('file-pages-label');
+      const pageDisplaySticky = document.getElementById('page-display-sticky');
+      const navPageCount = document.getElementById('nav-page-count');
+      const commentsBox = document.getElementById('analysis-comments');
+
+      if (dropZone) dropZone.classList.remove('hidden');
+      if (fileLoaded) fileLoaded.classList.add('hidden');
+      if (sessionInput) sessionInput.value = '';
+      if (navSession) navSession.textContent = 'No session';
+      if (fileNameLabel) fileNameLabel.textContent = '—';
+      if (filePagesLabel) filePagesLabel.textContent = '— pages';
+      if (pageDisplaySticky) pageDisplaySticky.textContent = '— / —';
+      if (navPageCount) navPageCount.textContent = '— / —';
+      if (commentsBox) commentsBox.value = '';
+
+      _resetPipelineSteps();
+      _resetStatsDisplay();
+
+      clearInterval(_progressInterval);
+      _progressInterval = null;
+      const progressWrap = document.getElementById('pipeline-progress-wrap');
+      if (progressWrap) progressWrap.classList.add('hidden');
+
+      _datasetReviews = [];
+
+      const btnRun = document.getElementById('btn-run');
+      if (btnRun) {
+        btnRun.disabled = false;
+        btnRun.innerHTML = '<span class="btn-icon">▶</span> Run Pipeline';
+        btnRun.title = '';
+      }
+
+      const pdfImg = document.getElementById('pdf-img');
+      const annotationLayerEl = document.getElementById('annotation-layer');
+      if (pdfImg) { pdfImg.removeAttribute('src'); pdfImg.src = ''; }
+      if (annotationLayerEl) annotationLayerEl.innerHTML = '';
+
+      if (typeof Canvas !== 'undefined' && Canvas.showEmpty) Canvas.showEmpty(true);
+      if (typeof EditPanel !== 'undefined' && EditPanel.close) EditPanel.close();
+
+      _closeCommentViewer();
+    } catch (e) {
+      console.error('[sidebar] _doRestartSession error:', e);
+    }
   }
 
   function _resetUiToInitialState() {
@@ -326,6 +401,8 @@ const Sidebar = (() => {
         btnRun.disabled = true;
         btnRun.innerHTML = '<span class="btn-icon"> </span> Running...';
 
+        _startProgress('Extracting components...');
+
         const result = await window.pywebview.api.run_pipeline();
 
         _setPipelineStepDone(0);
@@ -334,12 +411,14 @@ const Sidebar = (() => {
         _setPipelineStepRunning(2);
 
         if (!result || !result.ok) {
+          _errorProgress();
           _setPipelineStepError(2);
           alert('Pipeline failed: ' + (result?.error || 'Unknown error'));
           return;
         }
 
         _setPipelineStepDone(2);
+        _completeProgress();
 
         const pageRes = await window.pywebview.api.get_page_count();
         if (pageRes && pageRes.ok) {
@@ -366,10 +445,76 @@ const Sidebar = (() => {
         pipelineRunning = false;
         _setPipelineControlsLocked(false);
 
-        btnRun.disabled = false;
-        btnRun.innerHTML = '<span class="btn-icon">▶</span> Run Pipeline';
+        if (Store.pipelineRan) {
+          // Keep frozen after a successful run — only restart clears this
+          btnRun.disabled = true;
+          btnRun.innerHTML = '<span class="btn-icon">✓</span> Pipeline Complete';
+          btnRun.title = 'Restart session to run again';
+        } else {
+          btnRun.disabled = false;
+          btnRun.innerHTML = '<span class="btn-icon">▶</span> Run Pipeline';
+          btnRun.title = '';
+        }
       }
     });
+  }
+
+  function _startProgress(label) {
+    const wrap = document.getElementById('pipeline-progress-wrap');
+    const bar = document.getElementById('pipeline-progress-bar');
+    const lbl = document.getElementById('pipeline-progress-label');
+    if (!wrap || !bar) return;
+    clearInterval(_progressInterval);
+    _progressInterval = null;
+    bar.style.transition = 'none';
+    bar.style.width = '0%';
+    bar.style.background = '';
+    if (lbl) lbl.textContent = label || 'Running...';
+    wrap.classList.remove('hidden');
+    let val = 0;
+    setTimeout(() => {
+      bar.style.transition = 'width 0.5s ease';
+      _progressInterval = setInterval(() => {
+        if (val < 78) {
+          val += Math.random() * 4 + 0.5;
+          if (val > 78) val = 78;
+          bar.style.width = `${val}%`;
+          if (lbl) {
+            if (val < 30) lbl.textContent = 'Extracting components...';
+            else if (val < 60) lbl.textContent = 'Matching SDTM variables...';
+            else lbl.textContent = 'Drawing annotations...';
+          }
+        }
+      }, 400);
+    }, 50);
+  }
+
+  function _completeProgress() {
+    clearInterval(_progressInterval);
+    _progressInterval = null;
+    const bar = document.getElementById('pipeline-progress-bar');
+    const wrap = document.getElementById('pipeline-progress-wrap');
+    const lbl = document.getElementById('pipeline-progress-label');
+    if (bar) { bar.style.transition = 'width 0.3s ease'; bar.style.width = '100%'; }
+    if (lbl) lbl.textContent = 'Pipeline complete!';
+    setTimeout(() => {
+      if (wrap) wrap.classList.add('hidden');
+      if (bar) { bar.style.transition = 'none'; bar.style.width = '0%'; }
+    }, 1200);
+  }
+
+  function _errorProgress() {
+    clearInterval(_progressInterval);
+    _progressInterval = null;
+    const bar = document.getElementById('pipeline-progress-bar');
+    const wrap = document.getElementById('pipeline-progress-wrap');
+    const lbl = document.getElementById('pipeline-progress-label');
+    if (bar) bar.style.background = '#DC3545';
+    if (lbl) lbl.textContent = 'Pipeline failed';
+    setTimeout(() => {
+      if (wrap) wrap.classList.add('hidden');
+      if (bar) { bar.style.background = ''; bar.style.width = '0%'; }
+    }, 2000);
   }
 
   function _setPipelineControlsLocked(locked) {
@@ -391,6 +536,8 @@ const Sidebar = (() => {
     if (sessionInput) {
       sessionInput.disabled = !!locked;
     }
+
+    _setRestartButtonState();
   }
 
   function _resetPipelineSteps() {
@@ -645,7 +792,9 @@ async function _handleZoomChange(direction) {
         (Store.stats.resolved || 0) + (Store.stats.user_corrected || 0) + (Store.stats.not_submitted || 0)
       );
 
-      _updateRing(Store.stats.resolution_pct);
+      const allResolved = (Store.stats.resolved || 0) + (Store.stats.user_corrected || 0) + (Store.stats.not_submitted || 0);
+      const activePct = Store.stats.active > 0 ? Math.round(allResolved / Store.stats.active * 100) : 0;
+      _updateRing(Math.min(activePct, 100));
     } catch (e) {
       console.error('[sidebar] refreshStats error:', e);
     }
@@ -664,8 +813,10 @@ async function _handleZoomChange(direction) {
     const queueSummary = document.getElementById('unmapped-queue-summary');
     if (queueSummary) queueSummary.textContent = '0 pending';
 
-    const queueList = document.getElementById('unmapped-queue-list');
-    if (queueList) queueList.innerHTML = '';
+    const activeList = document.getElementById('unmapped-queue-list-active');
+    const resolvedList = document.getElementById('unmapped-queue-list-resolved');
+    if (activeList) activeList.innerHTML = '';
+    if (resolvedList) resolvedList.innerHTML = '';
 
     _updateRing(0);
   }
@@ -698,6 +849,19 @@ async function _handleZoomChange(direction) {
   // ANALYSIS / UNMAPPED QUEUE
   // ==========================================================
 
+  function _bindQueueInnerTabs() {
+    const tabs = Array.from(document.querySelectorAll('.queue-inner-tab'));
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        tabs.forEach((t) => t.classList.remove('active'));
+        tab.classList.add('active');
+        const key = tab.dataset.queueTab;
+        document.getElementById('queue-pane-active')?.classList.toggle('hidden', key !== 'active');
+        document.getElementById('queue-pane-resolved')?.classList.toggle('hidden', key !== 'resolved');
+      });
+    });
+  }
+
   function _bindAnalysisQueueFilters() {
     const chips = Array.from(document.querySelectorAll('.unmapped-filter-chip'));
     if (!chips.length) return;
@@ -712,45 +876,47 @@ async function _handleZoomChange(direction) {
   }
 
   function _bindAnalysisQueueSearch() {
-    const input = document.getElementById('unmapped-queue-search');
-    if (!input) return;
+    document.getElementById('unmapped-queue-search')?.addEventListener('input', _applyQueueFilters);
+    document.getElementById('resolved-queue-search')?.addEventListener('input', _applyResolvedFilter);
+  }
 
-    input.addEventListener('input', () => {
-      _applyQueueFilters();
-    });
+  function _rowMatchesQuery(row, query) {
+    if (!query) return true;
+    const raw = (row.dataset.rawVar || '').toLowerCase();
+    const domain = (row.dataset.domain || '').toLowerCase();
+    const page = String(row.dataset.page || '').toLowerCase();
+    const sdtmLabel = (row.dataset.sdtmLabel || '').toLowerCase();
+    return raw.includes(query) || domain.includes(query) || page.includes(query) || sdtmLabel.includes(query);
   }
 
   function _applyQueueFilters() {
-    const listEl = document.getElementById('unmapped-queue-list');
+    const listEl = document.getElementById('unmapped-queue-list-active');
     if (!listEl) return;
 
     const activeFilter =
       document.querySelector('.unmapped-filter-chip.active')?.dataset.filter || 'all';
-    const query = (document.getElementById('unmapped-queue-search')?.value || '')
-      .trim()
-      .toLowerCase();
+    const query = (document.getElementById('unmapped-queue-search')?.value || '').trim().toLowerCase();
 
-    const rows = Array.from(listEl.querySelectorAll('.qr-row'));
-    rows.forEach((row) => {
+    Array.from(listEl.querySelectorAll('.qr-row')).forEach((row) => {
       const status = row.dataset.queueStatus || 'unreviewed';
-      const isResolved = status === 'resolved';
-      const raw = (row.dataset.rawVar || '').toLowerCase();
-      const domain = (row.dataset.domain || '').toLowerCase();
-      const page = String(row.dataset.page || '').toLowerCase();
+      let matchesFilter;
+      if (activeFilter === 'all') {
+        matchesFilter = true;
+      } else if (activeFilter === 'dataset') {
+        matchesFilter = row.dataset.isDataset === 'true';
+      } else {
+        matchesFilter = status === activeFilter && row.dataset.isDataset !== 'true';
+      }
+      row.style.display = matchesFilter && _rowMatchesQuery(row, query) ? '' : 'none';
+    });
+  }
 
-      // Resolved section is always visible regardless of filter chips
-      const matchesFilter = isResolved
-        ? true
-        : (activeFilter === 'all' ? true : status === activeFilter);
-
-      const matchesSearch =
-        !query ||
-        raw.includes(query) ||
-        domain.includes(query) ||
-        page.includes(query) ||
-        (`page ${page}`).includes(query);
-
-      row.style.display = matchesFilter && matchesSearch ? '' : 'none';
+  function _applyResolvedFilter() {
+    const listEl = document.getElementById('unmapped-queue-list-resolved');
+    if (!listEl) return;
+    const query = (document.getElementById('resolved-queue-search')?.value || '').trim().toLowerCase();
+    Array.from(listEl.querySelectorAll('.qr-row')).forEach((row) => {
+      row.style.display = _rowMatchesQuery(row, query) ? '' : 'none';
     });
   }
 
@@ -780,12 +946,19 @@ async function _handleZoomChange(direction) {
     let sdtmLabel = '—';
     let sdtmDataset = '';
 
-    if (isNeedsReview && rec.sdtm_variable) {
+    if (rec.is_dataset_review) {
+      sdtmDataset = rec.sdtm_dataset || '';
+      sdtmLabel = `DATASET: ${rec.raw_variable || rec.sdtm_dataset || '—'}`;
+    } else if (isNeedsReview && rec.sdtm_variable) {
       sdtmDataset = rec.sdtm_dataset || '';
       sdtmLabel = sdtmDataset ? `${sdtmDataset}.${rec.sdtm_variable}` : rec.sdtm_variable;
+    } else if (isNeedsReview) {
+      sdtmLabel = `Unmapped (${rec.raw_variable || '—'})`;
     } else if (isUnmapped && rec.best_sdtm_variable) {
       sdtmDataset = rec.best_sdtm_dataset || '';
       sdtmLabel = sdtmDataset ? `${sdtmDataset}.${rec.best_sdtm_variable}` : rec.best_sdtm_variable;
+    } else if (isUnmapped) {
+      sdtmLabel = `Unmapped (${rec.raw_variable || '—'})`;
     } else if (isResolved) {
       sdtmDataset = rec.sdtm_dataset || '';
       if (rec.sdtm_variable) {
@@ -806,6 +979,8 @@ async function _handleZoomChange(direction) {
     row.dataset.domain = String(domainBadge);
     row.dataset.page = String(page);
     row.dataset.annotationId = String(rec.annotation_id || '');
+    row.dataset.sdtmLabel = String(sdtmLabel);
+    row.dataset.isDataset = rec.is_dataset_review ? 'true' : '';
 
     const hasComment = !!(rec.comment && String(rec.comment).trim());
     const commentBtnHtml = hasComment
@@ -829,22 +1004,18 @@ async function _handleZoomChange(direction) {
       </div>
     `;
 
-    // Bind comment button
+    // Bind comment button — right-click or left-click opens the comment viewer panel
     if (hasComment) {
       const commentBtn = row.querySelector('.qr-comment-btn');
       if (commentBtn) {
         commentBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          const callout = document.getElementById('comment-callout');
-          const textEl = document.getElementById('comment-callout-text');
-          if (!callout || !textEl) return;
-          const comment = rec.comment || '';
-          textEl.textContent = comment;
-          const btnRect = commentBtn.getBoundingClientRect();
-          callout.style.top = `${btnRect.top - 8}px`;
-          callout.style.left = `${btnRect.right + 12}px`;
-          callout.classList.toggle('hidden');
-          _commentCalloutVisible = !callout.classList.contains('hidden');
+          _openCommentViewer(rec);
+        });
+        commentBtn.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          _openCommentViewer(rec);
         });
       }
     }
@@ -877,25 +1048,48 @@ async function _handleZoomChange(direction) {
     return row;
   }
 
-  function _bindCommentCallout() {
-    document.addEventListener('click', (e) => {
-      const callout = document.getElementById('comment-callout');
-      if (!callout) return;
-      if (callout.classList.contains('hidden')) return;
-      if (!callout.contains(e.target) && !e.target.classList.contains('qr-comment-btn')) {
-        callout.classList.add('hidden');
-        _commentCalloutVisible = false;
-      }
-    });
+  function _bindCommentViewer() {
+    document.getElementById('comment-viewer-close')?.addEventListener('click', _closeCommentViewer);
+  }
+
+  function _openCommentViewer(rec) {
+    const viewer = document.getElementById('comment-viewer');
+    const body = document.getElementById('comment-viewer-body');
+    if (!viewer || !body) return;
+    body.textContent = rec.comment || '';
+    viewer.classList.remove('hidden');
+    viewer.classList.add('comment-viewer-full');
+  }
+
+  function _closeCommentViewer() {
+    const viewer = document.getElementById('comment-viewer');
+    if (viewer) { viewer.classList.add('hidden'); viewer.classList.remove('comment-viewer-full'); }
   }
 
   function _bindCommentDialog() {
     const dialog = document.getElementById('comment-dialog');
     if (!dialog) return;
 
+    const input = document.getElementById('comment-dialog-input');
+    const placeholder = document.getElementById('comment-dialog-placeholder');
+
+    const updatePlaceholder = () => {
+      if (placeholder && input) {
+        placeholder.style.opacity = input.value ? '0' : '1';
+      }
+    };
+
+    if (input) {
+      input.addEventListener('input', updatePlaceholder);
+      input.addEventListener('focus', updatePlaceholder);
+      input.addEventListener('blur', updatePlaceholder);
+    }
+
     const closeDialog = () => {
       dialog.classList.add('hidden');
       _currentCommentRec = null;
+      if (input) input.value = '';
+      if (placeholder) placeholder.style.opacity = '1';
     };
 
     document.getElementById('comment-dialog-close')?.addEventListener('click', closeDialog);
@@ -907,17 +1101,23 @@ async function _handleZoomChange(direction) {
 
     document.getElementById('comment-dialog-save')?.addEventListener('click', async () => {
       if (!_currentCommentRec) return;
-      const input = document.getElementById('comment-dialog-input');
       const comment = input ? input.value : '';
-      try {
-        await window.pywebview.api.update_comment(
-          String(_currentCommentRec.annotation_id || ''),
-          comment
-        );
-        await refreshStats();
+      if (_currentCommentRec.is_dataset_review) {
+        // Local-only record — update in _datasetReviews array
+        const idx = _datasetReviews.findIndex(r => r.annotation_id === _currentCommentRec.annotation_id);
+        if (idx >= 0) _datasetReviews[idx].comment = comment;
         await refreshUnmappedQueue();
-      } catch (e) {
-        console.error('[sidebar] save comment error:', e);
+      } else {
+        try {
+          await window.pywebview.api.update_comment(
+            String(_currentCommentRec.annotation_id || ''),
+            comment
+          );
+          await refreshStats();
+          await refreshUnmappedQueue();
+        } catch (e) {
+          console.error('[sidebar] save comment error:', e);
+        }
       }
       closeDialog();
     });
@@ -926,10 +1126,11 @@ async function _handleZoomChange(direction) {
   async function refreshUnmappedQueue() {
     try {
       const res = await window.pywebview.api.get_annotations();
-      const listEl = document.getElementById('unmapped-queue-list');
+      const activeListEl = document.getElementById('unmapped-queue-list-active');
+      const resolvedListEl = document.getElementById('unmapped-queue-list-resolved');
       const summaryEl = document.getElementById('unmapped-queue-summary');
 
-      if (!listEl || !res || !res.ok) return;
+      if (!activeListEl || !res || !res.ok) return;
 
       const records = Array.isArray(res.records) ? res.records : [];
 
@@ -938,51 +1139,56 @@ async function _handleZoomChange(direction) {
         return String(r.page_type || 'FORM').toUpperCase() !== 'TABLE';
       });
 
-      // Active queue: NEEDS_REVIEW + UNMAPPED (pending user action)
-      const activeQueue = formRecords.filter((r) => {
+      const _isUserCreatedRec = (r) => String(r.annotation_id || '').startsWith('user_');
+
+      // Active queue: NEEDS_REVIEW + UNMAPPED — pipeline items first, user-added last; plus dataset reviews
+      const activeBackend = formRecords
+        .filter((r) => { const s = String(r.status || '').toUpperCase(); return s === 'UNMAPPED' || s === 'NEEDS_REVIEW'; })
+        .sort((a, b) => (_isUserCreatedRec(a) ? 1 : 0) - (_isUserCreatedRec(b) ? 1 : 0));
+
+      const activeDatasetReviews = _datasetReviews.filter(r => {
         const s = String(r.status || '').toUpperCase();
-        return s === 'UNMAPPED' || s === 'NEEDS_REVIEW';
+        return s === 'NEEDS_REVIEW';
       });
 
-      // Resolved queue: user-actioned items
-      const resolvedQueue = formRecords.filter((r) => {
+      const activeQueue = [...activeBackend, ...activeDatasetReviews];
+
+      // Resolved queue: user-actioned items — pipeline items first, user-added last; plus resolved dataset reviews
+      const resolvedBackend = formRecords
+        .filter((r) => { const s = String(r.status || '').toUpperCase(); return s === 'USER_CORRECTED' || s === 'NOT_SUBMITTED'; })
+        .sort((a, b) => (_isUserCreatedRec(a) ? 1 : 0) - (_isUserCreatedRec(b) ? 1 : 0));
+
+      const resolvedDatasetReviews = _datasetReviews.filter(r => {
         const s = String(r.status || '').toUpperCase();
         return s === 'USER_CORRECTED' || s === 'NOT_SUBMITTED';
       });
+
+      const resolvedQueue = [...resolvedBackend, ...resolvedDatasetReviews];
 
       if (summaryEl) {
         summaryEl.textContent = `${activeQueue.length} pending`;
       }
 
-      listEl.innerHTML = '';
-
-      if (!activeQueue.length && !resolvedQueue.length) {
-        listEl.innerHTML = `<div class="muted small" style="padding:8px 4px;">All form annotations resolved</div>`;
-        return;
-      }
-
+      // Populate active pane
+      activeListEl.innerHTML = '';
       if (!activeQueue.length) {
-        const emptyMsg = document.createElement('div');
-        emptyMsg.className = 'muted small';
-        emptyMsg.style.padding = '8px 4px';
-        emptyMsg.textContent = 'No pending items';
-        listEl.appendChild(emptyMsg);
+        activeListEl.innerHTML = `<div class="muted small" style="padding:8px 4px;">No pending items</div>`;
       } else {
         activeQueue.slice(0, 300).forEach((rec) => {
-          listEl.appendChild(_buildQueueRow(rec));
+          activeListEl.appendChild(_buildQueueRow(rec));
         });
       }
 
-      // Resolved section
-      if (resolvedQueue.length > 0) {
-        const sep = document.createElement('div');
-        sep.className = 'queue-section-separator';
-        sep.innerHTML = `<span>Resolved (${resolvedQueue.length})</span>`;
-        listEl.appendChild(sep);
-
-        resolvedQueue.slice(0, 100).forEach((rec) => {
-          listEl.appendChild(_buildQueueRow(rec));
-        });
+      // Populate resolved pane
+      if (resolvedListEl) {
+        resolvedListEl.innerHTML = '';
+        if (!resolvedQueue.length) {
+          resolvedListEl.innerHTML = `<div class="muted small" style="padding:8px 4px;">No resolved items yet</div>`;
+        } else {
+          resolvedQueue.slice(0, 300).forEach((rec) => {
+            resolvedListEl.appendChild(_buildQueueRow(rec));
+          });
+        }
       }
 
       _applyQueueFilters();
@@ -1029,7 +1235,13 @@ async function _handleZoomChange(direction) {
       const res = await window.pywebview.api.update_annotation(
         String(_queueCtxRec.annotation_id || ''), 'UNMAPPED', '', '', ''
       );
-      if (res && res.ok) { await refreshStats(); await refreshUnmappedQueue(); }
+      if (res && res.ok) {
+        await refreshStats();
+        await refreshUnmappedQueue();
+        if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
+          await Canvas.loadPage(Store.currentPage);
+        }
+      }
       _queueCtxRec = null;
     });
 
@@ -1060,20 +1272,34 @@ async function _handleZoomChange(direction) {
     const markReviewBtn = document.getElementById('qctx-mark-review');
     const convertUnmappedBtn = document.getElementById('qctx-convert-unmapped');
 
+    const isDatasetReview = !!rec.is_dataset_review;
+
     if (resolveBtn) resolveBtn.style.display = isAlreadyResolved ? 'none' : '';
     if (ignoreBtn) ignoreBtn.style.display = isAlreadyResolved ? 'none' : '';
     if (markReviewBtn) markReviewBtn.style.display = '';
-    // Show "Convert to Unmapped" only for non-unmapped active items
-    if (convertUnmappedBtn) convertUnmappedBtn.style.display = (isAlreadyUnmapped || isAlreadyResolved) ? 'none' : '';
+    // Dataset reviews cannot be converted to unmapped
+    if (convertUnmappedBtn) convertUnmappedBtn.style.display =
+      (isAlreadyUnmapped || isAlreadyResolved || isDatasetReview) ? 'none' : '';
 
     menu.style.left = `${Math.min(x, window.innerWidth - 190)}px`;
     menu.style.top = `${Math.min(y, window.innerHeight - 240)}px`;
     menu.classList.remove('hidden');
   }
 
+  function _updateDatasetReviewStatus(annotationId, newStatus) {
+    const idx = _datasetReviews.findIndex(r => r.annotation_id === annotationId);
+    if (idx >= 0) _datasetReviews[idx].status = newStatus;
+  }
+
   async function _resolveQueueItem(rec) {
     const annotationId = String(rec.annotation_id || '');
     if (!annotationId) return;
+
+    if (rec.is_dataset_review) {
+      _updateDatasetReviewStatus(annotationId, 'USER_CORRECTED');
+      await refreshUnmappedQueue();
+      return;
+    }
 
     const dataset = rec.sdtm_dataset || rec.best_sdtm_dataset || '';
     const variable = rec.sdtm_variable || rec.best_sdtm_variable || '';
@@ -1093,6 +1319,12 @@ async function _handleZoomChange(direction) {
     const annotationId = String(rec.annotation_id || '');
     if (!annotationId) return;
 
+    if (rec.is_dataset_review) {
+      _updateDatasetReviewStatus(annotationId, 'NOT_SUBMITTED');
+      await refreshUnmappedQueue();
+      return;
+    }
+
     const res = await window.pywebview.api.update_annotation(
       annotationId, 'NOT_SUBMITTED', '', '', 'Not Submitted'
     );
@@ -1107,6 +1339,12 @@ async function _handleZoomChange(direction) {
     const annotationId = String(rec.annotation_id || '');
     if (!annotationId) return;
 
+    if (rec.is_dataset_review) {
+      _updateDatasetReviewStatus(annotationId, 'NEEDS_REVIEW');
+      await refreshUnmappedQueue();
+      return;
+    }
+
     const dataset = rec.sdtm_dataset || rec.best_sdtm_dataset || '';
     const variable = rec.sdtm_variable || rec.best_sdtm_variable || '';
 
@@ -1120,18 +1358,90 @@ async function _handleZoomChange(direction) {
     }
   }
 
+  async function addDatasetReview(formCode, dsCode, dsLabel, page) {
+    const id = `dsreview_${String(formCode).toUpperCase()}_${String(dsCode).toUpperCase()}`;
+    // Don't duplicate — just highlight the existing entry
+    if (_datasetReviews.find(r => r.annotation_id === id)) {
+      document.getElementById('tab-analysis')?.click();
+      document.querySelector('.queue-inner-tab[data-queue-tab="active"]')?.click();
+      setTimeout(() => highlightInQueue(id, 'NEEDS_REVIEW'), 100);
+      return;
+    }
+    _datasetReviews.push({
+      annotation_id: id,
+      raw_variable: dsLabel || dsCode,
+      sdtm_dataset: String(dsCode).toUpperCase(),
+      sdtm_variable: '',
+      sdtm_label: dsLabel || dsCode,
+      status: 'NEEDS_REVIEW',
+      page: page || Store.currentPage,
+      form_code: String(formCode).toUpperCase(),
+      is_dataset_review: true,
+      comment: '',
+    });
+    await refreshUnmappedQueue();
+    // Switch to Analysis > Active tab so user sees the new item
+    document.getElementById('tab-analysis')?.click();
+    document.querySelector('.queue-inner-tab[data-queue-tab="active"]')?.click();
+    setTimeout(() => highlightInQueue(id, 'NEEDS_REVIEW'), 100);
+  }
+
   function _openCommentForRecord(rec) {
     const dialog = document.getElementById('comment-dialog');
     const titleEl = document.getElementById('comment-dialog-title');
     const input = document.getElementById('comment-dialog-input');
+    const placeholder = document.getElementById('comment-dialog-placeholder');
     if (!dialog || !input) return;
 
     _currentCommentRec = rec;
     const label = rec.sdtm_variable || rec.best_sdtm_variable || rec.raw_variable || 'Annotation';
     if (titleEl) titleEl.textContent = `Comment — ${label}`;
     input.value = rec.comment || '';
+    if (placeholder) placeholder.style.opacity = input.value ? '0' : '1';
     dialog.classList.remove('hidden');
     setTimeout(() => input.focus(), 50);
+  }
+
+  function highlightInQueue(annotationId, status) {
+    const analysisTab = document.getElementById('tab-analysis');
+    if (analysisTab) analysisTab.click();
+
+    const statusUpper = String(status || '').toUpperCase();
+    const isActive = statusUpper === 'UNMAPPED' || statusUpper === 'NEEDS_REVIEW';
+
+    const innerTabs = document.querySelectorAll('.queue-inner-tab');
+    innerTabs.forEach((t) => {
+      if ((isActive && t.dataset.queueTab === 'active') || (!isActive && t.dataset.queueTab === 'resolved')) {
+        t.click();
+      }
+    });
+
+    setTimeout(() => {
+      // Try primary list first, fall back to the other list if not found
+      const primaryId = isActive ? 'unmapped-queue-list-active' : 'unmapped-queue-list-resolved';
+      const fallbackId = isActive ? 'unmapped-queue-list-resolved' : 'unmapped-queue-list-active';
+
+      let row = document.getElementById(primaryId)?.querySelector(`[data-annotation-id="${CSS.escape(annotationId)}"]`);
+
+      if (!row) {
+        // Try fallback list and switch tab if needed
+        row = document.getElementById(fallbackId)?.querySelector(`[data-annotation-id="${CSS.escape(annotationId)}"]`);
+        if (row) {
+          innerTabs.forEach((t) => {
+            if ((!isActive && t.dataset.queueTab === 'active') || (isActive && t.dataset.queueTab === 'resolved')) {
+              t.click();
+            }
+          });
+        }
+      }
+
+      if (!row) return;
+      // Ensure row is visible (not filtered out)
+      row.style.display = '';
+      row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      row.classList.add('qr-highlighted');
+      setTimeout(() => row.classList.remove('qr-highlighted'), 2200);
+    }, 200);
   }
 
   function _escapeHtml(str) {
@@ -1147,6 +1457,8 @@ async function _handleZoomChange(direction) {
     init,
     refreshStats,
     refreshUnmappedQueue,
+    highlightInQueue,
+    addDatasetReview,
     goPrev,
     goNext,
     isPipelineRunning: () => pipelineRunning,
