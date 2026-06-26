@@ -946,7 +946,10 @@ async function _handleZoomChange(direction) {
     let sdtmLabel = '—';
     let sdtmDataset = '';
 
-    if (isNeedsReview && rec.sdtm_variable) {
+    if (rec.is_dataset_review) {
+      sdtmDataset = rec.sdtm_dataset || '';
+      sdtmLabel = `DATASET: ${rec.raw_variable || rec.sdtm_dataset || '—'}`;
+    } else if (isNeedsReview && rec.sdtm_variable) {
       sdtmDataset = rec.sdtm_dataset || '';
       sdtmLabel = sdtmDataset ? `${sdtmDataset}.${rec.sdtm_variable}` : rec.sdtm_variable;
     } else if (isNeedsReview) {

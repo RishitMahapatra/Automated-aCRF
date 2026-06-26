@@ -1054,6 +1054,8 @@ function updateDatasetChip(chipRecord, fields = {}) {
       record: { ...newRec },
     });
 
+    _refreshAnnotationLayer();
+
     Store.selectedId = annotationId;
     Store.setSelectedAnnotation(newRec);
     highlightSelected();
