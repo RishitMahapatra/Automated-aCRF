@@ -990,6 +990,10 @@ await _refreshAfterUpdate({
       await Sidebar.refreshStats();
     }
 
+    if (typeof Sidebar !== 'undefined' && Sidebar.refreshUnmappedQueue) {
+      await Sidebar.refreshUnmappedQueue();
+    }
+
     const selectedId = Store.selectedId;
     const selectedRecord = Store.selectedRecord;
 

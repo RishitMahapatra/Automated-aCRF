@@ -414,9 +414,10 @@ function updateDatasetChip(chipRecord, fields = {}) {
     document.getElementById('ctx-mark-unmapped').style.display = '';
     document.getElementById('ctx-mark-not-submitted').style.display = '';
     document.getElementById('ctx-add-to-review').style.display = '';
+    document.getElementById('ctx-show-in-queue').style.display = '';
     document.getElementById('ctx-remove-annotation').style.display = '';
     ctxMenu.style.left = `${Math.min(x, window.innerWidth - 200)}px`;
-    ctxMenu.style.top = `${Math.min(y, window.innerHeight - 250)}px`;
+    ctxMenu.style.top = `${Math.min(y, window.innerHeight - 280)}px`;
     ctxMenu.classList.remove('hidden');
   }
 
@@ -426,6 +427,7 @@ function updateDatasetChip(chipRecord, fields = {}) {
     document.getElementById('ctx-mark-unmapped').style.display = 'none';
     document.getElementById('ctx-mark-not-submitted').style.display = 'none';
     document.getElementById('ctx-add-to-review').style.display = 'none';
+    document.getElementById('ctx-show-in-queue').style.display = 'none';
     document.getElementById('ctx-remove-annotation').style.display = 'none';
     ctxMenu.style.left = `${x}px`;
     ctxMenu.style.top = `${y}px`;
@@ -546,6 +548,15 @@ function updateDatasetChip(chipRecord, fields = {}) {
       );
       if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
       if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
+    });
+
+    document.getElementById('ctx-show-in-queue')?.addEventListener('click', () => {
+      ctxMenu.classList.add('hidden');
+      if (!pendingAnnotationCtxRec) return;
+      if (typeof Sidebar !== 'undefined' && Sidebar.highlightInQueue) {
+        Sidebar.highlightInQueue(pendingAnnotationCtxRec.annotation_id, pendingAnnotationCtxRec.status);
+      }
+      pendingAnnotationCtxRec = null;
     });
 
     document.getElementById('ctx-remove-annotation')?.addEventListener('click', () => {

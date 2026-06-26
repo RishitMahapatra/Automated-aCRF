@@ -4100,14 +4100,28 @@ body.theme-light .theme-toggle-btn .theme-icon-moon {
   border: 1px solid rgba(255,255,255,0.06);
   margin-bottom: 4px;
   cursor: pointer;
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  transition: background 0.12s ease, border-color 0.12s ease, transform 0.1s ease, box-shadow 0.1s ease;
   position: relative;
 }
-.qr-row:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.18); }
+.qr-row:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.22); }
 
 .qr-status-unmapped { background: rgba(220,53,69,0.10); border-color: rgba(220,53,69,0.25); }
 .qr-status-review   { background: rgba(255,193,7,0.10); border-color: rgba(255,193,7,0.25); }
 .qr-status-resolved { background: rgba(0,230,118,0.08); border-color: rgba(0,230,118,0.18); }
+
+.qr-status-unmapped:hover { background: rgba(220,53,69,0.20); border-color: rgba(220,53,69,0.45); }
+.qr-status-review:hover   { background: rgba(255,193,7,0.20); border-color: rgba(255,193,7,0.45); }
+.qr-status-resolved:hover { background: rgba(0,230,118,0.16); border-color: rgba(0,230,118,0.35); }
+
+@keyframes qr-flash {
+  0%, 100% { outline-color: transparent; }
+  40%, 60% { outline-color: rgba(142,84,255,0.85); background: rgba(142,84,255,0.18); }
+}
+.qr-highlighted {
+  animation: qr-flash 0.55s ease-in-out 2;
+  outline: 2px solid transparent;
+  outline-offset: 1px;
+}
 
 .qr-left { display: flex; align-items: center; flex-shrink: 0; width: 18px; }
 
@@ -4152,23 +4166,40 @@ body.theme-light .theme-toggle-btn .theme-icon-moon {
   background: #1E1A3A; border: 1px solid rgba(142,84,255,0.45);
   border-radius: 8px; padding: 10px 12px;
   min-width: 180px; max-width: 260px;
+  max-height: 160px; overflow-y: auto;
   box-shadow: 0 6px 20px rgba(0,0,0,0.45);
   font-size: 12px; color: #C8CCEC; line-height: 1.5;
-  word-wrap: break-word;
+  word-wrap: break-word; word-break: break-word;
 }
-.comment-callout::before {
+/* Arrow pointing left (default — callout is to the right of button) */
+.comment-callout:not(.above)::before {
   content: '';
   position: absolute; left: -8px; top: 12px;
   border-width: 7px 8px 7px 0;
   border-style: solid;
   border-color: transparent rgba(142,84,255,0.45) transparent transparent;
 }
-.comment-callout::after {
+.comment-callout:not(.above)::after {
   content: '';
   position: absolute; left: -6px; top: 13px;
   border-width: 6px 7px 6px 0;
   border-style: solid;
   border-color: transparent #1E1A3A transparent transparent;
+}
+/* Arrow pointing down-left (above variant — callout is above the button) */
+.comment-callout.above::before {
+  content: '';
+  position: absolute; left: 12px; bottom: -8px; top: auto;
+  border-width: 8px 7px 0 7px;
+  border-style: solid;
+  border-color: rgba(142,84,255,0.45) transparent transparent transparent;
+}
+.comment-callout.above::after {
+  content: '';
+  position: absolute; left: 13px; bottom: -6px; top: auto;
+  border-width: 7px 6px 0 6px;
+  border-style: solid;
+  border-color: #1E1A3A transparent transparent transparent;
 }
 
 /* ── Comment Dialog ────────────────────────────────────── */

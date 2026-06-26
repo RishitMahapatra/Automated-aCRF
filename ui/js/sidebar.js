@@ -191,6 +191,11 @@ const Sidebar = (() => {
           btnRun.innerHTML = '<span class="btn-icon">▶</span> Run Pipeline';
         }
 
+        const pdfImg = document.getElementById('pdf-img');
+        const annotationLayerEl = document.getElementById('annotation-layer');
+        if (pdfImg) { pdfImg.removeAttribute('src'); pdfImg.src = ''; }
+        if (annotationLayerEl) annotationLayerEl.innerHTML = '';
+
         if (typeof Canvas !== 'undefined' && Canvas.showEmpty) {
           Canvas.showEmpty(true);
         }
@@ -933,7 +938,14 @@ async function _handleZoomChange(direction) {
           const comment = rec.comment || '';
           textEl.textContent = comment;
           const btnRect = commentBtn.getBoundingClientRect();
-          callout.style.top = `${btnRect.top - 8}px`;
+          const CALLOUT_HEIGHT = 140;
+          const goAbove = (window.innerHeight - btnRect.bottom) < CALLOUT_HEIGHT + 20;
+          callout.classList.toggle('above', goAbove);
+          if (goAbove) {
+            callout.style.top = `${btnRect.top - CALLOUT_HEIGHT - 10}px`;
+          } else {
+            callout.style.top = `${btnRect.top - 8}px`;
+          }
           callout.style.left = `${btnRect.right + 12}px`;
           callout.classList.toggle('hidden');
           _commentCalloutVisible = !callout.classList.contains('hidden');
@@ -1236,6 +1248,35 @@ async function _handleZoomChange(direction) {
     setTimeout(() => input.focus(), 50);
   }
 
+  function highlightInQueue(annotationId, status) {
+    // Switch to the Review (analysis) tab
+    const analysisTab = document.getElementById('tab-analysis');
+    if (analysisTab) analysisTab.click();
+
+    const statusUpper = String(status || '').toUpperCase();
+    const isActive = statusUpper === 'UNMAPPED' || statusUpper === 'NEEDS_REVIEW';
+
+    // Switch inner tab accordingly
+    const innerTabs = document.querySelectorAll('.queue-inner-tab');
+    innerTabs.forEach((t) => {
+      if ((isActive && t.dataset.queueTab === 'active') || (!isActive && t.dataset.queueTab === 'resolved')) {
+        t.click();
+      }
+    });
+
+    setTimeout(() => {
+      const listEl = document.getElementById(
+        isActive ? 'unmapped-queue-list-active' : 'unmapped-queue-list-resolved'
+      );
+      if (!listEl) return;
+      const row = listEl.querySelector(`[data-annotation-id="${CSS.escape(annotationId)}"]`);
+      if (!row) return;
+      row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      row.classList.add('qr-highlighted');
+      setTimeout(() => row.classList.remove('qr-highlighted'), 2200);
+    }, 120);
+  }
+
   function _escapeHtml(str) {
     return String(str)
       .replaceAll('&', '&amp;')
@@ -1249,6 +1290,7 @@ async function _handleZoomChange(direction) {
     init,
     refreshStats,
     refreshUnmappedQueue,
+    highlightInQueue,
     goPrev,
     goNext,
     isPipelineRunning: () => pipelineRunning,
