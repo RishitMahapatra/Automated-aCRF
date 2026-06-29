@@ -9,8 +9,8 @@ const Store = {
   pdfLoaded: false,
   pdfName: "",
   pdfPath: "",
-  zoomPct: 100,
-  zoomMin: 50,
+  zoomPct: 50,
+  zoomMin: 25,
   zoomMax: 200,
   zoomStep: 10,
 
@@ -218,6 +218,6 @@ const Store = {
   },
 
   resetZoom() {
-    this.zoomPct = 100;
+    this.zoomPct = 50;
   },
 };

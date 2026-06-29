@@ -1469,6 +1469,7 @@ Store.setAnnotations([...backendRecords, ...uniqueUserRecs]);
 
     pageWrap.style.transform = '';
     pageWrap.style.transformOrigin = '';
+    pageWrap.style.setProperty('--zoom-scale', String(scale));
     pdfImg.style.width = '100%';
     pdfImg.style.height = '100%';
 
@@ -2493,6 +2494,9 @@ function _persistDatasetChipVisualState(rec, box) {
         }
       });
     }
+
+    // Sync toolbar zoom text and --zoom-scale variable to initial Store value
+    applyZoom();
   }
 
   return {
