@@ -5,7 +5,7 @@ A desktop annotation and review tool for PDF Case Report Forms (**CRFs**) that h
 This application is designed around a simple workflow: load a CRF PDF, run the pipeline, review page-by-page annotations, correct what needs correction, and export the final annotated output.
 
 <p align="center">
-  <img width="959" height="505" alt="image" src="https://github.com/user-attachments/assets/5f87635a-3751-4f29-8557-1df97605e830" />
+  <img width="949" height="499" alt="image" src="https://github.com/user-attachments/assets/9d87cbea-6a54-4ee4-b160-ea2a04a803c2" />
 </p>
 
 
@@ -82,7 +82,7 @@ The focus of the tool is **review and usability**, allowing users to quickly mov
 The end-to-end workflow is illustrated below. The application reads the CRF PDF, classifies pages, extracts and links annotation data, resolves SDTM mappings where possible, and surfaces unresolved items for manual review in the editor.
 
 <p align="center">
-<img width="457" height="254" alt="image" src="https://github.com/user-attachments/assets/88fd0744-4ad0-4250-bf97-02ad6da6517d" />
+<img width="959" height="539" alt="image" src="https://github.com/user-attachments/assets/2c24482b-22f4-42e8-a5e8-317a6d2d1dee" />
 </p>
 
 
@@ -102,7 +102,7 @@ The sidebar acts as the main control center for the session. It is used for:
 Depending on the build and layout version, the sidebar may include workspace controls, statistics, and review-related summary panels.
 
 <p align="center">
-<img width="237" height="453" alt="image" src="https://github.com/user-attachments/assets/1cc77988-549c-4f23-93d3-7cb21d80c2df" />
+<img width="353" height="494" alt="image" src="https://github.com/user-attachments/assets/e6506302-752e-4920-8faf-83e3745c0db3" />
 </p>
 
 
@@ -118,7 +118,7 @@ The canvas area displays the active CRF page and all visible annotations. It sup
 - **Zoomed review** for detailed reading
 
 <p align="center">
-<img width="439" height="454" alt="image" src="https://github.com/user-attachments/assets/a26b79a5-18cf-415a-b422-b285cd299e01" />
+<img width="752" height="539" alt="image" src="https://github.com/user-attachments/assets/ad1b19c0-c05a-4b97-9589-433708cc3116" />
 </p>
 
 ### Sticky Bottom Navigation
