@@ -59,9 +59,6 @@ const Canvas = (() => {
   let dragState = null;
   let resizeState = null;
 
-  // Pointer-based zoom origin (0-1 fraction of page dimensions)
-  let zoomOriginX = 0;
-  let zoomOriginY = 0;
 
   const annotationGeometryOverrides = {};
   const datasetChipUiOverrides = {};
@@ -538,13 +535,12 @@ function updateDatasetChip(chipRecord, fields = {}) {
       const pageWrap = document.getElementById('pdf-page-wrap');
       if (!pageWrap) return;
       const pageRect = pageWrap.getBoundingClientRect();
-      const zoom = Number(Store.zoomPct || 100) / 100;
-      const clickXPx = (e.clientX - pageRect.left) / zoom;
-      const clickYPx = (e.clientY - pageRect.top) / zoom;
-      const naturalWidth = pageWrap.offsetWidth || 1;
-      const naturalHeight = pageWrap.offsetHeight || 1;
-      const x_pts = (clickXPx / naturalWidth) * Store.pageWidthPts;
-      const y_pts = (clickYPx / naturalHeight) * Store.pageHeightPts;
+      const clickXPx = e.clientX - pageRect.left;
+      const clickYPx = e.clientY - pageRect.top;
+      const scaledW = pageRect.width || 1;
+      const scaledH = pageRect.height || 1;
+      const x_pts = (clickXPx / scaledW) * Store.pageWidthPts;
+      const y_pts = (clickYPx / scaledH) * Store.pageHeightPts;
       pendingClickPts = {
         x_pts: _clamp(x_pts, 4, Store.pageWidthPts - 4),
         y_pts: _clamp(y_pts, 4, Store.pageHeightPts - 4),
@@ -1449,50 +1445,49 @@ Store.setAnnotations([...backendRecords, ...uniqueUserRecs]);
     };
 
     pdfPageWrap.style.position = 'relative';
-    pdfPageWrap.style.display = 'inline-block';
+    pdfPageWrap.style.display = 'block';
 
     annotationLayer.innerHTML = '';
   }
 
-  function applyZoom(usePointerOrigin = false) {
-  const pageWrap = document.getElementById('pdf-page-wrap');
-  const pdfImg = document.getElementById('pdf-img');
-  const annotationLayer = document.getElementById('annotation-layer');
-  const toolbarZoom = document.getElementById('toolbar-zoom');
+  function applyZoom() {
+    const pageWrap = document.getElementById('pdf-page-wrap');
+    const pdfImg = document.getElementById('pdf-img');
+    const toolbarZoom = document.getElementById('toolbar-zoom');
 
-  if (!pageWrap || !pdfImg || !annotationLayer) return;
+    if (!pageWrap || !pdfImg) return;
 
-  const zoom = Number(Store.zoomPct || 100);
-  const scale = zoom / 100;
+    const zoom = Number(Store.zoomPct || 100);
+    const scale = zoom / 100;
+    const naturalWidth = Store.imgWidth || 0;
+    const naturalHeight = Store.imgHeight || 0;
 
-  const naturalWidth = pdfImg.offsetWidth || pdfImg.clientWidth || 0;
-  const naturalHeight = pdfImg.offsetHeight || pdfImg.clientHeight || 0;
+    if (naturalWidth > 0 && naturalHeight > 0) {
+      pageWrap.style.width = `${Math.round(naturalWidth * scale)}px`;
+      pageWrap.style.height = `${Math.round(naturalHeight * scale)}px`;
+    }
 
-  // Only use pointer-based origin during active Ctrl+Scroll
-  // Otherwise reset to top-left for consistent rendering after reloads
-  let originX = '0';
-  let originY = '0';
-  if (usePointerOrigin) {
-    originX = (zoomOriginX * 100).toFixed(2);
-    originY = (zoomOriginY * 100).toFixed(2);
+    pageWrap.style.transform = '';
+    pageWrap.style.transformOrigin = '';
+    pdfImg.style.width = '100%';
+    pdfImg.style.height = '100%';
+
+    if (toolbarZoom) {
+      toolbarZoom.textContent = `${zoom}%`;
+    }
   }
 
-  pageWrap.style.position = 'relative';
-  pageWrap.style.transformOrigin = `${originX}% ${originY}%`;
-  pageWrap.style.transform = `scale(${scale})`;
-
-  if (naturalWidth > 0) pageWrap.style.width = `${naturalWidth}px`;
-  if (naturalHeight > 0) pageWrap.style.height = `${naturalHeight}px`;
-
-  const pdfContainer = document.getElementById('pdf-container');
-  if (pdfContainer && naturalWidth > 0 && naturalHeight > 0) {
-    pdfContainer.style.height = `${naturalHeight * scale}px`;
+  function zoomIn() {
+    const oldZoom = Number(Store.zoomPct || 100);
+    Store.setZoom(oldZoom + (Store.zoomStep || 10));
+    applyZoom();
   }
 
-  if (toolbarZoom) {
-    toolbarZoom.textContent = `${zoom}%`;
+  function zoomOut() {
+    const oldZoom = Number(Store.zoomPct || 100);
+    Store.setZoom(oldZoom - (Store.zoomStep || 10));
+    applyZoom();
   }
-}
 
   function _clamp(val, min, max) {
     return Math.max(min, Math.min(max, val));
@@ -1524,30 +1519,31 @@ Store.setAnnotations([...backendRecords, ...uniqueUserRecs]);
       const pageWrap = document.getElementById('pdf-page-wrap');
       if (!pageWrap) return;
 
-      const pageRect = pageWrap.getBoundingClientRect();
-      const currentZoom = Number(Store.zoomPct || 100) / 100;
-
-      // Get pointer position relative to the unscaled page content
-      const pointerXInPage = (e.clientX - pageRect.left) / currentZoom;
-      const pointerYInPage = (e.clientY - pageRect.top) / currentZoom;
-
-      const naturalWidth = pageWrap.offsetWidth || 1;
-      const naturalHeight = pageWrap.offsetHeight || 1;
-
-      // Set zoom origin as fraction (0-1) of the page dimensions
-      zoomOriginX = _clamp(pointerXInPage / naturalWidth, 0, 1);
-      zoomOriginY = _clamp(pointerYInPage / naturalHeight, 0, 1);
-
-      // Determine zoom direction
+      const oldZoom = Number(Store.zoomPct || 100);
       const delta = e.deltaY > 0 ? -Store.zoomStep : Store.zoomStep;
-      const newZoom = _clamp(
-        (Store.zoomPct || 100) + delta,
-        Store.zoomMin,
-        Store.zoomMax
-      );
+      const newZoom = _clamp(oldZoom + delta, Store.zoomMin, Store.zoomMax);
+      if (newZoom === oldZoom) return;
 
+      // Capture pointer position in page-natural coords before zoom
+      const pageRect = pageWrap.getBoundingClientRect();
+      const oldScale = oldZoom / 100;
+      const pointerXInPage = (e.clientX - pageRect.left) / oldScale;
+      const pointerYInPage = (e.clientY - pageRect.top) / oldScale;
+
+      // Apply physical zoom
       Store.setZoom(newZoom);
-      applyZoom(true);
+      applyZoom();
+
+      // Adjust scroll so the same page point stays under the cursor.
+      // Formula: scrollLeft += (newPageRect.left - canvasRect.left) + pointerXInPage * newScale - pointerXInViewport
+      const newPageRect = pageWrap.getBoundingClientRect();
+      const canvasRect = canvasArea.getBoundingClientRect();
+      const newScale = newZoom / 100;
+      const pointerXInViewport = e.clientX - canvasRect.left;
+      const pointerYInViewport = e.clientY - canvasRect.top;
+
+      canvasArea.scrollLeft += (newPageRect.left - canvasRect.left) + pointerXInPage * newScale - pointerXInViewport;
+      canvasArea.scrollTop  += (newPageRect.top  - canvasRect.top)  + pointerYInPage * newScale - pointerYInViewport;
     }, { passive: false });
   }
 
@@ -2508,6 +2504,8 @@ function _persistDatasetChipVisualState(rec, box) {
   highlightSelected,
   highlightQueueAnnotation,
   applyZoom,
+  zoomIn,
+  zoomOut,
   applyOverridesToRecord,
   applyLocalOverrides,
   undoGeometry,
