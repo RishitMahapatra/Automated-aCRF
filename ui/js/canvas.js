@@ -494,7 +494,7 @@ function updateDatasetChip(chipRecord, fields = {}) {
 
   function _showAnnotationContextMenu(ctxMenu, x, y, rec) {
     const statusUp = String(rec?.status || '').toUpperCase();
-    const alreadyInQueue = statusUp === 'NEEDS_REVIEW' || statusUp === 'UNMAPPED';
+    const alreadyInQueue = statusUp === 'NEEDS_REVIEW' || statusUp === 'UNMAPPED' || statusUp === 'NOT_SUBMITTED';
 
     document.getElementById('ctx-add-annotation').style.display = '';
     document.getElementById('ctx-edit-annotation').style.display = '';

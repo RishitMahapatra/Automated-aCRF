@@ -1077,7 +1077,8 @@ async function _handleZoomChange(direction) {
     }
 
     const rawVar = rec.raw_variable || '—';
-    const filterStatus = isNeedsReview ? 'review' : isUnmapped ? 'unreviewed' : 'resolved';
+    const isNotSubmitted = statusUpper === 'NOT_SUBMITTED';
+    const filterStatus = isNeedsReview ? 'review' : isUnmapped ? 'unreviewed' : isNotSubmitted ? 'not-submitted' : 'resolved';
     const domainBadge = (sdtmDataset || 'NA').toUpperCase();
     const badgeColor = DOMAIN_BADGE_COLORS[domainBadge] || '#5B6BA3';
 
@@ -1256,26 +1257,26 @@ async function _handleZoomChange(direction) {
 
       const _isUserCreatedRec = (r) => String(r.annotation_id || '').startsWith('user_');
 
-      // Active queue: NEEDS_REVIEW + UNMAPPED — pipeline items first, user-added last; plus dataset reviews
+      // Active queue: NEEDS_REVIEW + UNMAPPED + NOT_SUBMITTED — pipeline items first, user-added last; plus dataset reviews
       const activeBackend = formRecords
-        .filter((r) => { const s = String(r.status || '').toUpperCase(); return s === 'UNMAPPED' || s === 'NEEDS_REVIEW'; })
+        .filter((r) => { const s = String(r.status || '').toUpperCase(); return s === 'UNMAPPED' || s === 'NEEDS_REVIEW' || s === 'NOT_SUBMITTED'; })
         .sort((a, b) => (_isUserCreatedRec(a) ? 1 : 0) - (_isUserCreatedRec(b) ? 1 : 0));
 
       const activeDatasetReviews = _datasetReviews.filter(r => {
         const s = String(r.status || '').toUpperCase();
-        return s === 'NEEDS_REVIEW';
+        return s === 'NEEDS_REVIEW' || s === 'NOT_SUBMITTED';
       });
 
       const activeQueue = [...activeBackend, ...activeDatasetReviews];
 
-      // Resolved queue: user-actioned items — pipeline items first, user-added last; plus resolved dataset reviews
+      // Resolved queue: only fully-actioned items (USER_CORRECTED)
       const resolvedBackend = formRecords
-        .filter((r) => { const s = String(r.status || '').toUpperCase(); return s === 'USER_CORRECTED' || s === 'NOT_SUBMITTED'; })
+        .filter((r) => { const s = String(r.status || '').toUpperCase(); return s === 'USER_CORRECTED'; })
         .sort((a, b) => (_isUserCreatedRec(a) ? 1 : 0) - (_isUserCreatedRec(b) ? 1 : 0));
 
       const resolvedDatasetReviews = _datasetReviews.filter(r => {
         const s = String(r.status || '').toUpperCase();
-        return s === 'USER_CORRECTED' || s === 'NOT_SUBMITTED';
+        return s === 'USER_CORRECTED';
       });
 
       const resolvedQueue = [...resolvedBackend, ...resolvedDatasetReviews];
@@ -1406,8 +1407,8 @@ async function _handleZoomChange(direction) {
 
     const isDatasetReview = !!rec.is_dataset_review;
 
-    // NEEDS_REVIEW and UNMAPPED are both already in the active queue — grey out "Mark for Review"
-    const isAlreadyNeedsReview = statusUpper === 'NEEDS_REVIEW' || statusUpper === 'UNMAPPED';
+    // NEEDS_REVIEW, UNMAPPED, and NOT_SUBMITTED are all in the active queue — grey out "Mark for Review"
+    const isAlreadyNeedsReview = statusUpper === 'NEEDS_REVIEW' || statusUpper === 'UNMAPPED' || statusUpper === 'NOT_SUBMITTED';
 
     if (resolveBtn) resolveBtn.style.display = isAlreadyResolved ? 'none' : '';
     if (ignoreBtn) ignoreBtn.style.display = isAlreadyResolved ? 'none' : '';
@@ -1512,6 +1513,12 @@ async function _handleZoomChange(direction) {
     const annotationId = String(rec.annotation_id || '');
     if (!annotationId) return;
 
+    // NOT_SUBMITTED is already in the active queue — no status change needed
+    if (String(rec.status || '').toUpperCase() === 'NOT_SUBMITTED') {
+      await refreshUnmappedQueue();
+      return;
+    }
+
     if (rec.is_dataset_review) {
       _updateDatasetReviewStatus(annotationId, 'NEEDS_REVIEW');
       await refreshUnmappedQueue();
@@ -1596,7 +1603,7 @@ async function _handleZoomChange(direction) {
     if (analysisTab) analysisTab.click();
 
     const statusUpper = String(status || '').toUpperCase();
-    const isActive = statusUpper === 'UNMAPPED' || statusUpper === 'NEEDS_REVIEW';
+    const isActive = statusUpper === 'UNMAPPED' || statusUpper === 'NEEDS_REVIEW' || statusUpper === 'NOT_SUBMITTED';
 
     const innerTabs = document.querySelectorAll('.queue-inner-tab');
     innerTabs.forEach((t) => {
