@@ -397,14 +397,35 @@ const EditPanel = (() => {
           <div class="suggestion-label">${escapeHtml(s.sdtm_label || '—')}</div>
         `;
 
-        card.addEventListener('click', () => {
-          const ds = document.getElementById('manual-dataset');
-          const variable = document.getElementById('manual-variable');
-          const label = document.getElementById('manual-label');
+        card.addEventListener('click', async () => {
+          // Show confirm dialog
+          const overlay = document.getElementById('suggest-confirm-overlay');
+          const body = document.getElementById('suggest-confirm-body');
+          const yesBtn = document.getElementById('suggest-confirm-yes');
+          const cancelBtn = document.getElementById('suggest-confirm-cancel');
+          if (!overlay) return;
+          if (body) body.innerHTML = `<strong>${escapeHtml(`${s.sdtm_dataset}.${s.sdtm_variable}`)}</strong><br>${escapeHtml(s.sdtm_label || '—')}<br><span style="font-size:11px;opacity:0.65;margin-top:4px;display:block">This will be applied and can be undone with Ctrl+Z</span>`;
+          overlay.classList.remove('hidden');
 
-          if (ds) ds.value = s.sdtm_dataset || '';
-          if (variable) variable.value = s.sdtm_variable || '';
-          if (label) label.value = s.sdtm_label || '';
+          const confirmed = await new Promise(resolve => {
+            const closeOverlay = (val) => { overlay.classList.add('hidden'); resolve(val); };
+            yesBtn.addEventListener('click', () => closeOverlay(true), { once: true });
+            cancelBtn.addEventListener('click', () => closeOverlay(false), { once: true });
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) closeOverlay(false); }, { once: true });
+          });
+
+          if (!confirmed || !Store.selectedRecord) return;
+
+          await _applyAndTrack({
+            before: _snapshotFromRecord(Store.selectedRecord),
+            after: {
+              annotation_id: Store.selectedId,
+              status: 'USER_CORRECTED',
+              sdtm_dataset: s.sdtm_dataset || '',
+              sdtm_variable: s.sdtm_variable || '',
+              sdtm_label: s.sdtm_label || '',
+            },
+          });
         });
 
         list.appendChild(card);
@@ -584,6 +605,8 @@ const EditPanel = (() => {
     const suggestionsBody = document.getElementById('expander-suggestions-body');
     const suggestionsChevron = suggestionsHdr?.querySelector('.expander-chevron');
 
+    if (suggestionsHdr) suggestionsHdr.title = 'AI-suggested SDTM variable mappings — click a suggestion to apply it';
+
     if (suggestionsHdr && suggestionsBody) {
       suggestionsHdr.addEventListener('click', () => {
         suggestionsBody.classList.toggle('hidden');
@@ -595,6 +618,8 @@ const EditPanel = (() => {
     const manualBody = document.getElementById('expander-manual-body');
     const manualChevron = manualHdr?.querySelector('.expander-chevron');
 
+    if (manualHdr) manualHdr.title = 'Manually enter or override the SDTM dataset, variable, and label';
+
     if (manualHdr && manualBody) {
       manualHdr.addEventListener('click', () => {
         manualBody.classList.toggle('hidden');
@@ -605,6 +630,8 @@ const EditPanel = (() => {
     const colourHdr = document.getElementById('expander-colour-hdr');
     const colourBody = document.getElementById('expander-colour-body');
     const colourChevron = colourHdr?.querySelector('.expander-chevron');
+
+    if (colourHdr) colourHdr.title = 'Change the annotation box fill colour for this dataset';
 
     if (colourHdr && colourBody) {
       colourHdr.addEventListener('click', () => {
