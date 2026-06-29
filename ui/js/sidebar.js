@@ -1077,8 +1077,7 @@ async function _handleZoomChange(direction) {
     }
 
     const rawVar = rec.raw_variable || '—';
-    const isNotSubmitted = statusUpper === 'NOT_SUBMITTED';
-    const filterStatus = isNeedsReview ? 'review' : isUnmapped ? 'unreviewed' : isNotSubmitted ? 'not-submitted' : 'resolved';
+    const filterStatus = isNeedsReview ? 'review' : isUnmapped ? 'unreviewed' : 'resolved';
     const domainBadge = (sdtmDataset || 'NA').toUpperCase();
     const badgeColor = DOMAIN_BADGE_COLORS[domainBadge] || '#5B6BA3';
 
@@ -1132,6 +1131,19 @@ async function _handleZoomChange(direction) {
     row.addEventListener('click', async (e) => {
       if (e.target.classList.contains('qr-comment-btn')) return;
 
+      const annotationId = String(rec.annotation_id || '');
+
+      // Dataset review row — highlight the chip on canvas without navigating
+      if (rec.is_dataset_review) {
+        const parts = annotationId.replace(/^dsreview_/, '').split('_');
+        const dsFormCode = parts[0] || '';
+        const dsDsCode = parts.slice(1).join('_') || '';
+        if (typeof Canvas !== 'undefined' && Canvas.highlightDatasetChip) {
+          Canvas.highlightDatasetChip(dsFormCode, dsDsCode);
+        }
+        return;
+      }
+
       const numericPage = Number(page);
       if (!numericPage || Number.isNaN(numericPage)) return;
 
@@ -1143,7 +1155,6 @@ async function _handleZoomChange(direction) {
         await Canvas.loadPage(Store.currentPage);
       }
 
-      const annotationId = String(rec.annotation_id || '');
       if (annotationId && typeof Canvas !== 'undefined' && Canvas.highlightQueueAnnotation) {
         Canvas.highlightQueueAnnotation(annotationId);
       }
@@ -1257,26 +1268,26 @@ async function _handleZoomChange(direction) {
 
       const _isUserCreatedRec = (r) => String(r.annotation_id || '').startsWith('user_');
 
-      // Active queue: NEEDS_REVIEW + UNMAPPED + NOT_SUBMITTED — pipeline items first, user-added last; plus dataset reviews
+      // Active queue: NEEDS_REVIEW + UNMAPPED — pipeline items first, user-added last; plus dataset reviews
       const activeBackend = formRecords
-        .filter((r) => { const s = String(r.status || '').toUpperCase(); return s === 'UNMAPPED' || s === 'NEEDS_REVIEW' || s === 'NOT_SUBMITTED'; })
+        .filter((r) => { const s = String(r.status || '').toUpperCase(); return s === 'UNMAPPED' || s === 'NEEDS_REVIEW'; })
         .sort((a, b) => (_isUserCreatedRec(a) ? 1 : 0) - (_isUserCreatedRec(b) ? 1 : 0));
 
       const activeDatasetReviews = _datasetReviews.filter(r => {
         const s = String(r.status || '').toUpperCase();
-        return s === 'NEEDS_REVIEW' || s === 'NOT_SUBMITTED';
+        return s === 'NEEDS_REVIEW';
       });
 
       const activeQueue = [...activeBackend, ...activeDatasetReviews];
 
-      // Resolved queue: only fully-actioned items (USER_CORRECTED)
+      // Resolved queue: user-actioned items — pipeline items first, user-added last; plus resolved dataset reviews
       const resolvedBackend = formRecords
-        .filter((r) => { const s = String(r.status || '').toUpperCase(); return s === 'USER_CORRECTED'; })
+        .filter((r) => { const s = String(r.status || '').toUpperCase(); return s === 'USER_CORRECTED' || s === 'NOT_SUBMITTED'; })
         .sort((a, b) => (_isUserCreatedRec(a) ? 1 : 0) - (_isUserCreatedRec(b) ? 1 : 0));
 
       const resolvedDatasetReviews = _datasetReviews.filter(r => {
         const s = String(r.status || '').toUpperCase();
-        return s === 'USER_CORRECTED';
+        return s === 'USER_CORRECTED' || s === 'NOT_SUBMITTED';
       });
 
       const resolvedQueue = [...resolvedBackend, ...resolvedDatasetReviews];
@@ -1345,6 +1356,42 @@ async function _handleZoomChange(direction) {
       _queueCtxRec = null;
     });
 
+    document.getElementById('qctx-remove-from-review')?.addEventListener('click', async () => {
+      if (!_queueCtxRec) return;
+      menu.classList.add('hidden');
+      const rec = _queueCtxRec;
+      const annotationId = String(rec.annotation_id || '');
+      _queueCtxRec = null;
+      if (rec.is_dataset_review) {
+        _updateDatasetReviewStatus(annotationId, 'UNMAPPED');
+        await refreshUnmappedQueue();
+        return;
+      }
+      if (typeof Canvas !== 'undefined' && Canvas.pushUndoAction) {
+        Canvas.pushUndoAction({
+          type: 'status-change',
+          id: annotationId,
+          beforeStatus: 'NEEDS_REVIEW',
+          beforeDataset: rec.sdtm_dataset || '',
+          beforeVariable: rec.sdtm_variable || '',
+          beforeLabel: rec.sdtm_label || '',
+          afterStatus: 'UNMAPPED',
+          afterDataset: '',
+          afterVariable: '',
+          afterLabel: '',
+          isUserCreated: false,
+        });
+      }
+      const res = await window.pywebview.api.update_annotation(annotationId, 'UNMAPPED', '', '', '');
+      if (res && res.ok) {
+        await refreshStats();
+        await refreshUnmappedQueue();
+        if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
+          await Canvas.loadPage(Store.currentPage);
+        }
+      }
+    });
+
     document.getElementById('qctx-convert-unmapped')?.addEventListener('click', async () => {
       if (!_queueCtxRec) return;
       menu.classList.add('hidden');
@@ -1407,8 +1454,8 @@ async function _handleZoomChange(direction) {
 
     const isDatasetReview = !!rec.is_dataset_review;
 
-    // NEEDS_REVIEW, UNMAPPED, and NOT_SUBMITTED are all in the active queue — grey out "Mark for Review"
-    const isAlreadyNeedsReview = statusUpper === 'NEEDS_REVIEW' || statusUpper === 'UNMAPPED' || statusUpper === 'NOT_SUBMITTED';
+    // NEEDS_REVIEW and UNMAPPED are already in the active queue — grey out "Mark for Review"
+    const isAlreadyNeedsReview = statusUpper === 'NEEDS_REVIEW' || statusUpper === 'UNMAPPED';
 
     if (resolveBtn) resolveBtn.style.display = isAlreadyResolved ? 'none' : '';
     if (ignoreBtn) ignoreBtn.style.display = isAlreadyResolved ? 'none' : '';
@@ -1422,6 +1469,10 @@ async function _handleZoomChange(direction) {
     // Dataset reviews cannot be converted to unmapped
     if (convertUnmappedBtn) convertUnmappedBtn.style.display =
       (isAlreadyUnmapped || isAlreadyResolved || isDatasetReview) ? 'none' : '';
+
+    // "Remove from Review" only makes sense for NEEDS_REVIEW items
+    const removeFromReviewBtn = document.getElementById('qctx-remove-from-review');
+    if (removeFromReviewBtn) removeFromReviewBtn.style.display = statusUpper === 'NEEDS_REVIEW' ? '' : 'none';
 
     menu.style.left = `${Math.min(x, window.innerWidth - 190)}px`;
     menu.style.top = `${Math.min(y, window.innerHeight - 240)}px`;
@@ -1513,12 +1564,6 @@ async function _handleZoomChange(direction) {
     const annotationId = String(rec.annotation_id || '');
     if (!annotationId) return;
 
-    // NOT_SUBMITTED is already in the active queue — no status change needed
-    if (String(rec.status || '').toUpperCase() === 'NOT_SUBMITTED') {
-      await refreshUnmappedQueue();
-      return;
-    }
-
     if (rec.is_dataset_review) {
       _updateDatasetReviewStatus(annotationId, 'NEEDS_REVIEW');
       await refreshUnmappedQueue();
@@ -1603,7 +1648,7 @@ async function _handleZoomChange(direction) {
     if (analysisTab) analysisTab.click();
 
     const statusUpper = String(status || '').toUpperCase();
-    const isActive = statusUpper === 'UNMAPPED' || statusUpper === 'NEEDS_REVIEW' || statusUpper === 'NOT_SUBMITTED';
+    const isActive = statusUpper === 'UNMAPPED' || statusUpper === 'NEEDS_REVIEW';
 
     const innerTabs = document.querySelectorAll('.queue-inner-tab');
     innerTabs.forEach((t) => {
