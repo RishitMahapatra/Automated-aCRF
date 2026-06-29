@@ -2956,7 +2956,7 @@ html, body {
     border: 1.5px dashed #cc0000;
 }
 .ann-box.unmapped .ann-box-label {
-    color: #cc0000;
+    color: inherit;
 }
 
 /* NOT_SUBMITTED — black border, grey bg */
@@ -3044,7 +3044,7 @@ html, body {
 }
 
 #annotation-layer .ann-box.unmapped .ann-box-label {
-  color: #CC0000;
+  color: inherit;
 }
 
 /* NOT_SUBMITTED */

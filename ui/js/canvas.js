@@ -2383,26 +2383,15 @@ function _persistDatasetChipVisualState(rec, box) {
 
     document.querySelectorAll('.component-band').forEach(band => {
       const selected = band.dataset.id === Store.selectedId;
-      const isQueueHighlight = selected && band.dataset.id === _queueHighlightId;
-
-      band.classList.toggle('queue-selected', isQueueHighlight);
-
-      if (selected && !isQueueHighlight) {
-        band.style.background = 'rgba(142, 84, 255, 0.20)';
-        band.style.border = '1px solid rgba(74, 0, 130, 0.95)';
-        band.style.boxShadow = 'inset 0 0 0 1px rgba(74, 0, 130, 0.30)';
-        band.style.left = '';
-        band.style.width = '';
-        band.style.borderRadius = '';
-      } else if (!selected) {
-        band.classList.remove('queue-selected');
-        band.style.background = 'transparent';
-        band.style.border = '1px solid transparent';
-        band.style.boxShadow = 'none';
-        band.style.left = '';
-        band.style.width = '';
-        band.style.borderRadius = '';
-      }
+      // Always use full-width purple band for all selections (queue or direct click)
+      band.classList.toggle('queue-selected', selected);
+      // Clear all inline overrides — CSS class handles the visual state
+      band.style.background = '';
+      band.style.border = '';
+      band.style.boxShadow = '';
+      band.style.left = '';
+      band.style.width = '';
+      band.style.borderRadius = '';
     });
   }
 
