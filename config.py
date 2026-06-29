@@ -68,8 +68,8 @@ DATASET_COLOURS = [COL_YELLOW, COL_LIGHT_BLUE, COL_LIGHT_GREEN]
 # =============================================================================
 FONT_NAME = "helv"
 FONT_BOLD = "hebo"
-DS_FONT_SIZE = 10.0
-VAR_FONT_SIZE = 10.0
+DS_FONT_SIZE = 12.0
+VAR_FONT_SIZE = 12.0
 TOC_TITLE_SIZE = 14.0
 TOC_HEAD_SIZE = 9.0
 TOC_BODY_SIZE = 8.5

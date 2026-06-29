@@ -59,14 +59,11 @@ const Canvas = (() => {
   let dragState = null;
   let resizeState = null;
 
-  // Pointer-based zoom origin (0-1 fraction of page dimensions)
-  let zoomOriginX = 0;
-  let zoomOriginY = 0;
 
   const annotationGeometryOverrides = {};
   const datasetChipUiOverrides = {};
   // Geometry undo/redo stacks (max 5 actions)
-const GEOMETRY_HISTORY_LIMIT = 5;
+const GEOMETRY_HISTORY_LIMIT = 50;
 const geometryUndoStack = [];
 const geometryRedoStack = [];
 
@@ -78,7 +75,7 @@ function _pushGeometryUndo(action) {
   geometryRedoStack.length = 0;
 }
 
-function undoGeometry() {
+async function undoGeometry() {
   if (!geometryUndoStack.length) return;
   const action = geometryUndoStack.pop();
   geometryRedoStack.push(action);
@@ -117,12 +114,59 @@ function undoGeometry() {
     if (formColourRegistry[action.formCode]) {
       delete formColourRegistry[action.formCode][action.dsShort];
     }
+  } else if (action.type === 'status-change') {
+    const { id, beforeStatus, beforeDataset, beforeVariable, beforeLabel, isUserCreated } = action;
+    if (isUserCreated) {
+      updateUserAnnotation(id, { status: beforeStatus, sdtm_dataset: beforeDataset, sdtm_variable: beforeVariable, sdtm_label: beforeLabel });
+    } else {
+      try {
+        await window.pywebview.api.update_annotation(id, beforeStatus, beforeDataset, beforeVariable, beforeLabel);
+      } catch (e) {
+        console.error('[undo] status-change failed:', e);
+      }
+    }
+    await loadPage(Store.currentPage);
+    if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
+    return;
+  } else if (action.type === 'remove-annotation') {
+    const { id, record, wasUserCreated } = action;
+    if (wasUserCreated) {
+      Store.annotations.push({ ...record });
+      _addUserAnnotation({ ...record });
+      if (action.geometryOverride) {
+        annotationGeometryOverrides[id] = action.geometryOverride;
+      }
+      if (id.startsWith('userdschip_') && action.chipUiOverride) {
+        const fc = (record.form_code || '').toUpperCase();
+        const ds = (record.sdtm_dataset || '').toUpperCase();
+        datasetChipUiOverrides[`${fc}::${ds}`] = action.chipUiOverride;
+        if (action.chipColour && fc) {
+          if (!formColourRegistry[fc]) formColourRegistry[fc] = {};
+          formColourRegistry[fc][ds] = action.chipColour;
+        }
+      }
+    } else {
+      try {
+        await window.pywebview.api.update_annotation(id, action.beforeStatus, action.beforeDataset, action.beforeVariable, action.beforeLabel);
+      } catch (e) {
+        console.error('[undo] remove-annotation failed:', e);
+      }
+    }
+    await loadPage(Store.currentPage);
+    if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
+    return;
+  } else {
+    // EditPanel-owned action types (dataset-colour, dataset-chip-edit, field edits)
+    if (typeof EditPanel !== 'undefined' && EditPanel.undoAction) {
+      await EditPanel.undoAction(action);
+    }
+    return;
   }
 
   _refreshAnnotationLayer();
 }
 
-function redoGeometry() {
+async function redoGeometry() {
   if (!geometryRedoStack.length) return;
   const action = geometryRedoStack.pop();
   geometryUndoStack.push(action);
@@ -159,6 +203,49 @@ function redoGeometry() {
     datasetChipUiOverrides[action.chipKey] = { ...action.uiOverride };
     if (!formColourRegistry[action.formCode]) formColourRegistry[action.formCode] = {};
     formColourRegistry[action.formCode][action.dsShort] = COLOUR_KEY_TO_HEX[action.colourKey] || PALETTE[0];
+  } else if (action.type === 'status-change') {
+    const { id, afterStatus, afterDataset, afterVariable, afterLabel, isUserCreated } = action;
+    if (isUserCreated) {
+      updateUserAnnotation(id, { status: afterStatus, sdtm_dataset: afterDataset, sdtm_variable: afterVariable, sdtm_label: afterLabel });
+    } else {
+      try {
+        await window.pywebview.api.update_annotation(id, afterStatus, afterDataset, afterVariable, afterLabel);
+      } catch (e) {
+        console.error('[redo] status-change failed:', e);
+      }
+    }
+    await loadPage(Store.currentPage);
+    if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
+    return;
+  } else if (action.type === 'remove-annotation') {
+    const { id, wasUserCreated, record } = action;
+    if (wasUserCreated) {
+      const idx = (Store.annotations || []).findIndex(r => r.annotation_id === id);
+      if (idx >= 0) Store.annotations.splice(idx, 1);
+      delete annotationGeometryOverrides[id];
+      _removeUserAnnotation(id);
+      if (id.startsWith('userdschip_')) {
+        const fc = (record?.form_code || '').toUpperCase();
+        const ds = (record?.sdtm_dataset || '').toUpperCase();
+        delete datasetChipUiOverrides[`${fc}::${ds}`];
+        if (formColourRegistry[fc]) delete formColourRegistry[fc][ds];
+      }
+    } else {
+      try {
+        await window.pywebview.api.update_annotation(id, 'REMOVED', '', '', '');
+      } catch (e) {
+        console.error('[redo] remove-annotation failed:', e);
+      }
+    }
+    await loadPage(Store.currentPage);
+    if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
+    return;
+  } else {
+    // EditPanel-owned action types (dataset-colour, dataset-chip-edit, field edits)
+    if (typeof EditPanel !== 'undefined' && EditPanel.redoAction) {
+      await EditPanel.redoAction(action);
+    }
+    return;
   }
 
   _refreshAnnotationLayer();
@@ -188,7 +275,7 @@ function _refreshAnnotationLayer() {
 }
 
 function _bindGeometryUndoRedo() {
-  document.addEventListener('keydown', (e) => {
+  document.addEventListener('keydown', async (e) => {
     const tag = (e.target.tagName || '').toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
 
@@ -197,20 +284,16 @@ function _bindGeometryUndoRedo() {
     if (!ctrl) return;
 
     if (e.key.toLowerCase() === 'z' && !e.shiftKey) {
-      if (geometryUndoStack.length > 0) {
-        e.preventDefault();
-        e.stopPropagation();
-        undoGeometry();
-      }
+      e.preventDefault();
+      e.stopPropagation();
+      await undoGeometry();
     } else if (
       e.key.toLowerCase() === 'y' ||
       (e.key.toLowerCase() === 'z' && e.shiftKey)
     ) {
-      if (geometryRedoStack.length > 0) {
-        e.preventDefault();
-        e.stopPropagation();
-        redoGeometry();
-      }
+      e.preventDefault();
+      e.stopPropagation();
+      await redoGeometry();
     }
   }, true);
 }
@@ -456,13 +539,12 @@ function updateDatasetChip(chipRecord, fields = {}) {
       const pageWrap = document.getElementById('pdf-page-wrap');
       if (!pageWrap) return;
       const pageRect = pageWrap.getBoundingClientRect();
-      const zoom = Number(Store.zoomPct || 100) / 100;
-      const clickXPx = (e.clientX - pageRect.left) / zoom;
-      const clickYPx = (e.clientY - pageRect.top) / zoom;
-      const naturalWidth = pageWrap.offsetWidth || 1;
-      const naturalHeight = pageWrap.offsetHeight || 1;
-      const x_pts = (clickXPx / naturalWidth) * Store.pageWidthPts;
-      const y_pts = (clickYPx / naturalHeight) * Store.pageHeightPts;
+      const clickXPx = e.clientX - pageRect.left;
+      const clickYPx = e.clientY - pageRect.top;
+      const scaledW = pageRect.width || 1;
+      const scaledH = pageRect.height || 1;
+      const x_pts = (clickXPx / scaledW) * Store.pageWidthPts;
+      const y_pts = (clickYPx / scaledH) * Store.pageHeightPts;
       pendingClickPts = {
         x_pts: _clamp(x_pts, 4, Store.pageWidthPts - 4),
         y_pts: _clamp(y_pts, 4, Store.pageHeightPts - 4),
@@ -537,9 +619,23 @@ function updateDatasetChip(chipRecord, fields = {}) {
     document.getElementById('ctx-mark-unmapped')?.addEventListener('click', async () => {
       ctxMenu.classList.add('hidden');
       if (!pendingAnnotationCtxRec) return;
-      await window.pywebview.api.update_annotation(
-        pendingAnnotationCtxRec.annotation_id, 'UNMAPPED', '', '', ''
-      );
+      const rec = pendingAnnotationCtxRec;
+      const id = rec.annotation_id;
+      const isUserCreated = String(id).startsWith('user_') || String(id).startsWith('userdschip_');
+      _pushGeometryUndo({
+        type: 'status-change',
+        id,
+        beforeStatus: rec.status || 'RESOLVED',
+        beforeDataset: rec.sdtm_dataset || '',
+        beforeVariable: rec.sdtm_variable || '',
+        beforeLabel: rec.sdtm_label || '',
+        afterStatus: 'UNMAPPED',
+        afterDataset: '',
+        afterVariable: '',
+        afterLabel: '',
+        isUserCreated,
+      });
+      await window.pywebview.api.update_annotation(id, 'UNMAPPED', '', '', '');
       if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
       if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
     });
@@ -547,9 +643,23 @@ function updateDatasetChip(chipRecord, fields = {}) {
     document.getElementById('ctx-mark-not-submitted')?.addEventListener('click', async () => {
       ctxMenu.classList.add('hidden');
       if (!pendingAnnotationCtxRec) return;
-      await window.pywebview.api.update_annotation(
-        pendingAnnotationCtxRec.annotation_id, 'NOT_SUBMITTED', '', '', 'Not Submitted'
-      );
+      const rec = pendingAnnotationCtxRec;
+      const id = rec.annotation_id;
+      const isUserCreated = String(id).startsWith('user_') || String(id).startsWith('userdschip_');
+      _pushGeometryUndo({
+        type: 'status-change',
+        id,
+        beforeStatus: rec.status || 'RESOLVED',
+        beforeDataset: rec.sdtm_dataset || '',
+        beforeVariable: rec.sdtm_variable || '',
+        beforeLabel: rec.sdtm_label || '',
+        afterStatus: 'NOT_SUBMITTED',
+        afterDataset: '',
+        afterVariable: '',
+        afterLabel: 'Not Submitted',
+        isUserCreated,
+      });
+      await window.pywebview.api.update_annotation(id, 'NOT_SUBMITTED', '', '', 'Not Submitted');
       if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
       if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
     });
@@ -558,8 +668,23 @@ function updateDatasetChip(chipRecord, fields = {}) {
       ctxMenu.classList.add('hidden');
       if (!pendingAnnotationCtxRec) return;
       const rec = pendingAnnotationCtxRec;
+      const id = rec.annotation_id;
+      const isUserCreated = String(id).startsWith('user_') || String(id).startsWith('userdschip_');
+      _pushGeometryUndo({
+        type: 'status-change',
+        id,
+        beforeStatus: rec.status || 'RESOLVED',
+        beforeDataset: rec.sdtm_dataset || '',
+        beforeVariable: rec.sdtm_variable || '',
+        beforeLabel: rec.sdtm_label || '',
+        afterStatus: 'NEEDS_REVIEW',
+        afterDataset: rec.sdtm_dataset || '',
+        afterVariable: rec.sdtm_variable || '',
+        afterLabel: rec.sdtm_label || '',
+        isUserCreated,
+      });
       await window.pywebview.api.update_annotation(
-        rec.annotation_id, 'NEEDS_REVIEW',
+        id, 'NEEDS_REVIEW',
         rec.sdtm_dataset || '', rec.sdtm_variable || '', rec.sdtm_label || ''
       );
       if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
@@ -583,22 +708,40 @@ function updateDatasetChip(chipRecord, fields = {}) {
         const id = rec.annotation_id;
         const isUserAnn = String(id).startsWith('user_');
         const isUserChip = String(id).startsWith('userdschip_');
+        const wasUserCreated = isUserAnn || isUserChip;
 
-        if (isUserAnn || isUserChip) {
+        // Capture undo state before removing
+        const fc = (rec.form_code || '').toUpperCase();
+        const ds = (rec.sdtm_dataset || '').toUpperCase();
+        const undoAction = {
+          type: 'remove-annotation',
+          id,
+          wasUserCreated,
+          record: { ...rec },
+          beforeStatus: rec.status || 'RESOLVED',
+          beforeDataset: ds,
+          beforeVariable: rec.sdtm_variable || '',
+          beforeLabel: rec.sdtm_label || '',
+          geometryOverride: annotationGeometryOverrides[id] ? { ...annotationGeometryOverrides[id] } : null,
+          chipUiOverride: isUserChip ? (datasetChipUiOverrides[`${fc}::${ds}`] ? { ...datasetChipUiOverrides[`${fc}::${ds}`] } : null) : null,
+          chipColour: isUserChip ? (formColourRegistry[fc]?.[ds] || null) : null,
+        };
+
+        if (wasUserCreated) {
           // Remove locally — backend doesn't know about user-created records
           const idx = (Store.annotations || []).findIndex(r => r.annotation_id === id);
           if (idx >= 0) Store.annotations.splice(idx, 1);
           delete annotationGeometryOverrides[id];
           _removeUserAnnotation(id);
           if (isUserChip) {
-            const fc = (rec.form_code || '').toUpperCase();
-            const ds = (rec.sdtm_dataset || '').toUpperCase();
             delete datasetChipUiOverrides[`${fc}::${ds}`];
             if (formColourRegistry[fc]) delete formColourRegistry[fc][ds];
           }
         } else {
           await window.pywebview.api.update_annotation(id, 'REMOVED', '', '', '');
         }
+
+        _pushGeometryUndo(undoAction);
 
         if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
         if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
@@ -830,7 +973,7 @@ function updateDatasetChip(chipRecord, fields = {}) {
     const annotationId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
 
     const label = `${datasetRaw}.${variableRaw}`;
-    const fontSizePts = 7.0;
+    const fontSizePts = 12.0;
     const padX = 6.0;
     const padY = 5.0;
     const textWidthPts = Math.max(20, 0.60 * fontSizePts * label.length + 3.0);
@@ -1012,7 +1155,7 @@ function updateDatasetChip(chipRecord, fields = {}) {
     const formCode = (first.form_code || 'UNKNOWN').toUpperCase();
 
     const annotationId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    const fontSizePts = 7.0;
+    const fontSizePts = 12.0;
     const padX = 6.0;
     const padY = 5.0;
     const textWidthPts = Math.max(20, 0.60 * fontSizePts * displayLabel.length + 3.0);
@@ -1306,50 +1449,50 @@ Store.setAnnotations([...backendRecords, ...uniqueUserRecs]);
     };
 
     pdfPageWrap.style.position = 'relative';
-    pdfPageWrap.style.display = 'inline-block';
+    pdfPageWrap.style.display = 'block';
 
     annotationLayer.innerHTML = '';
   }
 
-  function applyZoom(usePointerOrigin = false) {
-  const pageWrap = document.getElementById('pdf-page-wrap');
-  const pdfImg = document.getElementById('pdf-img');
-  const annotationLayer = document.getElementById('annotation-layer');
-  const toolbarZoom = document.getElementById('toolbar-zoom');
+  function applyZoom() {
+    const pageWrap = document.getElementById('pdf-page-wrap');
+    const pdfImg = document.getElementById('pdf-img');
+    const toolbarZoom = document.getElementById('toolbar-zoom');
 
-  if (!pageWrap || !pdfImg || !annotationLayer) return;
+    if (!pageWrap || !pdfImg) return;
 
-  const zoom = Number(Store.zoomPct || 100);
-  const scale = zoom / 100;
+    const zoom = Number(Store.zoomPct || 100);
+    const scale = zoom / 100;
+    const naturalWidth = Store.imgWidth || 0;
+    const naturalHeight = Store.imgHeight || 0;
 
-  const naturalWidth = pdfImg.offsetWidth || pdfImg.clientWidth || 0;
-  const naturalHeight = pdfImg.offsetHeight || pdfImg.clientHeight || 0;
+    if (naturalWidth > 0 && naturalHeight > 0) {
+      pageWrap.style.width = `${Math.round(naturalWidth * scale)}px`;
+      pageWrap.style.height = `${Math.round(naturalHeight * scale)}px`;
+    }
 
-  // Only use pointer-based origin during active Ctrl+Scroll
-  // Otherwise reset to top-left for consistent rendering after reloads
-  let originX = '0';
-  let originY = '0';
-  if (usePointerOrigin) {
-    originX = (zoomOriginX * 100).toFixed(2);
-    originY = (zoomOriginY * 100).toFixed(2);
+    pageWrap.style.transform = '';
+    pageWrap.style.transformOrigin = '';
+    pageWrap.style.setProperty('--zoom-scale', String(scale));
+    pdfImg.style.width = '100%';
+    pdfImg.style.height = '100%';
+
+    if (toolbarZoom) {
+      toolbarZoom.textContent = `${zoom}%`;
+    }
   }
 
-  pageWrap.style.position = 'relative';
-  pageWrap.style.transformOrigin = `${originX}% ${originY}%`;
-  pageWrap.style.transform = `scale(${scale})`;
-
-  if (naturalWidth > 0) pageWrap.style.width = `${naturalWidth}px`;
-  if (naturalHeight > 0) pageWrap.style.height = `${naturalHeight}px`;
-
-  const pdfContainer = document.getElementById('pdf-container');
-  if (pdfContainer && naturalWidth > 0 && naturalHeight > 0) {
-    pdfContainer.style.height = `${naturalHeight * scale}px`;
+  function zoomIn() {
+    const oldZoom = Number(Store.zoomPct || 100);
+    Store.setZoom(oldZoom + (Store.zoomStep || 10));
+    applyZoom();
   }
 
-  if (toolbarZoom) {
-    toolbarZoom.textContent = `${zoom}%`;
+  function zoomOut() {
+    const oldZoom = Number(Store.zoomPct || 100);
+    Store.setZoom(oldZoom - (Store.zoomStep || 10));
+    applyZoom();
   }
-}
 
   function _clamp(val, min, max) {
     return Math.max(min, Math.min(max, val));
@@ -1381,30 +1524,31 @@ Store.setAnnotations([...backendRecords, ...uniqueUserRecs]);
       const pageWrap = document.getElementById('pdf-page-wrap');
       if (!pageWrap) return;
 
-      const pageRect = pageWrap.getBoundingClientRect();
-      const currentZoom = Number(Store.zoomPct || 100) / 100;
-
-      // Get pointer position relative to the unscaled page content
-      const pointerXInPage = (e.clientX - pageRect.left) / currentZoom;
-      const pointerYInPage = (e.clientY - pageRect.top) / currentZoom;
-
-      const naturalWidth = pageWrap.offsetWidth || 1;
-      const naturalHeight = pageWrap.offsetHeight || 1;
-
-      // Set zoom origin as fraction (0-1) of the page dimensions
-      zoomOriginX = _clamp(pointerXInPage / naturalWidth, 0, 1);
-      zoomOriginY = _clamp(pointerYInPage / naturalHeight, 0, 1);
-
-      // Determine zoom direction
+      const oldZoom = Number(Store.zoomPct || 100);
       const delta = e.deltaY > 0 ? -Store.zoomStep : Store.zoomStep;
-      const newZoom = _clamp(
-        (Store.zoomPct || 100) + delta,
-        Store.zoomMin,
-        Store.zoomMax
-      );
+      const newZoom = _clamp(oldZoom + delta, Store.zoomMin, Store.zoomMax);
+      if (newZoom === oldZoom) return;
 
+      // Capture pointer position in page-natural coords before zoom
+      const pageRect = pageWrap.getBoundingClientRect();
+      const oldScale = oldZoom / 100;
+      const pointerXInPage = (e.clientX - pageRect.left) / oldScale;
+      const pointerYInPage = (e.clientY - pageRect.top) / oldScale;
+
+      // Apply physical zoom
       Store.setZoom(newZoom);
-      applyZoom(true);
+      applyZoom();
+
+      // Adjust scroll so the same page point stays under the cursor.
+      // Formula: scrollLeft += (newPageRect.left - canvasRect.left) + pointerXInPage * newScale - pointerXInViewport
+      const newPageRect = pageWrap.getBoundingClientRect();
+      const canvasRect = canvasArea.getBoundingClientRect();
+      const newScale = newZoom / 100;
+      const pointerXInViewport = e.clientX - canvasRect.left;
+      const pointerYInViewport = e.clientY - canvasRect.top;
+
+      canvasArea.scrollLeft += (newPageRect.left - canvasRect.left) + pointerXInPage * newScale - pointerXInViewport;
+      canvasArea.scrollTop  += (newPageRect.top  - canvasRect.top)  + pointerYInPage * newScale - pointerYInViewport;
     }, { passive: false });
   }
 
@@ -1985,7 +2129,7 @@ function _persistDatasetChipVisualState(rec, box) {
     const y0 = parseFloat(rec.y0_pts) || 0;
     const y1 = parseFloat(rec.y1_pts) || 0;
 
-    const fontSizePts = 7.0;
+    const fontSizePts = 12.0;
     const padX = 6.0;
     const padY = 5.0;
     const textWidthPts = Math.max(20, 0.60 * fontSizePts * (label || '').length + 3.0);
@@ -2014,8 +2158,8 @@ function _persistDatasetChipVisualState(rec, box) {
       return 'Not Submitted';
     }
 
-    if (rec.sdtm_dataset && rec.sdtm_variable) {
-      return `${rec.sdtm_dataset}.${rec.sdtm_variable}`;
+    if (rec.sdtm_variable) {
+      return rec.sdtm_variable;
     }
 
     return 'UNMAPPED';
@@ -2354,6 +2498,9 @@ function _persistDatasetChipVisualState(rec, box) {
         }
       });
     }
+
+    // Sync toolbar zoom text and --zoom-scale variable to initial Store value
+    applyZoom();
   }
 
   return {
@@ -2365,10 +2512,13 @@ function _persistDatasetChipVisualState(rec, box) {
   highlightSelected,
   highlightQueueAnnotation,
   applyZoom,
+  zoomIn,
+  zoomOut,
   applyOverridesToRecord,
   applyLocalOverrides,
   undoGeometry,
   redoGeometry,
+  pushUndoAction: _pushGeometryUndo,
   isUserCreated,
   updateUserAnnotation,
   updateDatasetChip,

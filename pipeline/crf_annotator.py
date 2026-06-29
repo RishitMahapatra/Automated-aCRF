@@ -49,11 +49,11 @@ WONG_PALETTE = [
 COL_CYAN = (0.0, 0.71, 0.85)
 COL_WHITE = (1.0, 1.0, 1.0)
 
-# Annotation sizing tuned so full variable names fit better
-VAR_FONT_SIZE = 6.5
-VAR_CHIP_PAD_X = 3.5
-VAR_CHIP_PAD_Y = 1.8
-VAR_TEXT_BUFFER = 1.5
+# CDISC standard: 12pt font for both variable and dataset annotations
+VAR_FONT_SIZE = 12.0
+VAR_CHIP_PAD_X = 5.0
+VAR_CHIP_PAD_Y = 3.0
+VAR_TEXT_BUFFER = 2.0
 
 # Header chip geometry
 HEADER_CHIP_PAD_X = 4.0

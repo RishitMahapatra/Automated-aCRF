@@ -4349,3 +4349,58 @@ body.theme-light .theme-toggle-btn .theme-icon-moon {
   font-style: italic;
   letter-spacing: 0.2px;
 }
+
+/* =============================================================================
+   PHYSICAL ZOOM LAYOUT — must be last; overrides all prior zoom/transform rules
+   ============================================================================= */
+
+#canvas-area {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* pdf-container acts as the centering flex wrapper and scroll content root */
+#pdf-container {
+  display: flex !important;
+  justify-content: center;
+  align-items: flex-start;
+  min-width: 100%;
+  padding: 24px;
+  box-sizing: border-box;
+  position: relative;
+}
+
+/* hidden must defeat the display:flex above */
+#pdf-container.hidden {
+  display: none !important;
+}
+
+/* page wrap is sized physically in JS — no CSS transform */
+.pdf-page-wrap,
+#pdf-page-wrap {
+  flex-shrink: 0;
+  display: block !important;
+  position: relative;
+  transform: none !important;
+  transform-origin: unset !important;
+}
+
+/* image fills whatever physical size JS gives the wrap */
+#pdf-img {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: fill;
+}
+
+/* annotation label font scales with zoom — 12pt CDISC standard
+   25px = 12pt at 150 DPI (12 × 150/72 ≈ 25); --zoom-scale default 0.5 matches 50% default zoom */
+#pdf-page-wrap .ann-box-label {
+  font-size: calc(25px * var(--zoom-scale, 0.5));
+}
+
+/* dataset chip font — same 12pt standard */
+#pdf-page-wrap .ann-chip {
+  font-size: calc(25px * var(--zoom-scale, 0.5)) !important;
+}
