@@ -369,26 +369,65 @@
 
   <div class="section-label">Progress</div>
   <div class="progress-ring-wrap">
-    <svg class="progress-ring" viewBox="0 0 68 68">
-      <circle
-        class="ring-track"
-        cx="34" cy="34" r="28"
+    <svg class="progress-ring" viewBox="0 0 150 150" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="ring-glow-lg" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="5" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="ring-glow-sm" x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="3" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      <!-- Dark background fill -->
+      <circle cx="75" cy="75" r="74" fill="#07091C"/>
+
+      <!-- Glass tube body (layered for depth) -->
+      <circle cx="75" cy="75" r="59" fill="none" stroke="#0E1130" stroke-width="18"/>
+      <circle cx="75" cy="75" r="59" fill="none" stroke="rgba(80,70,140,0.30)" stroke-width="16"/>
+      <!-- Top-half highlight of glass -->
+      <circle cx="75" cy="75" r="59" fill="none"
+        stroke="rgba(255,255,255,0.06)" stroke-width="3"
+        stroke-dasharray="185 186" stroke-dashoffset="0"
+        transform="rotate(-90 75 75)" stroke-linecap="round"/>
+      <!-- Bottom-half shadow of glass -->
+      <circle cx="75" cy="75" r="59" fill="none"
+        stroke="rgba(0,0,0,0.45)" stroke-width="2"
+        stroke-dasharray="185 186" stroke-dashoffset="185"
+        transform="rotate(-90 75 75)"/>
+
+      <!-- Dark center fill (inner circle) -->
+      <circle cx="75" cy="75" r="50" fill="#07091C"/>
+
+      <!-- Ambient static glow rings (always visible, very faint) -->
+      <circle cx="75" cy="75" r="68" fill="none" stroke="rgba(142,84,255,0.10)" stroke-width="1.5"/>
+      <circle cx="75" cy="75" r="51" fill="none" stroke="rgba(142,84,255,0.08)" stroke-width="1"/>
+
+      <!-- OUTER progress neon arc (main indicator) -->
+      <circle id="ring-fill"
+        cx="75" cy="75" r="68"
         fill="none"
-        stroke="#1C1F3A"
-        stroke-width="5"
-      />
-      <circle
-        class="ring-fill"
-        id="ring-fill"
-        cx="34" cy="34" r="28"
-        fill="none"
-        stroke="#8E54FF"
-        stroke-width="5"
+        stroke="#A374FF"
+        stroke-width="3"
         stroke-linecap="round"
-        stroke-dasharray="175.9"
-        stroke-dashoffset="175.9"
-        transform="rotate(-90 34 34)"
-      />
+        stroke-dasharray="427.3"
+        stroke-dashoffset="427.3"
+        transform="rotate(-90 75 75)"
+        filter="url(#ring-glow-lg)"/>
+
+      <!-- INNER progress neon arc (inner edge echo) -->
+      <circle id="ring-fill-inner"
+        cx="75" cy="75" r="51"
+        fill="none"
+        stroke="rgba(142,84,255,0.80)"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-dasharray="320.4"
+        stroke-dashoffset="320.4"
+        transform="rotate(-90 75 75)"
+        filter="url(#ring-glow-sm)"/>
     </svg>
     <div class="ring-center">
       <span class="ring-pct" id="ring-pct">0%</span>

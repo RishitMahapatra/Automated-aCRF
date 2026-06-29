@@ -924,20 +924,23 @@ async function _handleZoomChange(direction) {
   }
 
   function _updateRing(pct) {
+    const p = Math.max(0, Math.min(100, pct || 0));
+    // Outer neon arc: r=68, circumference≈427.3
     const fill = document.getElementById('ring-fill');
-    const label = document.getElementById('ring-pct');
-
     if (fill) {
-      const radius = 28;
-      const circumference = 2 * Math.PI * radius;
-      const offset = circumference * (1 - (pct || 0) / 100);
-      fill.style.strokeDasharray = `${circumference}`;
-      fill.style.strokeDashoffset = `${offset}`;
+      const circ = 427.3;
+      fill.style.strokeDasharray = `${circ}`;
+      fill.style.strokeDashoffset = `${circ * (1 - p / 100)}`;
     }
-
-    if (label) {
-      label.textContent = `${Math.round(pct || 0)}%`;
+    // Inner neon arc: r=51, circumference≈320.4
+    const fillInner = document.getElementById('ring-fill-inner');
+    if (fillInner) {
+      const circ = 320.4;
+      fillInner.style.strokeDasharray = `${circ}`;
+      fillInner.style.strokeDashoffset = `${circ * (1 - p / 100)}`;
     }
+    const label = document.getElementById('ring-pct');
+    if (label) label.textContent = `${Math.round(p)}%`;
   }
 
   // ==========================================================
