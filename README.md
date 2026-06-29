@@ -207,7 +207,7 @@ The tool may display summary metrics to help track review progress, such as:
 These indicators help users monitor how much review remains.
 
 <p align="center">
-<img width="241" height="185" alt="image" src="https://github.com/user-attachments/assets/6fd33f62-9ed9-42bd-a26e-ed42b469bfdd" />
+<img width="244" height="290" alt="image" src="https://github.com/user-attachments/assets/d638ea72-6a53-4a19-a9d2-c473883b927c" />
 </p>
 
 ## Export
