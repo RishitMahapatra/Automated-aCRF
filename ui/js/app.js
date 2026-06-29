@@ -88,7 +88,7 @@ async function _captureCurrentRenderedPage() {
   const canvas = await html2canvas(target, {
     backgroundColor: '#ffffff',
     useCORS: true,
-    scale: 4,
+    scale: 2,   // 300 DPI — professional print quality, 4× smaller than scale:4
     logging: false,
     removeContainer: true,
   });
