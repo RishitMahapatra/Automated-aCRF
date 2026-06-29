@@ -492,14 +492,26 @@ function updateDatasetChip(chipRecord, fields = {}) {
   let pendingAnnotationCtxRec = null;
   let pendingDatasetCtxRec = null;
 
-  function _showAnnotationContextMenu(ctxMenu, x, y) {
+  function _showAnnotationContextMenu(ctxMenu, x, y, rec) {
+    const statusUp = String(rec?.status || '').toUpperCase();
+    const alreadyInQueue = statusUp === 'NEEDS_REVIEW' || statusUp === 'UNMAPPED';
+
     document.getElementById('ctx-add-annotation').style.display = '';
     document.getElementById('ctx-edit-annotation').style.display = '';
     document.getElementById('ctx-mark-unmapped').style.display = '';
     document.getElementById('ctx-mark-not-submitted').style.display = '';
-    document.getElementById('ctx-add-to-review').style.display = '';
     document.getElementById('ctx-show-in-queue').style.display = '';
     document.getElementById('ctx-remove-annotation').style.display = '';
+
+    const addToReviewBtn = document.getElementById('ctx-add-to-review');
+    if (addToReviewBtn) {
+      addToReviewBtn.style.display = '';
+      addToReviewBtn.disabled = alreadyInQueue;
+      addToReviewBtn.style.opacity = alreadyInQueue ? '0.4' : '';
+      addToReviewBtn.style.cursor = alreadyInQueue ? 'default' : '';
+      addToReviewBtn.title = alreadyInQueue ? 'Already in review queue' : '';
+    }
+
     ctxMenu.style.left = `${Math.min(x, window.innerWidth - 200)}px`;
     ctxMenu.style.top = `${Math.min(y, window.innerHeight - 310)}px`;
     ctxMenu.classList.remove('hidden');
@@ -573,7 +585,7 @@ function updateDatasetChip(chipRecord, fields = {}) {
         // Clicked on annotation box — show annotation-specific menu (Add Annotation also available)
         const annotationId = annBox.dataset.id;
         pendingAnnotationCtxRec = (Store.annotations || []).find(r => r.annotation_id === annotationId) || null;
-        _showAnnotationContextMenu(ctxMenu, e.clientX, e.clientY);
+        _showAnnotationContextMenu(ctxMenu, e.clientX, e.clientY, pendingAnnotationCtxRec);
       } else {
         // Clicked on blank canvas or component band — show "Add Annotation" menu
         pendingAnnotationCtxRec = null;
@@ -635,7 +647,11 @@ function updateDatasetChip(chipRecord, fields = {}) {
         afterLabel: '',
         isUserCreated,
       });
-      await window.pywebview.api.update_annotation(id, 'UNMAPPED', '', '', '');
+      if (isUserCreated) {
+        updateUserAnnotation(id, { status: 'UNMAPPED', sdtm_dataset: '', sdtm_variable: '', sdtm_label: '' });
+      } else {
+        await window.pywebview.api.update_annotation(id, 'UNMAPPED', '', '', '');
+      }
       if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
       if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
     });
@@ -659,7 +675,11 @@ function updateDatasetChip(chipRecord, fields = {}) {
         afterLabel: 'Not Submitted',
         isUserCreated,
       });
-      await window.pywebview.api.update_annotation(id, 'NOT_SUBMITTED', '', '', 'Not Submitted');
+      if (isUserCreated) {
+        updateUserAnnotation(id, { status: 'NOT_SUBMITTED', sdtm_dataset: '', sdtm_variable: '', sdtm_label: 'Not Submitted' });
+      } else {
+        await window.pywebview.api.update_annotation(id, 'NOT_SUBMITTED', '', '', 'Not Submitted');
+      }
       if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
       if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
     });
@@ -683,10 +703,11 @@ function updateDatasetChip(chipRecord, fields = {}) {
         afterLabel: rec.sdtm_label || '',
         isUserCreated,
       });
-      await window.pywebview.api.update_annotation(
-        id, 'NEEDS_REVIEW',
-        rec.sdtm_dataset || '', rec.sdtm_variable || '', rec.sdtm_label || ''
-      );
+      if (isUserCreated) {
+        updateUserAnnotation(id, { status: 'NEEDS_REVIEW', sdtm_dataset: rec.sdtm_dataset || '', sdtm_variable: rec.sdtm_variable || '', sdtm_label: rec.sdtm_label || '' });
+      } else {
+        await window.pywebview.api.update_annotation(id, 'NEEDS_REVIEW', rec.sdtm_dataset || '', rec.sdtm_variable || '', rec.sdtm_label || '');
+      }
       if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
       if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
     });

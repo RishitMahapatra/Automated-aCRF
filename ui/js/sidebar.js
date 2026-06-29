@@ -1231,8 +1231,15 @@ async function _handleZoomChange(direction) {
 
       const records = Array.isArray(res.records) ? res.records : [];
 
+      // Merge in user-created annotations from the frontend store (backend doesn't persist them)
+      const backendIds = new Set(records.map(r => r.annotation_id));
+      const userCreatedLocal = (Store.annotations || []).filter(r =>
+        String(r.annotation_id || '').startsWith('user_') && !backendIds.has(r.annotation_id)
+      );
+      const allRecords = [...records, ...userCreatedLocal];
+
       // FORM pages only — TABLE pages are reference-only
-      const formRecords = records.filter((r) => {
+      const formRecords = allRecords.filter((r) => {
         return String(r.page_type || 'FORM').toUpperCase() !== 'TABLE';
       });
 
@@ -1388,7 +1395,8 @@ async function _handleZoomChange(direction) {
 
     const isDatasetReview = !!rec.is_dataset_review;
 
-    const isAlreadyNeedsReview = statusUpper === 'NEEDS_REVIEW';
+    // NEEDS_REVIEW and UNMAPPED are both already in the active queue — grey out "Mark for Review"
+    const isAlreadyNeedsReview = statusUpper === 'NEEDS_REVIEW' || statusUpper === 'UNMAPPED';
 
     if (resolveBtn) resolveBtn.style.display = isAlreadyResolved ? 'none' : '';
     if (ignoreBtn) ignoreBtn.style.display = isAlreadyResolved ? 'none' : '';
@@ -1397,7 +1405,7 @@ async function _handleZoomChange(direction) {
       markReviewBtn.disabled = isAlreadyNeedsReview;
       markReviewBtn.style.opacity = isAlreadyNeedsReview ? '0.4' : '';
       markReviewBtn.style.cursor = isAlreadyNeedsReview ? 'default' : '';
-      markReviewBtn.title = isAlreadyNeedsReview ? 'Already marked for review' : '';
+      markReviewBtn.title = isAlreadyNeedsReview ? 'Already in review queue' : '';
     }
     // Dataset reviews cannot be converted to unmapped
     if (convertUnmappedBtn) convertUnmappedBtn.style.display =
