@@ -495,6 +495,7 @@ function updateDatasetChip(chipRecord, fields = {}) {
   function _showAnnotationContextMenu(ctxMenu, x, y, rec) {
     const statusUp = String(rec?.status || '').toUpperCase();
     const alreadyInQueue = statusUp === 'NEEDS_REVIEW' || statusUp === 'UNMAPPED';
+    const isInReview = statusUp === 'NEEDS_REVIEW';
 
     document.getElementById('ctx-add-annotation').style.display = '';
     document.getElementById('ctx-edit-annotation').style.display = '';
@@ -512,6 +513,10 @@ function updateDatasetChip(chipRecord, fields = {}) {
       addToReviewBtn.title = alreadyInQueue ? 'Already in review queue' : '';
     }
 
+    // Show "Remove from Review" only for annotations that are currently NEEDS_REVIEW
+    const removeFromReviewBtn = document.getElementById('ctx-remove-from-review');
+    if (removeFromReviewBtn) removeFromReviewBtn.style.display = isInReview ? '' : 'none';
+
     ctxMenu.style.left = `${Math.min(x, window.innerWidth - 200)}px`;
     ctxMenu.style.top = `${Math.min(y, window.innerHeight - 310)}px`;
     ctxMenu.classList.remove('hidden');
@@ -523,6 +528,7 @@ function updateDatasetChip(chipRecord, fields = {}) {
     document.getElementById('ctx-mark-unmapped').style.display = 'none';
     document.getElementById('ctx-mark-not-submitted').style.display = 'none';
     document.getElementById('ctx-add-to-review').style.display = 'none';
+    document.getElementById('ctx-remove-from-review').style.display = 'none';
     document.getElementById('ctx-show-in-queue').style.display = 'none';
     document.getElementById('ctx-remove-annotation').style.display = 'none';
     ctxMenu.style.left = `${x}px`;
@@ -708,6 +714,35 @@ function updateDatasetChip(chipRecord, fields = {}) {
       } else {
         await window.pywebview.api.update_annotation(id, 'NEEDS_REVIEW', rec.sdtm_dataset || '', rec.sdtm_variable || '', rec.sdtm_label || '');
       }
+      if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
+      if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
+    });
+
+    document.getElementById('ctx-remove-from-review')?.addEventListener('click', async () => {
+      ctxMenu.classList.add('hidden');
+      if (!pendingAnnotationCtxRec) return;
+      const rec = pendingAnnotationCtxRec;
+      const id = rec.annotation_id;
+      const isUserCreated = String(id).startsWith('user_') || String(id).startsWith('userdschip_');
+      _pushGeometryUndo({
+        type: 'status-change',
+        id,
+        beforeStatus: 'NEEDS_REVIEW',
+        beforeDataset: rec.sdtm_dataset || '',
+        beforeVariable: rec.sdtm_variable || '',
+        beforeLabel: rec.sdtm_label || '',
+        afterStatus: 'UNMAPPED',
+        afterDataset: '',
+        afterVariable: '',
+        afterLabel: '',
+        isUserCreated,
+      });
+      if (isUserCreated) {
+        updateUserAnnotation(id, { status: 'UNMAPPED', sdtm_dataset: '', sdtm_variable: '', sdtm_label: '' });
+      } else {
+        await window.pywebview.api.update_annotation(id, 'UNMAPPED', '', '', '');
+      }
+      pendingAnnotationCtxRec = null;
       if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
       if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
     });
@@ -2449,6 +2484,19 @@ function _persistDatasetChipVisualState(rec, box) {
     }
   }
 
+  function highlightDatasetChip(formCode, dsCode) {
+    if (!formCode || !dsCode) return;
+    const chip = document.querySelector(
+      `.ann-chip[data-form-code="${CSS.escape(formCode.toUpperCase())}"][data-dataset-code="${CSS.escape(dsCode.toUpperCase())}"]`
+    );
+    if (!chip) return;
+    chip.classList.remove('queue-shake');
+    void chip.offsetWidth;
+    chip.classList.add('queue-shake');
+    chip.addEventListener('animationend', () => chip.classList.remove('queue-shake'), { once: true });
+    chip.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
   function updatePageMeta() {
     const records = Store.annotations || [];
     const first = records[0] || {};
@@ -2541,6 +2589,7 @@ function _persistDatasetChipVisualState(rec, box) {
   showEmpty,
   highlightSelected,
   highlightQueueAnnotation,
+  highlightDatasetChip,
   applyZoom,
   zoomIn,
   zoomOut,

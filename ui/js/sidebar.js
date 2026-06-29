@@ -924,20 +924,33 @@ async function _handleZoomChange(direction) {
   }
 
   function _updateRing(pct) {
+    const p = Math.max(0, Math.min(100, pct || 0));
+    const outerCirc = 427.3;
+    const innerCirc = 320.4;
+    const TRANSITION = 'stroke-dashoffset 900ms cubic-bezier(0.34, 1.56, 0.64, 1)';
+
     const fill = document.getElementById('ring-fill');
+    const fillInner = document.getElementById('ring-fill-inner');
+
+    // Strip transition so the reset to 0% is instant
+    if (fill) fill.style.transition = 'none';
+    if (fillInner) fillInner.style.transition = 'none';
+
+    // Reset both arcs to fully empty (dashoffset = full circumference)
+    if (fill) { fill.style.strokeDasharray = `${outerCirc}`; fill.style.strokeDashoffset = `${outerCirc}`; }
+    if (fillInner) { fillInner.style.strokeDasharray = `${innerCirc}`; fillInner.style.strokeDashoffset = `${innerCirc}`; }
+
+    // Force reflow so browser commits the reset before restoring transition
+    (fill || fillInner)?.getBoundingClientRect();
+
+    // Restore transition and animate to the new target value
+    if (fill) fill.style.transition = TRANSITION;
+    if (fillInner) fillInner.style.transition = TRANSITION;
+    if (fill) fill.style.strokeDashoffset = `${outerCirc * (1 - p / 100)}`;
+    if (fillInner) fillInner.style.strokeDashoffset = `${innerCirc * (1 - p / 100)}`;
+
     const label = document.getElementById('ring-pct');
-
-    if (fill) {
-      const radius = 28;
-      const circumference = 2 * Math.PI * radius;
-      const offset = circumference * (1 - (pct || 0) / 100);
-      fill.style.strokeDasharray = `${circumference}`;
-      fill.style.strokeDashoffset = `${offset}`;
-    }
-
-    if (label) {
-      label.textContent = `${Math.round(pct || 0)}%`;
-    }
+    if (label) label.textContent = `${Math.round(p)}%`;
   }
 
   // ==========================================================
@@ -1118,6 +1131,19 @@ async function _handleZoomChange(direction) {
     row.addEventListener('click', async (e) => {
       if (e.target.classList.contains('qr-comment-btn')) return;
 
+      const annotationId = String(rec.annotation_id || '');
+
+      // Dataset review row — highlight the chip on canvas without navigating
+      if (rec.is_dataset_review) {
+        const parts = annotationId.replace(/^dsreview_/, '').split('_');
+        const dsFormCode = parts[0] || '';
+        const dsDsCode = parts.slice(1).join('_') || '';
+        if (typeof Canvas !== 'undefined' && Canvas.highlightDatasetChip) {
+          Canvas.highlightDatasetChip(dsFormCode, dsDsCode);
+        }
+        return;
+      }
+
       const numericPage = Number(page);
       if (!numericPage || Number.isNaN(numericPage)) return;
 
@@ -1129,7 +1155,6 @@ async function _handleZoomChange(direction) {
         await Canvas.loadPage(Store.currentPage);
       }
 
-      const annotationId = String(rec.annotation_id || '');
       if (annotationId && typeof Canvas !== 'undefined' && Canvas.highlightQueueAnnotation) {
         Canvas.highlightQueueAnnotation(annotationId);
       }
@@ -1331,6 +1356,42 @@ async function _handleZoomChange(direction) {
       _queueCtxRec = null;
     });
 
+    document.getElementById('qctx-remove-from-review')?.addEventListener('click', async () => {
+      if (!_queueCtxRec) return;
+      menu.classList.add('hidden');
+      const rec = _queueCtxRec;
+      const annotationId = String(rec.annotation_id || '');
+      _queueCtxRec = null;
+      if (rec.is_dataset_review) {
+        _updateDatasetReviewStatus(annotationId, 'UNMAPPED');
+        await refreshUnmappedQueue();
+        return;
+      }
+      if (typeof Canvas !== 'undefined' && Canvas.pushUndoAction) {
+        Canvas.pushUndoAction({
+          type: 'status-change',
+          id: annotationId,
+          beforeStatus: 'NEEDS_REVIEW',
+          beforeDataset: rec.sdtm_dataset || '',
+          beforeVariable: rec.sdtm_variable || '',
+          beforeLabel: rec.sdtm_label || '',
+          afterStatus: 'UNMAPPED',
+          afterDataset: '',
+          afterVariable: '',
+          afterLabel: '',
+          isUserCreated: false,
+        });
+      }
+      const res = await window.pywebview.api.update_annotation(annotationId, 'UNMAPPED', '', '', '');
+      if (res && res.ok) {
+        await refreshStats();
+        await refreshUnmappedQueue();
+        if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
+          await Canvas.loadPage(Store.currentPage);
+        }
+      }
+    });
+
     document.getElementById('qctx-convert-unmapped')?.addEventListener('click', async () => {
       if (!_queueCtxRec) return;
       menu.classList.add('hidden');
@@ -1393,7 +1454,7 @@ async function _handleZoomChange(direction) {
 
     const isDatasetReview = !!rec.is_dataset_review;
 
-    // NEEDS_REVIEW and UNMAPPED are both already in the active queue — grey out "Mark for Review"
+    // NEEDS_REVIEW and UNMAPPED are already in the active queue — grey out "Mark for Review"
     const isAlreadyNeedsReview = statusUpper === 'NEEDS_REVIEW' || statusUpper === 'UNMAPPED';
 
     if (resolveBtn) resolveBtn.style.display = isAlreadyResolved ? 'none' : '';
@@ -1408,6 +1469,10 @@ async function _handleZoomChange(direction) {
     // Dataset reviews cannot be converted to unmapped
     if (convertUnmappedBtn) convertUnmappedBtn.style.display =
       (isAlreadyUnmapped || isAlreadyResolved || isDatasetReview) ? 'none' : '';
+
+    // "Remove from Review" only makes sense for NEEDS_REVIEW items
+    const removeFromReviewBtn = document.getElementById('qctx-remove-from-review');
+    if (removeFromReviewBtn) removeFromReviewBtn.style.display = statusUpper === 'NEEDS_REVIEW' ? '' : 'none';
 
     menu.style.left = `${Math.min(x, window.innerWidth - 190)}px`;
     menu.style.top = `${Math.min(y, window.innerHeight - 240)}px`;

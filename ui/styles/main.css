@@ -447,20 +447,20 @@ html, body {
 }
 
 .btn-danger {
-  color: rgba(255, 138, 0, 0.6);
-  border-color: rgba(255, 138, 0, 0.25);
+  color: rgba(220, 53, 69, 0.7);
+  border-color: rgba(220, 53, 69, 0.3);
 }
 
 .btn-danger:hover {
-  color: var(--orange);
-  border-color: var(--orange);
-  background: rgba(255, 138, 0, 0.08);
+  color: #E05252;
+  border-color: #E05252;
+  background: rgba(220, 53, 69, 0.1);
 }
 
 .btn-danger-solid {
-  background: rgba(255, 138, 0, 0.15);
-  border-color: var(--orange);
-  color: var(--orange);
+  background: rgba(220, 53, 69, 0.15);
+  border-color: #E05252;
+  color: #E05252;
 }
 
 /* Pipeline steps */
@@ -569,22 +569,23 @@ html, body {
 }
 
 
-/* Progress ring */
+/* Progress ring — neumorphic glass */
 .progress-ring-wrap {
   position: relative;
-  width: 68px;
-  height: 68px;
-  margin: 0 auto 12px;
+  width: 150px;
+  height: 150px;
+  margin: 8px auto 16px;
 }
 
 .progress-ring {
-  width: 68px;
-  height: 68px;
+  width: 150px;
+  height: 150px;
+  overflow: visible;
 }
 
-.ring-fill {
-  transition: stroke-dashoffset 700ms cubic-bezier(0.34, 1.56, 0.64, 1);
-  filter: drop-shadow(0 0 6px rgba(142, 84, 255, 0.6));
+.ring-fill,
+.ring-fill-inner {
+  transition: stroke-dashoffset 900ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .ring-center {
@@ -594,19 +595,23 @@ html, body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  pointer-events: none;
 }
 
 .ring-pct {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--bright);
+  font-size: 28px;
+  font-weight: 700;
+  color: #FFFFFF;
   line-height: 1;
+  letter-spacing: -0.5px;
 }
 
 .ring-label {
-  font-size: 9px;
-  color: var(--muted);
-  margin-top: 2px;
+  font-size: 10px;
+  color: rgba(200, 204, 236, 0.60);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 /* Stat grid */
@@ -751,17 +756,10 @@ html, body {
   gap: 12px;
 }
 
-.empty-lines {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  align-items: center;
-}
-
-.empty-line {
-  height: 3px;
-  background: var(--elevated);
-  border-radius: 2px;
+.empty-pdf-icon {
+  width: 64px;
+  height: 64px;
+  opacity: 0.85;
 }
 
 .empty-title {
@@ -971,17 +969,11 @@ html, body {
   padding: 24px;
 }
 
-.panel-empty-lines {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  align-items: center;
-}
-
-.panel-empty-line {
-  height: 3px;
-  background: var(--elevated);
-  border-radius: 2px;
+.panel-empty-icon {
+  width: 52px;
+  height: 52px;
+  opacity: 0.75;
+  margin-bottom: 4px;
 }
 
 .panel-empty-title {
@@ -1877,20 +1869,20 @@ html, body {
 }
 
 .btn-danger {
-  color: rgba(255, 138, 0, 0.6);
-  border-color: rgba(255, 138, 0, 0.25);
+  color: rgba(220, 53, 69, 0.7);
+  border-color: rgba(220, 53, 69, 0.3);
 }
 
 .btn-danger:hover {
-  color: var(--orange);
-  border-color: var(--orange);
-  background: rgba(255, 138, 0, 0.08);
+  color: #E05252;
+  border-color: #E05252;
+  background: rgba(220, 53, 69, 0.1);
 }
 
 .btn-danger-solid {
-  background: rgba(255, 138, 0, 0.15);
-  border-color: var(--orange);
-  color: var(--orange);
+  background: rgba(220, 53, 69, 0.15);
+  border-color: #E05252;
+  color: #E05252;
 }
 
 /* Pipeline steps */
@@ -1999,22 +1991,23 @@ html, body {
 }
 
 
-/* Progress ring */
+/* Progress ring — neumorphic glass */
 .progress-ring-wrap {
   position: relative;
-  width: 68px;
-  height: 68px;
-  margin: 0 auto 12px;
+  width: 150px;
+  height: 150px;
+  margin: 8px auto 16px;
 }
 
 .progress-ring {
-  width: 68px;
-  height: 68px;
+  width: 150px;
+  height: 150px;
+  overflow: visible;
 }
 
-.ring-fill {
-  transition: stroke-dashoffset 700ms cubic-bezier(0.34, 1.56, 0.64, 1);
-  filter: drop-shadow(0 0 6px rgba(142, 84, 255, 0.6));
+.ring-fill,
+.ring-fill-inner {
+  transition: stroke-dashoffset 900ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .ring-center {
@@ -2024,19 +2017,23 @@ html, body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  pointer-events: none;
 }
 
 .ring-pct {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--bright);
+  font-size: 28px;
+  font-weight: 700;
+  color: #FFFFFF;
   line-height: 1;
+  letter-spacing: -0.5px;
 }
 
 .ring-label {
-  font-size: 9px;
-  color: var(--muted);
-  margin-top: 2px;
+  font-size: 10px;
+  color: rgba(200, 204, 236, 0.60);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 /* Stat grid */
@@ -2181,17 +2178,10 @@ html, body {
   gap: 12px;
 }
 
-.empty-lines {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  align-items: center;
-}
-
-.empty-line {
-  height: 3px;
-  background: var(--elevated);
-  border-radius: 2px;
+.empty-pdf-icon {
+  width: 64px;
+  height: 64px;
+  opacity: 0.85;
 }
 
 .empty-title {
@@ -2401,17 +2391,11 @@ html, body {
   padding: 24px;
 }
 
-.panel-empty-lines {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  align-items: center;
-}
-
-.panel-empty-line {
-  height: 3px;
-  background: var(--elevated);
-  border-radius: 2px;
+.panel-empty-icon {
+  width: 52px;
+  height: 52px;
+  opacity: 0.75;
+  margin-bottom: 4px;
 }
 
 .panel-empty-title {
@@ -4500,6 +4484,17 @@ body.theme-light .nav-export-btn:hover {
   color: #E05252 !important;
 }
 #ctx-remove-annotation:hover {
+  background: rgba(220, 53, 69, 0.15) !important;
+  color: #FF6B6B !important;
+}
+
+/* Remove from Review — danger red */
+#ctx-remove-from-review,
+#qctx-remove-from-review {
+  color: #E05252 !important;
+}
+#ctx-remove-from-review:hover,
+#qctx-remove-from-review:hover {
   background: rgba(220, 53, 69, 0.15) !important;
   color: #FF6B6B !important;
 }
