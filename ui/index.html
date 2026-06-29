@@ -287,12 +287,7 @@
         </span>
       </div>
       <div class="nav-right">
-        <button class="theme-toggle-btn" id="btn-theme-toggle" title="Toggle theme">
-          <span class="theme-icon theme-icon-moon">☾</span>
-          <span class="theme-icon theme-icon-sun">☀</span>
-        </button>
-        <div class="nav-divider"></div>
-        <button class="nav-export-btn" id="btn-export-pdf">
+        <button class="nav-export-btn" id="btn-export-pdf" title="Export annotated PDF">
           Export ↗
         </button>
       </div>
@@ -307,15 +302,15 @@
         <!-- Tabs -->
 <div class="sidebar-tabs-wrap">
   <div class="sidebar-tabs chrome-tabs" id="sidebar-tabs">
-    <button class="sidebar-tab active" data-tab="workspace" id="tab-workspace">
+    <button class="sidebar-tab active" data-tab="workspace" id="tab-workspace" title="Upload &amp; configure CRF PDF">
       <span class="material-symbols-outlined tab-icon">upload_file</span>
       <span class="tab-label">Upload</span>
     </button>
-    <button class="sidebar-tab" data-tab="stats" id="tab-stats">
+    <button class="sidebar-tab" data-tab="stats" id="tab-stats" title="View annotation statistics and progress">
       <span class="material-symbols-outlined tab-icon">monitoring</span>
       <span class="tab-label">Analytics</span>
     </button>
-    <button class="sidebar-tab" data-tab="analysis" id="tab-analysis">
+    <button class="sidebar-tab" data-tab="analysis" id="tab-analysis" title="Review and resolve annotation queue">
       <span class="material-symbols-outlined tab-icon">rate_review</span>
       <span class="tab-label">Review</span>
     </button>
@@ -326,7 +321,7 @@
 <div class="sidebar-tab-panel active" id="sidebar-panel-workspace">
 
   <div class="section-label">Upload</div>
-  <div id="drop-zone" class="drop-zone">
+  <div id="drop-zone" class="drop-zone" title="Drag &amp; drop a PDF, or click to browse">
     <div class="drop-icon">↑</div>
     <div class="drop-text">Drop PDF here</div>
     <div class="drop-sub">or click to browse</div>
@@ -349,7 +344,7 @@
   />
 
   <div class="section-label">Pipeline</div>
-  <button class="btn btn-primary btn-full" id="btn-run">
+  <button class="btn btn-primary btn-full" id="btn-run" title="Run AI annotation pipeline on the loaded PDF">
     <span class="btn-icon">▶</span>
     Run Pipeline
   </button>
@@ -362,7 +357,7 @@
     <span class="pipeline-progress-label" id="pipeline-progress-label">Running...</span>
   </div>
 
-  <button class="btn btn-full" id="btn-restart-session" style="margin-top:8px;">
+  <button class="btn btn-full" id="btn-restart-session" style="margin-top:8px;" title="Clear all annotations and start a new session">
     Restart Session
   </button>
 
@@ -570,9 +565,9 @@
       <!-- ── STICKY BOTTOM NAVIGATION ─────────────────────── -->
       <div id="sticky-nav" class="sticky-nav">
         <button class="btn nav-btn sticky-nav-btn" id="btn-prev-sticky">‹</button>
-        <button class="btn nav-btn sticky-nav-btn" id="btn-zoom-out-sticky" title="Zoom out">−</button>
+        <button class="btn nav-btn sticky-nav-btn" id="btn-zoom-out-sticky" title="Zoom out (Ctrl + scroll)">−</button>
         <span class="page-display sticky-page-display" id="page-display-sticky">— / —</span>
-        <button class="btn nav-btn sticky-nav-btn" id="btn-zoom-in-sticky" title="Zoom in">+</button>
+        <button class="btn nav-btn sticky-nav-btn" id="btn-zoom-in-sticky" title="Zoom in (Ctrl + scroll)">+</button>
         <button class="btn nav-btn sticky-nav-btn" id="btn-next-sticky">›</button>
       </div>
 
@@ -998,6 +993,36 @@
     <div class="add-ann-actions">
       <button class="btn btn-danger-solid" id="ann-remove-confirm-btn">Remove</button>
       <button class="btn" id="ann-remove-cancel-btn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast Notification Container ──────────────────────── -->
+<div id="toast-container" aria-live="polite"></div>
+
+<!-- ── Suggestion Apply Confirm Dialog ────────────────────── -->
+<div id="suggest-confirm-overlay" class="add-ann-overlay hidden">
+  <div class="add-ann-dialog" style="min-width:300px;max-width:400px">
+    <div class="add-ann-header">
+      <span class="add-ann-title">Apply Suggestion?</span>
+    </div>
+    <div id="suggest-confirm-body" style="font-size:13px;color:#C8CCEC;margin-bottom:16px;line-height:1.5"></div>
+    <div class="add-ann-actions">
+      <button class="btn btn-primary" id="suggest-confirm-yes">Apply</button>
+      <button class="btn" id="suggest-confirm-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Generic Info/Alert Dialog ──────────────────────────── -->
+<div id="info-dialog-overlay" class="add-ann-overlay hidden">
+  <div class="add-ann-dialog" style="min-width:260px;max-width:380px">
+    <div class="add-ann-header">
+      <span class="add-ann-title" id="info-dialog-title">Notice</span>
+    </div>
+    <div id="info-dialog-body" style="font-size:13px;color:#C8CCEC;margin-bottom:16px;line-height:1.5"></div>
+    <div class="add-ann-actions">
+      <button class="btn btn-primary" id="info-dialog-ok">OK</button>
     </div>
   </div>
 </div>

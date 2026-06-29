@@ -3,12 +3,44 @@
  * ------------
  * Main frontend bootstrap for the PyWebView CRF Annotation Editor.
  */
-const SIDEBAR_MIN_WIDTH = 160;
+const SIDEBAR_MIN_WIDTH = 84;
 const SIDEBAR_MAX_WIDTH = 520;
 
 const EDIT_PANEL_MIN_WIDTH = 200;
 const EDIT_PANEL_MAX_WIDTH = 560;
 
+function showToast(message, type = 'info', duration = 4500) {
+  const container = document.getElementById('toast-container');
+  if (!container) { console.warn('[toast]', message); return; }
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  const safeMsg = String(message).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  toast.innerHTML = `<span class="toast-msg">${safeMsg}</span><button class="toast-close" title="Dismiss">×</button>`;
+  toast.querySelector('.toast-close').addEventListener('click', () => {
+    toast.classList.remove('toast-visible');
+    setTimeout(() => toast.remove(), 300);
+  });
+  container.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('toast-visible'));
+  setTimeout(() => {
+    toast.classList.remove('toast-visible');
+    setTimeout(() => toast.remove(), 300);
+  }, duration);
+}
+
+function showInfoDialog(title, body) {
+  const overlay = document.getElementById('info-dialog-overlay');
+  const titleEl = document.getElementById('info-dialog-title');
+  const bodyEl = document.getElementById('info-dialog-body');
+  const okBtn = document.getElementById('info-dialog-ok');
+  if (!overlay) { alert(body); return; }
+  if (titleEl) titleEl.textContent = title;
+  if (bodyEl) bodyEl.textContent = body;
+  overlay.classList.remove('hidden');
+  const close = () => overlay.classList.add('hidden');
+  okBtn?.addEventListener('click', close, { once: true });
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); }, { once: true });
+}
 
 async function initApp() {
   console.log('[app] Initializing CRF Annotation Editor...');
@@ -155,8 +187,7 @@ function _bindExportButton() {
   btn.addEventListener('click', async () => {
     try {
       if (!Store.pipelineRan) {
-        alert('Run the pipeline first.');
-        return;
+        showToast('Run the pipeline first.', 'warning'); return;
       }
 
       btn.disabled = true;
@@ -165,21 +196,20 @@ function _bindExportButton() {
 
       const pageData = await _captureAllPagesForExport();
       if (!pageData || !pageData.length) {
-        alert('No page images captured for export.');
-        return;
+        showToast('No page images captured for export.', 'error'); return;
       }
 
       const res = await window.pywebview.api.export_pdf_from_images(pageData);
 
       if (res && res.ok) {
-        alert('PDF exported successfully:\n' + res.path);
+        showToast('PDF exported to: ' + res.path, 'success', 7000);
       } else {
-        alert('Export failed: ' + (res?.error || 'Unknown error'));
+        showToast('Export failed: ' + (res?.error || 'Unknown error'), 'error');
       }
 
     } catch (e) {
       console.error('[app] screenshot export error:', e);
-      alert('Export failed: ' + e);
+      showToast('Export failed: ' + e, 'error');
     } finally {
       btn.disabled = false;
       btn.textContent = 'Export ↗';
@@ -311,6 +341,12 @@ function _bindThemeToggle() {
   _syncThemeToggleTooltip();
 }
 
+function _updateSidebarTabMode(sidebar) {
+  if (!sidebar) return;
+  const w = parseFloat(sidebar.style.width) || sidebar.getBoundingClientRect().width;
+  sidebar.classList.toggle('sidebar-icon-only', w < 145);
+}
+
 function _bindSidebarResizer() {
   const resizer = document.getElementById('sidebar-resizer');
   const sidebar = document.getElementById('sidebar');
@@ -332,6 +368,7 @@ function _bindSidebarResizer() {
 
     sidebar.style.width = `${nextWidth}px`;
     sidebar.style.flex = `0 0 ${nextWidth}px`;
+    _updateSidebarTabMode(sidebar);
   };
 
   const stopDragging = () => {
@@ -355,6 +392,9 @@ function _bindSidebarResizer() {
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', stopDragging);
   });
+
+  // Set initial icon-only state based on current sidebar width
+  _updateSidebarTabMode(sidebar);
 }
 
 

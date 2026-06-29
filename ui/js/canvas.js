@@ -492,14 +492,26 @@ function updateDatasetChip(chipRecord, fields = {}) {
   let pendingAnnotationCtxRec = null;
   let pendingDatasetCtxRec = null;
 
-  function _showAnnotationContextMenu(ctxMenu, x, y) {
+  function _showAnnotationContextMenu(ctxMenu, x, y, rec) {
+    const statusUp = String(rec?.status || '').toUpperCase();
+    const alreadyInQueue = statusUp === 'NEEDS_REVIEW' || statusUp === 'UNMAPPED';
+
     document.getElementById('ctx-add-annotation').style.display = '';
     document.getElementById('ctx-edit-annotation').style.display = '';
     document.getElementById('ctx-mark-unmapped').style.display = '';
     document.getElementById('ctx-mark-not-submitted').style.display = '';
-    document.getElementById('ctx-add-to-review').style.display = '';
     document.getElementById('ctx-show-in-queue').style.display = '';
     document.getElementById('ctx-remove-annotation').style.display = '';
+
+    const addToReviewBtn = document.getElementById('ctx-add-to-review');
+    if (addToReviewBtn) {
+      addToReviewBtn.style.display = '';
+      addToReviewBtn.disabled = alreadyInQueue;
+      addToReviewBtn.style.opacity = alreadyInQueue ? '0.4' : '';
+      addToReviewBtn.style.cursor = alreadyInQueue ? 'default' : '';
+      addToReviewBtn.title = alreadyInQueue ? 'Already in review queue' : '';
+    }
+
     ctxMenu.style.left = `${Math.min(x, window.innerWidth - 200)}px`;
     ctxMenu.style.top = `${Math.min(y, window.innerHeight - 310)}px`;
     ctxMenu.classList.remove('hidden');
@@ -573,7 +585,7 @@ function updateDatasetChip(chipRecord, fields = {}) {
         // Clicked on annotation box — show annotation-specific menu (Add Annotation also available)
         const annotationId = annBox.dataset.id;
         pendingAnnotationCtxRec = (Store.annotations || []).find(r => r.annotation_id === annotationId) || null;
-        _showAnnotationContextMenu(ctxMenu, e.clientX, e.clientY);
+        _showAnnotationContextMenu(ctxMenu, e.clientX, e.clientY, pendingAnnotationCtxRec);
       } else {
         // Clicked on blank canvas or component band — show "Add Annotation" menu
         pendingAnnotationCtxRec = null;
@@ -635,7 +647,11 @@ function updateDatasetChip(chipRecord, fields = {}) {
         afterLabel: '',
         isUserCreated,
       });
-      await window.pywebview.api.update_annotation(id, 'UNMAPPED', '', '', '');
+      if (isUserCreated) {
+        updateUserAnnotation(id, { status: 'UNMAPPED', sdtm_dataset: '', sdtm_variable: '', sdtm_label: '' });
+      } else {
+        await window.pywebview.api.update_annotation(id, 'UNMAPPED', '', '', '');
+      }
       if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
       if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
     });
@@ -659,7 +675,11 @@ function updateDatasetChip(chipRecord, fields = {}) {
         afterLabel: 'Not Submitted',
         isUserCreated,
       });
-      await window.pywebview.api.update_annotation(id, 'NOT_SUBMITTED', '', '', 'Not Submitted');
+      if (isUserCreated) {
+        updateUserAnnotation(id, { status: 'NOT_SUBMITTED', sdtm_dataset: '', sdtm_variable: '', sdtm_label: 'Not Submitted' });
+      } else {
+        await window.pywebview.api.update_annotation(id, 'NOT_SUBMITTED', '', '', 'Not Submitted');
+      }
       if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
       if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
     });
@@ -683,10 +703,11 @@ function updateDatasetChip(chipRecord, fields = {}) {
         afterLabel: rec.sdtm_label || '',
         isUserCreated,
       });
-      await window.pywebview.api.update_annotation(
-        id, 'NEEDS_REVIEW',
-        rec.sdtm_dataset || '', rec.sdtm_variable || '', rec.sdtm_label || ''
-      );
+      if (isUserCreated) {
+        updateUserAnnotation(id, { status: 'NEEDS_REVIEW', sdtm_dataset: rec.sdtm_dataset || '', sdtm_variable: rec.sdtm_variable || '', sdtm_label: rec.sdtm_label || '' });
+      } else {
+        await window.pywebview.api.update_annotation(id, 'NEEDS_REVIEW', rec.sdtm_dataset || '', rec.sdtm_variable || '', rec.sdtm_label || '');
+      }
       if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
       if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
     });
@@ -1956,6 +1977,7 @@ function _persistDatasetChipVisualState(rec, box) {
 
       band.addEventListener('click', async (e) => {
         e.stopPropagation();
+        _queueHighlightId = null;  // direct click clears queue highlight mode
         Store.setSelectedAnnotation(rec);
         highlightSelected();
 
@@ -2366,6 +2388,8 @@ function _persistDatasetChipVisualState(rec, box) {
     return (status || 'UNMAPPED').toLowerCase().replace(/_/g, '-');
   }
 
+  let _queueHighlightId = null;
+
   function highlightSelected() {
     document.querySelectorAll('.ann-box').forEach(box => {
       const selected = box.dataset.id === Store.selectedId;
@@ -2380,15 +2404,15 @@ function _persistDatasetChipVisualState(rec, box) {
 
     document.querySelectorAll('.component-band').forEach(band => {
       const selected = band.dataset.id === Store.selectedId;
-      if (selected) {
-        band.style.background = 'rgba(142, 84, 255, 0.20)';
-        band.style.border = '1px solid rgba(74, 0, 130, 0.95)';
-        band.style.boxShadow = 'inset 0 0 0 1px rgba(74, 0, 130, 0.30)';
-      } else {
-        band.style.background = 'transparent';
-        band.style.border = '1px solid transparent';
-        band.style.boxShadow = 'none';
-      }
+      // Always use full-width purple band for all selections (queue or direct click)
+      band.classList.toggle('queue-selected', selected);
+      // Clear all inline overrides — CSS class handles the visual state
+      band.style.background = '';
+      band.style.border = '';
+      band.style.boxShadow = '';
+      band.style.left = '';
+      band.style.width = '';
+      band.style.borderRadius = '';
     });
   }
 
@@ -2400,21 +2424,27 @@ function _persistDatasetChipVisualState(rec, box) {
   function highlightQueueAnnotation(annotationId) {
     if (!annotationId) return;
 
+    _queueHighlightId = annotationId;
+
     const annotations = Store.annotations || [];
     const rec = annotations.find(r => r.annotation_id === annotationId);
 
     if (rec) {
       Store.setSelectedAnnotation(rec);
     } else {
-      // Record not on this page yet — just set the ID so band highlights on render
       Store.selectedId = annotationId;
     }
 
     highlightSelected();
 
-    // Scroll the highlighted component band into the centre of the viewport
     const band = document.querySelector(`.component-band[data-id="${CSS.escape(annotationId)}"]`);
     if (band) {
+      // Shake animation — remove then re-add to restart
+      band.classList.remove('queue-shake');
+      void band.offsetWidth;
+      band.classList.add('queue-shake');
+      band.addEventListener('animationend', () => band.classList.remove('queue-shake'), { once: true });
+
       band.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }

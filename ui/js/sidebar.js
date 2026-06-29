@@ -377,16 +377,14 @@ const Sidebar = (() => {
         if (pipelineRunning) return;
 
         if (!Store.pdfLoaded) {
-          alert('Upload a PDF first.');
-          return;
+          document.getElementById('restart-nopdf-overlay')?.classList.remove('hidden'); return;
         }
 
         const sessionInput = document.getElementById('session-input');
         const sessionId = (sessionInput?.value || Store.sessionId || '').trim();
 
         if (!sessionId) {
-          alert('Enter a session ID.');
-          return;
+          showToast('Enter a session ID.', 'warning'); return;
         }
 
         Store.sessionId = sessionId;
@@ -413,7 +411,7 @@ const Sidebar = (() => {
         if (!result || !result.ok) {
           _errorProgress();
           _setPipelineStepError(2);
-          alert('Pipeline failed: ' + (result?.error || 'Unknown error'));
+          showToast('Pipeline failed: ' + (result?.error || 'Unknown error'), 'error');
           return;
         }
 
@@ -440,7 +438,7 @@ const Sidebar = (() => {
         }
       } catch (e) {
         console.error('[sidebar] run_pipeline error:', e);
-        alert('Pipeline failed: ' + e);
+        showToast('Pipeline failed: ' + e, 'error');
       } finally {
         pipelineRunning = false;
         _setPipelineControlsLocked(false);
@@ -678,7 +676,7 @@ function _bindPageNumberEdit(span) {
       const raw = input.value.trim();
       const num = parseInt(raw, 10);
       if (!raw || isNaN(num) || !/^\d+$/.test(raw)) {
-        hint.textContent = 'invalid page number';
+        if (typeof showInfoDialog !== 'undefined') showInfoDialog('Invalid Page Number', 'Please enter a valid page number between 1 and ' + (Store.pageCount || 1) + '.');
         input.select();
         return;
       }
@@ -695,7 +693,7 @@ function _bindPageNumberEdit(span) {
     input.addEventListener('input', () => {
       const raw = input.value;
       if (raw !== '' && !/^\d*$/.test(raw)) {
-        hint.textContent = 'invalid page number';
+        hint.textContent = '';
       } else {
         hint.textContent = '';
       }
@@ -1231,8 +1229,15 @@ async function _handleZoomChange(direction) {
 
       const records = Array.isArray(res.records) ? res.records : [];
 
+      // Merge in user-created annotations from the frontend store (backend doesn't persist them)
+      const backendIds = new Set(records.map(r => r.annotation_id));
+      const userCreatedLocal = (Store.annotations || []).filter(r =>
+        String(r.annotation_id || '').startsWith('user_') && !backendIds.has(r.annotation_id)
+      );
+      const allRecords = [...records, ...userCreatedLocal];
+
       // FORM pages only — TABLE pages are reference-only
-      const formRecords = records.filter((r) => {
+      const formRecords = allRecords.filter((r) => {
         return String(r.page_type || 'FORM').toUpperCase() !== 'TABLE';
       });
 
@@ -1388,9 +1393,18 @@ async function _handleZoomChange(direction) {
 
     const isDatasetReview = !!rec.is_dataset_review;
 
+    // NEEDS_REVIEW and UNMAPPED are both already in the active queue — grey out "Mark for Review"
+    const isAlreadyNeedsReview = statusUpper === 'NEEDS_REVIEW' || statusUpper === 'UNMAPPED';
+
     if (resolveBtn) resolveBtn.style.display = isAlreadyResolved ? 'none' : '';
     if (ignoreBtn) ignoreBtn.style.display = isAlreadyResolved ? 'none' : '';
-    if (markReviewBtn) markReviewBtn.style.display = '';
+    if (markReviewBtn) {
+      markReviewBtn.style.display = '';
+      markReviewBtn.disabled = isAlreadyNeedsReview;
+      markReviewBtn.style.opacity = isAlreadyNeedsReview ? '0.4' : '';
+      markReviewBtn.style.cursor = isAlreadyNeedsReview ? 'default' : '';
+      markReviewBtn.title = isAlreadyNeedsReview ? 'Already in review queue' : '';
+    }
     // Dataset reviews cannot be converted to unmapped
     if (convertUnmappedBtn) convertUnmappedBtn.style.display =
       (isAlreadyUnmapped || isAlreadyResolved || isDatasetReview) ? 'none' : '';
