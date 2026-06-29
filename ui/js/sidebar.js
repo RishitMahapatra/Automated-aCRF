@@ -925,20 +925,30 @@ async function _handleZoomChange(direction) {
 
   function _updateRing(pct) {
     const p = Math.max(0, Math.min(100, pct || 0));
-    // Outer neon arc: r=68, circumference≈427.3
+    const outerCirc = 427.3;
+    const innerCirc = 320.4;
+    const TRANSITION = 'stroke-dashoffset 900ms cubic-bezier(0.34, 1.56, 0.64, 1)';
+
     const fill = document.getElementById('ring-fill');
-    if (fill) {
-      const circ = 427.3;
-      fill.style.strokeDasharray = `${circ}`;
-      fill.style.strokeDashoffset = `${circ * (1 - p / 100)}`;
-    }
-    // Inner neon arc: r=51, circumference≈320.4
     const fillInner = document.getElementById('ring-fill-inner');
-    if (fillInner) {
-      const circ = 320.4;
-      fillInner.style.strokeDasharray = `${circ}`;
-      fillInner.style.strokeDashoffset = `${circ * (1 - p / 100)}`;
-    }
+
+    // Strip transition so the reset to 0% is instant
+    if (fill) fill.style.transition = 'none';
+    if (fillInner) fillInner.style.transition = 'none';
+
+    // Reset both arcs to fully empty (dashoffset = full circumference)
+    if (fill) { fill.style.strokeDasharray = `${outerCirc}`; fill.style.strokeDashoffset = `${outerCirc}`; }
+    if (fillInner) { fillInner.style.strokeDasharray = `${innerCirc}`; fillInner.style.strokeDashoffset = `${innerCirc}`; }
+
+    // Force reflow so browser commits the reset before restoring transition
+    (fill || fillInner)?.getBoundingClientRect();
+
+    // Restore transition and animate to the new target value
+    if (fill) fill.style.transition = TRANSITION;
+    if (fillInner) fillInner.style.transition = TRANSITION;
+    if (fill) fill.style.strokeDashoffset = `${outerCirc * (1 - p / 100)}`;
+    if (fillInner) fillInner.style.strokeDashoffset = `${innerCirc * (1 - p / 100)}`;
+
     const label = document.getElementById('ring-pct');
     if (label) label.textContent = `${Math.round(p)}%`;
   }
