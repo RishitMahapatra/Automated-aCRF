@@ -10,28 +10,14 @@ The editor is divided into four colour-coded regions. Every feature in this manu
 
 | Region | Colour | Description |
 |--------|--------|-------------|
-| 🟣 **Side Panel** | `#1A1D36` dark navy | Upload, Analytics, Review tabs on the left |
-| 🔵 **Editor / Canvas** | `#12152A` deep blue | PDF viewer with annotation overlays in the centre |
-| 🟤 **Edit Panel** | `#14172E` panel dark | Variable/dataset editor on the right |
-| ⚫ **Bottom Nav** | `#0D0F22` near-black | Zoom and page navigation strip at the very bottom |
+|  **Side Panel** | `#ffbd59` Peach | Upload, Analytics, Review tabs on the left |
+|  **Editor / Canvas** | `#5170ff` Vivid Blue | PDF viewer with annotation overlays in the centre |
+|  **Edit Panel** | `#00bf63` Green | Variable/dataset editor on the right |
+|  **Bottom Nav** | `#ff3131` Bright Red | Zoom and page navigation strip at the very bottom |
 
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│  🔷 Top Navigation Bar  —  Session ID · Form Code · Export ↗             │
-├─────────────────┬────────────────────────────────────┬───────────────────┤
-│                 │                                    │                   │
-│  🟣 SIDE PANEL  │       🔵 EDITOR / CANVAS           │  🟤 EDIT PANEL    │
-│                 │                                    │                   │
-│  ┌───────────┐  │   PDF pages with annotation        │  Variable &        │
-│  │  Upload   │  │   boxes, dataset chips, and        │  Dataset editing   │
-│  │ Analytics │  │   component bands rendered         │  Suggestions       │
-│  │  Review   │  │   over the CRF form image          │  Manual Override   │
-│  └───────────┘  │                                    │  Actions           │
-│                 │                                    │                   │
-├─────────────────┴────────────────────────────────────┴───────────────────┤
-│  ⚫ BOTTOM NAV  —  ‹  −  [ Page 1 / 12 ]  +  ›                          │
-└──────────────────────────────────────────────────────────────────────────┘
-```
+<p align = "center">
+<img width="959" height="539" alt="image" src="https://github.com/user-attachments/assets/d1293a6c-51e6-4e42-867a-3d2eb89171c1" />
+</p>
 
 ---
 
@@ -45,6 +31,10 @@ The editor is divided into four colour-coded regions. Every feature in this manu
    - **Drag and drop** a `.pdf` file directly onto the drop zone.
 3. Once loaded, the drop zone shows the **filename**, **page count**, and a **×** dismiss button.
 4. The **Session ID** field auto-populates from the filename. You may edit it — this ID links all saved data on the backend.
+   
+<p align = "center">
+<img width="959" height="539" alt="image" src="https://github.com/user-attachments/assets/dec14516-9f80-4c8a-b125-d623f9e56195" />
+</p>
 
 > ⚠️ Only PDF files are accepted. The tool processes CRF (Case Report Form) documents that contain structured form fields.
 
@@ -73,6 +63,11 @@ The editor is divided into four colour-coded regions. Every feature in this manu
 ---
 
 ## 🧭 Navigation
+
+<p align = "center">
+<img width="959" height="539" alt="image" src="https://github.com/user-attachments/assets/e2f06879-58ad-4e12-b72b-487c5e0f2ef5" />
+</p>
+
 
 ### Page Navigation
 
@@ -114,7 +109,7 @@ The unified undo stack covers: **annotation creation**, **removal**, **moves**, 
 
 ---
 
-## 🟣 Side Panel — Tabs
+## Side Panel — Tabs
 
 The Side Panel sits on the left edge of the interface. It has three tabs that collapse to icon-only mode when the panel is narrowed below ~145 px (drag the vertical resizer to adjust width).
 
@@ -141,10 +136,9 @@ Provides a real-time overview of the annotation coverage.
 
 A **neumorphic glass ring** with dual neon-purple arcs shows the overall resolution percentage.
 
-```
-         ◉ 72%
-       resolved
-```
+<p align = "center">
+<img width="488" height="581" alt="Screenshot 2026-06-29 143234" src="https://github.com/user-attachments/assets/7eb8ef98-5ccf-4d6c-b6f1-50bafbe4f5b2" />
+</p>
 
 The ring **sweeps from zero** every time the percentage updates — the animation restarts from the beginning so you can see the change clearly.
 
