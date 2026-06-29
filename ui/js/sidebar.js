@@ -1388,9 +1388,17 @@ async function _handleZoomChange(direction) {
 
     const isDatasetReview = !!rec.is_dataset_review;
 
+    const isAlreadyNeedsReview = statusUpper === 'NEEDS_REVIEW';
+
     if (resolveBtn) resolveBtn.style.display = isAlreadyResolved ? 'none' : '';
     if (ignoreBtn) ignoreBtn.style.display = isAlreadyResolved ? 'none' : '';
-    if (markReviewBtn) markReviewBtn.style.display = '';
+    if (markReviewBtn) {
+      markReviewBtn.style.display = '';
+      markReviewBtn.disabled = isAlreadyNeedsReview;
+      markReviewBtn.style.opacity = isAlreadyNeedsReview ? '0.4' : '';
+      markReviewBtn.style.cursor = isAlreadyNeedsReview ? 'default' : '';
+      markReviewBtn.title = isAlreadyNeedsReview ? 'Already marked for review' : '';
+    }
     // Dataset reviews cannot be converted to unmapped
     if (convertUnmappedBtn) convertUnmappedBtn.style.display =
       (isAlreadyUnmapped || isAlreadyResolved || isDatasetReview) ? 'none' : '';

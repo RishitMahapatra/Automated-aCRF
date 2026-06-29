@@ -1956,6 +1956,7 @@ function _persistDatasetChipVisualState(rec, box) {
 
       band.addEventListener('click', async (e) => {
         e.stopPropagation();
+        _queueHighlightId = null;  // direct click clears queue highlight mode
         Store.setSelectedAnnotation(rec);
         highlightSelected();
 
@@ -2366,6 +2367,8 @@ function _persistDatasetChipVisualState(rec, box) {
     return (status || 'UNMAPPED').toLowerCase().replace(/_/g, '-');
   }
 
+  let _queueHighlightId = null;
+
   function highlightSelected() {
     document.querySelectorAll('.ann-box').forEach(box => {
       const selected = box.dataset.id === Store.selectedId;
@@ -2380,14 +2383,25 @@ function _persistDatasetChipVisualState(rec, box) {
 
     document.querySelectorAll('.component-band').forEach(band => {
       const selected = band.dataset.id === Store.selectedId;
-      if (selected) {
+      const isQueueHighlight = selected && band.dataset.id === _queueHighlightId;
+
+      band.classList.toggle('queue-selected', isQueueHighlight);
+
+      if (selected && !isQueueHighlight) {
         band.style.background = 'rgba(142, 84, 255, 0.20)';
         band.style.border = '1px solid rgba(74, 0, 130, 0.95)';
         band.style.boxShadow = 'inset 0 0 0 1px rgba(74, 0, 130, 0.30)';
-      } else {
+        band.style.left = '';
+        band.style.width = '';
+        band.style.borderRadius = '';
+      } else if (!selected) {
+        band.classList.remove('queue-selected');
         band.style.background = 'transparent';
         band.style.border = '1px solid transparent';
         band.style.boxShadow = 'none';
+        band.style.left = '';
+        band.style.width = '';
+        band.style.borderRadius = '';
       }
     });
   }
@@ -2400,21 +2414,27 @@ function _persistDatasetChipVisualState(rec, box) {
   function highlightQueueAnnotation(annotationId) {
     if (!annotationId) return;
 
+    _queueHighlightId = annotationId;
+
     const annotations = Store.annotations || [];
     const rec = annotations.find(r => r.annotation_id === annotationId);
 
     if (rec) {
       Store.setSelectedAnnotation(rec);
     } else {
-      // Record not on this page yet — just set the ID so band highlights on render
       Store.selectedId = annotationId;
     }
 
     highlightSelected();
 
-    // Scroll the highlighted component band into the centre of the viewport
     const band = document.querySelector(`.component-band[data-id="${CSS.escape(annotationId)}"]`);
     if (band) {
+      // Shake animation — remove then re-add to restart
+      band.classList.remove('queue-shake');
+      void band.offsetWidth;
+      band.classList.add('queue-shake');
+      band.addEventListener('animationend', () => band.classList.remove('queue-shake'), { once: true });
+
       band.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }

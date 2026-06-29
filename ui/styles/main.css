@@ -4404,3 +4404,106 @@ body.theme-light .theme-toggle-btn .theme-icon-moon {
 #pdf-page-wrap .ann-chip {
   font-size: calc(25px * var(--zoom-scale, 0.5)) !important;
 }
+
+/* ==========================================================
+   COSMETIC POLISH — shake, component highlight, export btn
+   ========================================================== */
+
+/* Shake animation for queue-highlight */
+@keyframes queue-shake {
+  0%,100% { transform: translateX(0); }
+  12%      { transform: translateX(-5px); }
+  25%      { transform: translateX(5px); }
+  37%      { transform: translateX(-4px); }
+  50%      { transform: translateX(4px); }
+  62%      { transform: translateX(-2px); }
+  75%      { transform: translateX(2px); }
+}
+
+.component-band.queue-shake {
+  animation: queue-shake 0.45s cubic-bezier(.36,.07,.19,.97) both;
+}
+
+/* Full-width component highlight when triggered from queue */
+.component-band.queue-selected {
+  left: 0 !important;
+  width: 100% !important;
+  background: rgba(142, 84, 255, 0.22) !important;
+  border-color: rgba(142, 84, 255, 0.55) !important;
+  box-shadow: inset 0 0 0 1px rgba(142, 84, 255, 0.25) !important;
+  border-radius: 0 !important;
+}
+
+/* Suppress the annotation-box scale/glow when queue-selecting the row */
+.component-band.queue-selected ~ .ann-box.selected,
+.annotation-layer-queue-active .ann-box.selected {
+  transform: none;
+  box-shadow: 0 0 0 1.5px rgba(142, 84, 255, 0.6);
+}
+
+/* Export button — prominent violet with app theme */
+.nav-export-btn {
+  background: linear-gradient(135deg, #8E54FF 0%, #6E3FD4 100%) !important;
+  border: 1px solid rgba(142, 84, 255, 0.40) !important;
+  color: #fff !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  padding: 6px 14px !important;
+  border-radius: 6px !important;
+  cursor: pointer !important;
+  box-shadow: 0 0 14px rgba(142, 84, 255, 0.28) !important;
+  transition: box-shadow 0.18s ease, transform 0.12s ease !important;
+  letter-spacing: 0.01em !important;
+}
+
+.nav-export-btn:hover {
+  box-shadow: 0 0 22px rgba(142, 84, 255, 0.45) !important;
+  transform: translateY(-1px) !important;
+  opacity: 1 !important;
+}
+
+.nav-export-btn:active {
+  transform: translateY(0) !important;
+}
+
+.nav-export-btn:disabled {
+  opacity: 0.55 !important;
+  cursor: default !important;
+  transform: none !important;
+}
+
+/* Light mode export button */
+body.theme-light .nav-export-btn {
+  background: linear-gradient(135deg, #652BDA 0%, #7A48E6 100%) !important;
+  border-color: rgba(101, 43, 218, 0.35) !important;
+  box-shadow: 0 0 14px rgba(101, 43, 218, 0.18) !important;
+}
+
+body.theme-light .nav-export-btn:hover {
+  box-shadow: 0 0 22px rgba(101, 43, 218, 0.30) !important;
+}
+
+/* Moon icon nudge — better vertical centering */
+.theme-toggle-btn .theme-icon-moon {
+  font-size: 15px;
+  padding-bottom: 1px;
+  letter-spacing: 0;
+}
+
+.theme-toggle-btn .theme-icon-sun {
+  font-size: 15px;
+}
+
+/* Suggestions expander — user-generated state */
+.expander-header.user-generated .expander-label {
+  color: var(--muted);
+}
+
+.expander-header.user-generated {
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+.expander-header.user-generated .expander-chevron {
+  opacity: 0;
+}

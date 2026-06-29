@@ -331,15 +331,43 @@ const EditPanel = (() => {
     if (label) label.value = '';
   }
 
+  function _normalizeDatasetName(raw) {
+    const trimmed = raw.trim();
+    const openIdx = trimmed.indexOf('(');
+    const closeIdx = trimmed.lastIndexOf(')');
+    if (openIdx === -1 && closeIdx === -1) {
+      return { ok: true, value: trimmed.toUpperCase() };
+    }
+    const openCount = (trimmed.match(/\(/g) || []).length;
+    const closeCount = (trimmed.match(/\)/g) || []).length;
+    if (openCount !== 1 || closeCount !== 1) {
+      return { ok: false, error: 'Only one set of parentheses () is allowed.' };
+    }
+    if (openIdx > closeIdx) {
+      return { ok: false, error: 'Parentheses must be in the form (...).' };
+    }
+    const codePart = trimmed.slice(0, openIdx).trim().toUpperCase();
+    const fullPart = trimmed.slice(openIdx);
+    return { ok: true, value: codePart ? `${codePart} ${fullPart}`.trim() : fullPart };
+  }
+
   async function _loadSuggestions(annotationId) {
     const list = document.getElementById('suggestions-list');
     if (!list) return;
 
+    const sugHdr = document.getElementById('expander-suggestions-hdr');
+    const sugLbl = sugHdr?.querySelector('.expander-label');
+
     // Skip suggestions for user-created annotations (backend doesn't know them)
     if (typeof Canvas !== 'undefined' && Canvas.isUserCreated && Canvas.isUserCreated(annotationId)) {
-      list.innerHTML = '<div class="suggestions-loading muted small">No suggestions (user-created)</div>';
+      list.innerHTML = '<div class="suggestions-loading muted small">No suggestions available</div>';
+      if (sugHdr) sugHdr.classList.add('user-generated');
+      if (sugLbl) sugLbl.textContent = 'Suggestions (User Generated)';
       return;
     }
+
+    if (sugHdr) sugHdr.classList.remove('user-generated');
+    if (sugLbl) sugLbl.textContent = 'Suggestions';
 
     list.innerHTML = '<div class="suggestions-loading muted small">Loading suggestions...</div>';
 
@@ -471,7 +499,9 @@ const EditPanel = (() => {
         if (!Store.selectedRecord) return;
 
         if (currentMode === 'dataset-chip') {
-          const ds = (document.getElementById('manual-dataset')?.value || '').trim().toUpperCase();
+          const _dsNorm = _normalizeDatasetName(document.getElementById('manual-dataset')?.value || '');
+          if (!_dsNorm.ok) { alert(_dsNorm.error); return; }
+          const ds = _dsNorm.value;
           const fullForm = (document.getElementById('manual-label')?.value || '').trim();
 
           if (!ds) {
@@ -524,7 +554,9 @@ const EditPanel = (() => {
           return;
         }
 
-        const ds = (document.getElementById('manual-dataset')?.value || '').trim().toUpperCase();
+        const _dsNorm2 = _normalizeDatasetName(document.getElementById('manual-dataset')?.value || '');
+        if (!_dsNorm2.ok) { alert(_dsNorm2.error); return; }
+        const ds = _dsNorm2.value;
         const variable = (document.getElementById('manual-variable')?.value || '').trim().toUpperCase();
         const label = (document.getElementById('manual-label')?.value || '').trim();
 
