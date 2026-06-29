@@ -507,7 +507,7 @@ const EditPanel = (() => {
             mode: 'dataset-chip-edit',
           };
 
-          Store.pushHistory({
+          _pushToUnifiedStack({
             type: 'dataset-chip-edit',
             before,
             after,
@@ -624,7 +624,7 @@ const EditPanel = (() => {
     );
   }
 
-  Store.pushHistory({
+  _pushToUnifiedStack({
     type: 'dataset-colour',
     before: {
       form_code: Store.selectedRecord._formCode,
@@ -678,7 +678,7 @@ if (typeof Canvas !== 'undefined' && Canvas.updateFormColour) {
   Canvas.updateFormColour(formCode, dataset, colourKey);
 }
 
-Store.pushHistory({
+_pushToUnifiedStack({
   type: 'dataset-colour',
   before: {
     form_code: formCode,
@@ -708,23 +708,15 @@ await _refreshAfterUpdate({
   }
 
   function _bindUndoRedo() {
-    document.addEventListener('keydown', async (e) => {
-      const isMac = navigator.platform.toUpperCase().includes('MAC');
-      const ctrl = isMac ? e.metaKey : e.ctrlKey;
+    // Canvas handles all Ctrl+Z/Y via capture-phase listener; no-op here.
+  }
 
-      if (!ctrl) return;
-
-      if (e.key.toLowerCase() === 'z' && !e.shiftKey) {
-        e.preventDefault();
-        await undo();
-      } else if (
-        e.key.toLowerCase() === 'y' ||
-        (e.key.toLowerCase() === 'z' && e.shiftKey)
-      ) {
-        e.preventDefault();
-        await redo();
-      }
-    });
+  function _pushToUnifiedStack(action) {
+    if (typeof Canvas !== 'undefined' && Canvas.pushUndoAction) {
+      Canvas.pushUndoAction(action);
+    } else {
+      Store.pushHistory(action);
+    }
   }
 
   async function _applyAndTrack(action, reopenPanel = true) {
@@ -739,7 +731,7 @@ await _refreshAfterUpdate({
         sdtm_label: action.after.sdtm_label || '',
       };
       Canvas.updateUserAnnotation(annotationId, updatedFields);
-      Store.pushHistory(action);
+      _pushToUnifiedStack(action);
 
       await _refreshAfterUpdate({
         reopenPanel,
@@ -754,7 +746,7 @@ await _refreshAfterUpdate({
     const ok = await _applySnapshot(action.after);
     if (!ok) return;
 
-    Store.pushHistory(action);
+    _pushToUnifiedStack(action);
 
     await _refreshAfterUpdate({
       reopenPanel,
@@ -803,20 +795,28 @@ await _refreshAfterUpdate({
   }
 
   async function undo() {
-    const action = Store.popUndo();
-    if (!action) return;
+    if (typeof Canvas !== 'undefined' && Canvas.undoGeometry) {
+      await Canvas.undoGeometry();
+    }
+  }
 
+  async function redo() {
+    if (typeof Canvas !== 'undefined' && Canvas.redoGeometry) {
+      await Canvas.redoGeometry();
+    }
+  }
+
+  // Called by Canvas.undoGeometry() for EditPanel-owned action types.
+  // Stack management is already done by canvas before this is called.
+  async function undoAction(action) {
     if (action.type === 'dataset-chip-edit') {
       const chipId = action.before.annotation_id;
       const chipRecord = (Store.annotations || []).find(r => r.annotation_id === chipId);
-
       if (chipRecord && typeof Canvas !== 'undefined' && Canvas.updateDatasetChip) {
         const restored = Canvas.updateDatasetChip(chipRecord, {
           sdtm_dataset: action.before.sdtm_dataset || '',
           full_name: action.before.full_name || _extractFullForm(action.before.sdtm_label || ''),
         });
-
-        Store.pushRedo(action);
         if (restored) {
           Store.selectedId = restored.annotation_id;
           await openDatasetChip(restored);
@@ -829,7 +829,13 @@ await _refreshAfterUpdate({
       const ok = await _applyDatasetColourSnapshot(action.before);
       if (!ok) return;
 
-      Store.pushRedo(action);
+      if (typeof Canvas !== 'undefined' && Canvas.updateFormColour) {
+        Canvas.updateFormColour(
+          String(action.before.form_code || '').toUpperCase(),
+          String(action.before.dataset || '').toUpperCase(),
+          action.before.colour || ''
+        );
+      }
 
       if (action.before.mode === 'dataset-chip') {
         Store.selectedId = `datasetchip::${String(action.before.form_code).toUpperCase()}::${String(action.before.dataset).toUpperCase()}`;
@@ -847,19 +853,16 @@ await _refreshAfterUpdate({
       return;
     }
 
-    // For user-created annotations, update locally
-    const annotationId = action.before.annotation_id;
+    // Generic field edit (no type or unrecognised type)
+    const annotationId = action.before?.annotation_id;
     if (typeof Canvas !== 'undefined' && Canvas.isUserCreated && Canvas.isUserCreated(annotationId)) {
-      const updatedFields = {
+      Canvas.updateUserAnnotation(annotationId, {
         status: action.before.status,
         sdtm_dataset: action.before.sdtm_dataset || '',
         sdtm_variable: action.before.sdtm_variable || '',
         sdtm_label: action.before.sdtm_label || '',
-      };
-      Canvas.updateUserAnnotation(annotationId, updatedFields);
-      Store.pushRedo(action);
+      });
       Store.selectedId = annotationId;
-
       await _refreshAfterUpdate({
         reopenPanel: true,
         reloadSuggestions: false,
@@ -872,10 +875,7 @@ await _refreshAfterUpdate({
 
     const ok = await _applySnapshot(action.before);
     if (!ok) return;
-
-    Store.pushRedo(action);
-    Store.selectedId = action.before.annotation_id;
-
+    Store.selectedId = annotationId;
     await _refreshAfterUpdate({
       reopenPanel: true,
       reloadSuggestions: false,
@@ -885,20 +885,16 @@ await _refreshAfterUpdate({
     });
   }
 
-  async function redo() {
-    const action = Store.popRedo();
-    if (!action) return;
+  // Called by Canvas.redoGeometry() for EditPanel-owned action types.
+  async function redoAction(action) {
     if (action.type === 'dataset-chip-edit') {
       const chipId = action.after.annotation_id;
       const chipRecord = (Store.annotations || []).find(r => r.annotation_id === chipId);
-
       if (chipRecord && typeof Canvas !== 'undefined' && Canvas.updateDatasetChip) {
         const restored = Canvas.updateDatasetChip(chipRecord, {
           sdtm_dataset: action.after.sdtm_dataset || '',
           full_name: action.after.full_name || _extractFullForm(action.after.sdtm_label || ''),
         });
-
-        Store.pushHistory(action);
         if (restored) {
           Store.selectedId = restored.annotation_id;
           await openDatasetChip(restored);
@@ -911,7 +907,13 @@ await _refreshAfterUpdate({
       const ok = await _applyDatasetColourSnapshot(action.after);
       if (!ok) return;
 
-      Store.pushHistory(action);
+      if (typeof Canvas !== 'undefined' && Canvas.updateFormColour) {
+        Canvas.updateFormColour(
+          String(action.after.form_code || '').toUpperCase(),
+          String(action.after.dataset || '').toUpperCase(),
+          action.after.colour || ''
+        );
+      }
 
       if (action.after.mode === 'dataset-chip') {
         Store.selectedId = `datasetchip::${String(action.after.form_code).toUpperCase()}::${String(action.after.dataset).toUpperCase()}`;
@@ -929,19 +931,16 @@ await _refreshAfterUpdate({
       return;
     }
 
-    // For user-created annotations, update locally
-    const annotationId = action.after.annotation_id;
+    // Generic field edit
+    const annotationId = action.after?.annotation_id;
     if (typeof Canvas !== 'undefined' && Canvas.isUserCreated && Canvas.isUserCreated(annotationId)) {
-      const updatedFields = {
+      Canvas.updateUserAnnotation(annotationId, {
         status: action.after.status,
         sdtm_dataset: action.after.sdtm_dataset || '',
         sdtm_variable: action.after.sdtm_variable || '',
         sdtm_label: action.after.sdtm_label || '',
-      };
-      Canvas.updateUserAnnotation(annotationId, updatedFields);
-      Store.pushHistory(action);
+      });
       Store.selectedId = annotationId;
-
       await _refreshAfterUpdate({
         reopenPanel: true,
         reloadSuggestions: false,
@@ -954,10 +953,7 @@ await _refreshAfterUpdate({
 
     const ok = await _applySnapshot(action.after);
     if (!ok) return;
-
-    Store.pushHistory(action);
-    Store.selectedId = action.after.annotation_id;
-
+    Store.selectedId = annotationId;
     await _refreshAfterUpdate({
       reopenPanel: true,
       reloadSuggestions: false,
@@ -1089,5 +1085,7 @@ await _refreshAfterUpdate({
     close,
     undo,
     redo,
+    undoAction,
+    redoAction,
   };
 })();

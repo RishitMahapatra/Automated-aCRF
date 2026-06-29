@@ -155,6 +155,12 @@ async function undoGeometry() {
     await loadPage(Store.currentPage);
     if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
     return;
+  } else {
+    // EditPanel-owned action types (dataset-colour, dataset-chip-edit, field edits)
+    if (typeof EditPanel !== 'undefined' && EditPanel.undoAction) {
+      await EditPanel.undoAction(action);
+    }
+    return;
   }
 
   _refreshAnnotationLayer();
@@ -234,6 +240,12 @@ async function redoGeometry() {
     await loadPage(Store.currentPage);
     if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
     return;
+  } else {
+    // EditPanel-owned action types (dataset-colour, dataset-chip-edit, field edits)
+    if (typeof EditPanel !== 'undefined' && EditPanel.redoAction) {
+      await EditPanel.redoAction(action);
+    }
+    return;
   }
 
   _refreshAnnotationLayer();
@@ -274,22 +286,14 @@ function _bindGeometryUndoRedo() {
     if (e.key.toLowerCase() === 'z' && !e.shiftKey) {
       e.preventDefault();
       e.stopPropagation();
-      if (geometryUndoStack.length > 0) {
-        await undoGeometry();
-      } else if (typeof EditPanel !== 'undefined' && EditPanel.undo) {
-        await EditPanel.undo();
-      }
+      await undoGeometry();
     } else if (
       e.key.toLowerCase() === 'y' ||
       (e.key.toLowerCase() === 'z' && e.shiftKey)
     ) {
       e.preventDefault();
       e.stopPropagation();
-      if (geometryRedoStack.length > 0) {
-        await redoGeometry();
-      } else if (typeof EditPanel !== 'undefined' && EditPanel.redo) {
-        await EditPanel.redo();
-      }
+      await redoGeometry();
     }
   }, true);
 }
