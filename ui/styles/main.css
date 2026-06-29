@@ -4394,12 +4394,13 @@ body.theme-light .theme-toggle-btn .theme-icon-moon {
   object-fit: fill;
 }
 
-/* annotation label font scales with zoom via CSS variable set in applyZoom() */
+/* annotation label font scales with zoom — 12pt CDISC standard
+   25px = 12pt at 150 DPI (12 × 150/72 ≈ 25); --zoom-scale default 0.5 matches 50% default zoom */
 #pdf-page-wrap .ann-box-label {
-  font-size: calc(7px * var(--zoom-scale, 0.5));
+  font-size: calc(25px * var(--zoom-scale, 0.5));
 }
 
-/* dataset chip font also scales */
+/* dataset chip font — same 12pt standard */
 #pdf-page-wrap .ann-chip {
-  font-size: calc(11px * var(--zoom-scale, 0.5)) !important;
+  font-size: calc(25px * var(--zoom-scale, 0.5)) !important;
 }

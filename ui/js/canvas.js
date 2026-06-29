@@ -969,7 +969,7 @@ function updateDatasetChip(chipRecord, fields = {}) {
     const annotationId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
 
     const label = `${datasetRaw}.${variableRaw}`;
-    const fontSizePts = 7.0;
+    const fontSizePts = 12.0;
     const padX = 6.0;
     const padY = 5.0;
     const textWidthPts = Math.max(20, 0.60 * fontSizePts * label.length + 3.0);
@@ -1151,7 +1151,7 @@ function updateDatasetChip(chipRecord, fields = {}) {
     const formCode = (first.form_code || 'UNKNOWN').toUpperCase();
 
     const annotationId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    const fontSizePts = 7.0;
+    const fontSizePts = 12.0;
     const padX = 6.0;
     const padY = 5.0;
     const textWidthPts = Math.max(20, 0.60 * fontSizePts * displayLabel.length + 3.0);
@@ -2125,7 +2125,7 @@ function _persistDatasetChipVisualState(rec, box) {
     const y0 = parseFloat(rec.y0_pts) || 0;
     const y1 = parseFloat(rec.y1_pts) || 0;
 
-    const fontSizePts = 7.0;
+    const fontSizePts = 12.0;
     const padX = 6.0;
     const padY = 5.0;
     const textWidthPts = Math.max(20, 0.60 * fontSizePts * (label || '').length + 3.0);
