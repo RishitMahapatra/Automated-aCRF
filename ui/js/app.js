@@ -103,14 +103,14 @@ async function _captureAllPagesForExport() {
 
   const originalPage = Store.currentPage;
   const originalZoom = Number(Store.zoomPct || 100);
-  const images = [];
+  const pageData = [];
 
   try {
-    // Export at stable zoom for consistent capture
+    // Render at 100% zoom so CSS font-size = 25px = 12pt at 150 DPI
     if (Store.setZoom && typeof Canvas !== 'undefined' && Canvas.applyZoom) {
       Store.setZoom(100);
       Canvas.applyZoom();
-      await _sleep(120);
+      await _sleep(150);
     }
 
     for (let page = 1; page <= Store.pageCount; page++) {
@@ -121,13 +121,20 @@ async function _captureAllPagesForExport() {
       }
 
       // Let image + annotations + chips fully render
-      await _sleep(250);
+      await _sleep(300);
 
       const img = await _captureCurrentRenderedPage();
-      images.push(img);
+
+      // Store original PDF page dimensions in points alongside the image so
+      // the backend can create correctly-sized PDF pages (not pixel-sized).
+      pageData.push({
+        image: img,
+        widthPts: Store.pageWidthPts || 0,
+        heightPts: Store.pageHeightPts || 0,
+      });
     }
 
-    return images;
+    return pageData;
   } finally {
     if (typeof Canvas !== 'undefined' && Canvas.loadPage && originalPage) {
       await Canvas.loadPage(originalPage);
@@ -156,13 +163,13 @@ function _bindExportButton() {
       const oldText = btn.textContent;
       btn.textContent = 'Exporting...';
 
-      const pageImages = await _captureAllPagesForExport();
-      if (!pageImages || !pageImages.length) {
+      const pageData = await _captureAllPagesForExport();
+      if (!pageData || !pageData.length) {
         alert('No page images captured for export.');
         return;
       }
 
-      const res = await window.pywebview.api.export_pdf_from_images(pageImages);
+      const res = await window.pywebview.api.export_pdf_from_images(pageData);
 
       if (res && res.ok) {
         alert('PDF exported successfully:\n' + res.path);

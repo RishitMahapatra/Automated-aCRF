@@ -57,10 +57,17 @@ class ExportBridge:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
-    def export_from_page_images(self, page_images: list[str], out_path: str | Path):
+    def export_from_page_images(self, page_images: list, out_path: str | Path):
         """
-        Build a PDF from a list of PNG data URLs or raw base64 PNG strings.
-        Each image becomes one full PDF page.
+        Build a PDF from page data.
+
+        Each entry in page_images may be:
+          - A dict {"image": <data-url or base64>, "widthPts": float, "heightPts": float}
+          - A plain string (data-url or base64) — legacy format, pixel dims used as fallback
+
+        When widthPts/heightPts are provided they are used as the PDF page size so the
+        output matches the original document dimensions. The high-res screenshot is then
+        fitted into that page, yielding ~600 DPI quality with correct physical dimensions.
         """
         doc = fitz.open()
         try:
@@ -68,7 +75,16 @@ class ExportBridge:
                 if not item:
                     continue
 
-                data = str(item)
+                if isinstance(item, dict):
+                    raw = item.get("image") or item.get("data") or ""
+                    width_pts = float(item.get("widthPts") or 0)
+                    height_pts = float(item.get("heightPts") or 0)
+                else:
+                    raw = str(item)
+                    width_pts = 0.0
+                    height_pts = 0.0
+
+                data = str(raw)
                 if data.startswith("data:image"):
                     b64 = data.split(",", 1)[1]
                 else:
@@ -76,12 +92,15 @@ class ExportBridge:
 
                 img_bytes = base64.b64decode(b64)
                 pil_img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+                img_w_px, img_h_px = pil_img.size
 
-                width_px, height_px = pil_img.size
-
-                # 72 dpi logical page size from pixel dimensions
-                page_width = float(width_px)
-                page_height = float(height_px)
+                if width_pts > 0 and height_pts > 0:
+                    page_width = width_pts
+                    page_height = height_pts
+                else:
+                    # Fallback: preserve aspect ratio at a sensible letter-size width
+                    page_width = 612.0
+                    page_height = 612.0 * img_h_px / img_w_px if img_w_px else 792.0
 
                 page = doc.new_page(width=page_width, height=page_height)
                 page.insert_image(
