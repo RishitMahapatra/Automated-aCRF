@@ -12,11 +12,14 @@ let _dirty = false;
 function _markDirty() {
   _dirty = true;
   document.getElementById('dirty-dot')?.classList.remove('hidden');
+  // Mirror to Python so the closing event handler can read it without evaluate_js
+  window.pywebview?.api?.set_dirty?.(true);
 }
 
 function _clearDirty() {
   _dirty = false;
   document.getElementById('dirty-dot')?.classList.add('hidden');
+  window.pywebview?.api?.set_dirty?.(false);
 }
 
 window._markSessionDirty  = _markDirty;

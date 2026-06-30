@@ -32,6 +32,7 @@ class Api:
         self._acrf_path: Path | None = None
         self._pipeline = PipelineBridge()
         self._export = ExportBridge()
+        self._is_dirty: bool = False  # mirrored from JS; read by on_closing without evaluate_js
 
     # ==========================================================================
     # FILE UPLOAD
@@ -649,6 +650,14 @@ class Api:
     # ==========================================================================
     # WINDOW LIFECYCLE
     # ==========================================================================
+
+    def set_dirty(self, dirty):
+        """
+        JS calls this whenever the dirty state changes so Python knows it
+        without having to call evaluate_js inside the closing event handler
+        (which would deadlock on the UI thread).
+        """
+        self._is_dirty = bool(dirty)
 
     def confirm_close(self):
         """

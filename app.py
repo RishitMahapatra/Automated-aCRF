@@ -6,6 +6,7 @@ Run with: python app.py
 """
 
 import sys
+import threading
 from pathlib import Path
 
 ROOT = Path(__file__).parent.resolve()
@@ -36,22 +37,29 @@ def main():
     api._window = window
 
     def on_closing():
-        """Intercept window close; show a JS save dialog if the session is dirty."""
-        try:
-            is_dirty = window.evaluate_js(
-                'typeof window._isSessionDirty === "function" && window._isSessionDirty() === true'
-            )
-            if not is_dirty:
-                return True  # nothing to save — allow close immediately
-            # Show the custom JS close-confirm dialog and cancel the native close.
-            # The dialog's "Save & Close" / "Discard & Close" buttons will call
-            # api.confirm_close() which destroys the window.
-            window.evaluate_js(
-                'typeof window._showCloseDialog === "function" && window._showCloseDialog()'
-            )
-            return False  # cancel native close; JS dialog takes over
-        except Exception:
-            return True  # if JS check fails just allow close
+        """Intercept window close; show a JS save dialog if the session is dirty.
+
+        IMPORTANT: evaluate_js() dispatches to the UI/main thread.  The closing
+        event itself fires on the UI thread, so calling evaluate_js() here would
+        deadlock — the UI thread would wait for itself.  Fixes:
+          1. Dirty state is mirrored to api._is_dirty by JS (no evaluate_js needed
+             for the check).
+          2. The dialog is shown from a *background thread* so this handler can
+             return False immediately without blocking.
+        """
+        if not api._is_dirty:
+            return True  # nothing to save — let the window close
+
+        def _show_dialog():
+            try:
+                window.evaluate_js(
+                    'typeof window._showCloseDialog === "function" && window._showCloseDialog()'
+                )
+            except Exception as e:
+                print(f"[closing] evaluate_js error: {e}")
+
+        threading.Thread(target=_show_dialog, daemon=True).start()
+        return False  # cancel native close; JS dialog calls api.confirm_close()
 
     window.events.closing += on_closing
 
