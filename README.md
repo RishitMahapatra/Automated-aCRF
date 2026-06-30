@@ -1,8 +1,18 @@
-# CRF Annotation Editor
 
-## Documentation 
-Full documentation is available at: 
-**[https://rishitmahapatra.github.io/Automated-aCRF/](https://rishitmahapatra.github.io/Automated-aCRF/)**
+<h1 align="center"> CRF Annotation Editor </h1>
+<p align="center">
+  <b>Automated CRF Annotation Editor</b><br>
+  Full documentation is available at:<br>
+  <strong><a href="https://rishitmahapatra.github.io/Automated-aCRF/">https://rishitmahapatra.github.io/Automated-aCRF/</a></strong>
+</p>
+
+<p align="center">
+
+  ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge\&logo=python\&logoColor=white)
+   ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
+</p>
+
+
 
 ## Important References
 * Full step by step installation guide is present at: **[https://github.com/RishitMahapatra/Automated-aCRF/blob/main/INSTALLATION_GUIDE.md](https://github.com/RishitMahapatra/Automated-aCRF/blob/main/INSTALLATION_GUIDE.md)**
