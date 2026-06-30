@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Automated aCRF — Documentation</title>
+  <meta name="description" content="Official documentation for the CRF Annotation Editor — installation, usage, keyboard shortcuts, and reference guide." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Reading progress bar -->
+  <div id="progress-bar" class="progress-bar" role="progressbar" aria-hidden="true"></div>
+
+  <!-- Mobile overlay -->
+  <div id="sidebar-overlay" class="sidebar-overlay"></div>
+
+  <!-- ── Mobile top bar ─────────────────────────────────────────────────── -->
+  <header class="mobile-topbar">
+    <button id="hamburger" class="hamburger" aria-label="Open navigation">
+      <span></span><span></span><span></span>
+    </button>
+    <span class="mobile-title">aCRF Docs</span>
+  </header>
+
+  <!-- ── Sidebar navigation ─────────────────────────────────────────────── -->
+  <nav id="sidebar" class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="4" y="2" width="20" height="26" rx="3" fill="url(#lg1)" opacity="0.9"/>
+          <rect x="8" y="8" width="12" height="2" rx="1" fill="#fff" opacity="0.8"/>
+          <rect x="8" y="13" width="9" height="2" rx="1" fill="#fff" opacity="0.6"/>
+          <rect x="8" y="18" width="6" height="2" rx="1" fill="#fff" opacity="0.4"/>
+          <circle cx="23" cy="23" r="7" fill="url(#lg2)"/>
+          <path d="M20 23 l2 2 4-4" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <defs>
+            <linearGradient id="lg1" x1="4" y1="2" x2="24" y2="28" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#A374FF"/>
+              <stop offset="1" stop-color="#3DB7FF"/>
+            </linearGradient>
+            <linearGradient id="lg2" x1="16" y1="16" x2="30" y2="30" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#00E676"/>
+              <stop offset="1" stop-color="#3DB7FF"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+      <div>
+        <div class="logo-name">aCRF Editor</div>
+        <div class="logo-version">v1.0 · Docs</div>
+      </div>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-label">Getting Started</div>
+      <a class="nav-link" href="#overview">Overview</a>
+      <a class="nav-link" href="#installation">Installation</a>
+      <a class="nav-link" href="#excel-mapping">Excel Mapping File</a>
+      <a class="nav-link" href="#quick-start">Quick Start</a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-label">Interface</div>
+      <a class="nav-link" href="#interface-overview">Interface Overview</a>
+      <a class="nav-link" href="#side-panel">Side Panel</a>
+      <a class="nav-link" href="#canvas">PDF Canvas</a>
+      <a class="nav-link" href="#edit-panel">Edit Panel</a>
+      <a class="nav-link" href="#review-queue">Review Queue</a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-label">Workflow</div>
+      <a class="nav-link" href="#pipeline">Running the Pipeline</a>
+      <a class="nav-link" href="#annotations">Working with Annotations</a>
+      <a class="nav-link" href="#export">Exporting</a>
+      <a class="nav-link" href="#undo-redo">Undo / Redo</a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-label">Reference</div>
+      <a class="nav-link" href="#status-reference">Status Reference</a>
+      <a class="nav-link" href="#keyboard-shortcuts">Keyboard Shortcuts</a>
+      <a class="nav-link" href="#troubleshooting">Troubleshooting</a>
+    </div>
+  </nav>
+
+  <!-- ── Main content ───────────────────────────────────────────────────── -->
+  <main class="main-content">
+
+    <!-- ══ HERO ══════════════════════════════════════════════════════════ -->
+    <section id="overview" class="section hero-section">
+      <div class="hero-badge">Documentation v1.0</div>
+      <h1 class="hero-title">CRF Annotation Editor</h1>
+      <p class="hero-subtitle">
+        A desktop tool that automatically extracts fields from clinical CRF PDFs, maps them to
+        SDTM variables using a RAW-to-SDTM Excel mapping workbook, and lets you review,
+        correct, and export fully annotated PDFs — all from a native window.
+      </p>
+
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-icon" style="background: linear-gradient(135deg,#A374FF22,#A374FF44);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#A374FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+            </svg>
+          </div>
+          <h3>PDF Pipeline</h3>
+          <p>Five-step automated pipeline extracts CRF fields, matches them against SDTM mappings, and annotates your PDF with coloured overlay boxes.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background: linear-gradient(135deg,#3DB7FF22,#3DB7FF44);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#3DB7FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+          </div>
+          <h3>Confidence Scoring</h3>
+          <p>TF-IDF–based engine scores each annotation: ≥ 80 % auto-resolves, 60–79 % flags for review, below 60 % marks unmapped.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background: linear-gradient(135deg,#00E67622,#00E67644);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#00E676" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </div>
+          <h3>Manual Review</h3>
+          <p>Drag to draw new boxes, right-click to edit, add or remove from the review queue, and apply SDTM labels with the AI-powered suggestion panel.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background: linear-gradient(135deg,#FF8A0022,#FF8A0044);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#FF8A00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+          </div>
+          <h3>Analytics</h3>
+          <p>Live ring-chart shows resolution percentage. Sidebar counters display per-status counts for every domain — updated after every action.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background: linear-gradient(135deg,#E0525222,#E0525244);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#E05252" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+          </div>
+          <h3>PDF Export</h3>
+          <p>Exports a pixel-perfect annotated PDF with all annotation boxes and SDTM labels rendered directly onto the original CRF pages.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background: linear-gradient(135deg,#A374FF22,#3DB7FF44);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#A374FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
+          </div>
+          <h3>Session Persistence</h3>
+          <p>All annotations, undo history, and pipeline data are persisted per session under <code>outputs/&lt;session_id&gt;/</code>. Sessions are isolated and reloadable.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ INSTALLATION ═══════════════════════════════════════════════════ -->
+    <section id="installation" class="section">
+      <h2 class="section-title">Installation</h2>
+      <p class="section-intro">The editor runs as a native Python desktop application. Follow these steps to get it running from source.</p>
+
+      <h3>System Requirements</h3>
+      <table>
+        <thead>
+          <tr><th>Component</th><th>Requirement</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Python</td><td>3.10 or later (3.11 recommended)</td></tr>
+          <tr><td>Operating System</td><td>Windows 10/11 · macOS 12+ · Linux (GTK3)</td></tr>
+          <tr><td>RAM</td><td>4 GB minimum, 8 GB recommended</td></tr>
+          <tr><td>Disk</td><td>~500 MB free (Python env + dependencies)</td></tr>
+          <tr><td>Display</td><td>1024 × 700 px minimum (1440 × 900 recommended)</td></tr>
+          <tr><td>WebView backend</td><td>Windows: Edge WebView2 · macOS: WKWebView · Linux: GTK WebKit2</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="margin-top:2rem;">Step 1 — Clone the repository</h3>
+      <div class="code-block">
+        <pre><code>git clone https://github.com/rishitmahapatra/automated-acrf.git
+cd automated-acrf</code></pre>
+      </div>
+
+      <h3>Step 2 — Create and activate a virtual environment</h3>
+      <div class="code-block">
+        <pre><code># Create virtual environment
+python -m venv .venv
+
+# Activate — Windows
+.venv\Scripts\activate
+
+# Activate — macOS / Linux
+source .venv/bin/activate</code></pre>
+      </div>
+
+      <h3>Step 3 — Install Python dependencies</h3>
+      <div class="code-block">
+        <pre><code>pip install pymupdf pywebview openpyxl pandas Pillow numpy scikit-learn</code></pre>
+      </div>
+
+      <table>
+        <thead><tr><th>Package</th><th>pip Name</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td>PyMuPDF</td><td><code>pymupdf</code></td><td>Parses and renders PDF pages; draws annotation boxes</td></tr>
+          <tr><td>pywebview</td><td><code>pywebview</code></td><td>Creates the native desktop window around the web frontend</td></tr>
+          <tr><td>openpyxl</td><td><code>openpyxl</code></td><td>Reads the Excel mapping file</td></tr>
+          <tr><td>pandas</td><td><code>pandas</code></td><td>Loads and processes mapping table data from Excel</td></tr>
+          <tr><td>Pillow</td><td><code>Pillow</code></td><td>Image processing for page captures</td></tr>
+          <tr><td>NumPy</td><td><code>numpy</code></td><td>Numerical operations for the suggestion engine</td></tr>
+          <tr><td>scikit-learn</td><td><code>scikit-learn</code></td><td>TF-IDF vectoriser + cosine similarity for suggestions</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="margin-top:2rem;">Step 4 — Linux-specific: GTK WebKit packages</h3>
+      <p>PyWebView on Linux requires GTK3 + WebKit2GTK. Install for your distro:</p>
+      <div class="code-block">
+        <pre><code># Ubuntu / Debian
+sudo apt-get install python3-gi python3-gi-cairo gir1.2-gtk-3.0 \
+  gir1.2-webkit2-4.1 libgtk-3-dev libwebkit2gtk-4.1-dev
+
+# Fedora / RHEL
+sudo dnf install python3-gobject gtk3 webkit2gtk4.1
+
+# Arch Linux
+sudo pacman -S python-gobject gtk3 webkit2gtk-4.1</code></pre>
+      </div>
+
+      <h3>Step 5 — Verify your setup</h3>
+      <div class="code-block">
+        <pre><code>python -c "
+import fitz, webview, openpyxl, pandas, PIL, numpy
+from sklearn.feature_extraction.text import TfidfVectorizer
+from pathlib import Path
+excel = Path('assets/RAW_SDTM_Mappings.xlsx')
+print('✓ All imports OK')
+print('✓ Excel file found:', excel.exists())
+"</code></pre>
+      </div>
+
+      <div class="callout callout-info">
+        <strong>Windows:</strong> Edge WebView2 Runtime is pre-installed on Windows 11. Download it for Windows 10 from the Microsoft website. Do <em>not</em> run from inside WSL — WebView2 does not work in WSL.
+      </div>
+
+      <h3>Step 6 — Launch</h3>
+      <div class="code-block">
+        <pre><code>python app.py</code></pre>
+      </div>
+      <p>A native window (1440 × 900 px, resizable) titled <strong>"CRF Annotation Editor"</strong> opens. The minimum enforced window size is 1024 × 700 px.</p>
+    </section>
+
+    <!-- ══ EXCEL MAPPING FILE ════════════════════════════════════════════ -->
+    <section id="excel-mapping" class="section">
+      <h2 class="section-title">Excel Mapping File</h2>
+
+      <div class="callout callout-warn">
+        <strong>Required.</strong> The pipeline will not run without <code>assets/RAW_SDTM_Mappings.xlsx</code>. Place this file before launching the application.
+      </div>
+
+      <p>The annotation pipeline relies on a <strong>RAW-to-SDTM variable mapping workbook</strong> that defines how raw CRF field names are translated into standardised SDTM variables. The file must be located at exactly:</p>
+
+      <div class="code-block">
+        <pre><code>Automated-aCRF/
+└── assets/
+    └── RAW_SDTM_Mappings.xlsx   ← exact filename, exact location</code></pre>
+      </div>
+
+      <h3>Supported Formats</h3>
+
+      <div class="region-block" style="border-color:#A374FF55; background:linear-gradient(120deg,#A374FF08,#07091C);">
+        <div class="region-title" style="color:#A374FF;">Format A — One sheet per SDTM domain</div>
+        <p>Each domain has its own sheet named by its domain code. Recognised domain codes:</p>
+        <div class="pill-row">
+          <span class="status-pill" style="background:#A374FF22;color:#A374FF;">CM</span>
+          <span class="status-pill" style="background:#A374FF22;color:#A374FF;">AE</span>
+          <span class="status-pill" style="background:#A374FF22;color:#A374FF;">DM</span>
+          <span class="status-pill" style="background:#A374FF22;color:#A374FF;">DS</span>
+          <span class="status-pill" style="background:#A374FF22;color:#A374FF;">EX</span>
+          <span class="status-pill" style="background:#A374FF22;color:#A374FF;">LB</span>
+          <span class="status-pill" style="background:#A374FF22;color:#A374FF;">VS</span>
+          <span class="status-pill" style="background:#A374FF22;color:#A374FF;">MH</span>
+          <span class="status-pill" style="background:#A374FF22;color:#A374FF;">PE</span>
+          <span class="status-pill" style="background:#A374FF22;color:#A374FF;">QS</span>
+          <span class="status-pill" style="background:#A374FF22;color:#A374FF;">SC</span>
+          <span class="status-pill" style="background:#A374FF22;color:#A374FF;">SU</span>
+          <span class="status-pill" style="background:#A374FF22;color:#A374FF;">EG</span>
+          <span class="status-pill" style="background:#A374FF22;color:#A374FF;">FA</span>
+          <span class="status-pill" style="background:#A374FF22;color:#A374FF;">PR</span>
+        </div>
+      </div>
+
+      <div class="region-block" style="border-color:#3DB7FF55; background:linear-gradient(120deg,#3DB7FF08,#07091C); margin-top:1rem;">
+        <div class="region-title" style="color:#3DB7FF;">Format B — Single consolidated sheet</div>
+        <p>One sheet named <strong>"RAW-SDTM Mappings"</strong> containing all domains in a single table. The pipeline auto-detects which format is present.</p>
+      </div>
+
+      <h3 style="margin-top:2rem;">Required Columns</h3>
+      <p>Both formats must contain these five columns (exact names, case-insensitive; column order does not matter):</p>
+
+      <table>
+        <thead>
+          <tr><th>Column Name</th><th>Description</th><th>Example</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>Source Dataset</code></td><td>The raw/source dataset name</td><td>CONMED</td></tr>
+          <tr><td><code>Source Variable</code></td><td>The raw CRF field name</td><td>CMTRT</td></tr>
+          <tr><td><code>SDTM Dataset</code></td><td>The target SDTM domain code</td><td>CM</td></tr>
+          <tr><td><code>SDTM Variable</code></td><td>The target SDTM variable name</td><td>CMTRT</td></tr>
+          <tr><td><code>SDTM Label</code></td><td>Human-readable label</td><td>Concomitant Medication Treatment</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="margin-top:2rem;">Example Rows</h3>
+      <table>
+        <thead>
+          <tr><th>Source Dataset</th><th>Source Variable</th><th>SDTM Dataset</th><th>SDTM Variable</th><th>SDTM Label</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>CONMED</td><td>CMTRT</td><td>CM</td><td>CMTRT</td><td>Concomitant Medication Treatment</td></tr>
+          <tr><td>CONMED</td><td>CMDOSE</td><td>CM</td><td>CMDOSE</td><td>Dose per Administration</td></tr>
+          <tr><td>ADVERSE</td><td>AETERM</td><td>AE</td><td>AETERM</td><td>Reported Term for Adverse Event</td></tr>
+          <tr><td>DEMOG</td><td>AGE</td><td>DM</td><td>AGE</td><td>Age</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout callout-tip" style="margin-top:2rem;">
+        <strong>Custom column names?</strong> Edit the constants in <code>config.py</code>:
+        <div class="code-block" style="margin-top:.75rem;">
+          <pre><code>COL_SRC_DATASET  = "Source Dataset"
+COL_SRC_VARIABLE = "Source Variable"
+COL_SDTM_DATASET = "SDTM Dataset"
+COL_SDTM_VAR     = "SDTM Variable"
+COL_SDTM_LABEL   = "SDTM Label"</code></pre>
+        </div>
+      </div>
+
+      <div class="callout callout-info" style="margin-top:1.5rem;">
+        <strong>Upcoming:</strong> Automatic mapping extraction from sponsor mapping documents is under active development. Once shipped, you'll be able to upload your mapping spec directly — no manual reformatting required.
+      </div>
+    </section>
+
+    <!-- ══ QUICK START ════════════════════════════════════════════════════ -->
+    <section id="quick-start" class="section">
+      <h2 class="section-title">Quick Start</h2>
+      <p class="section-intro">From zero to an annotated PDF in five steps.</p>
+
+      <div class="steps">
+        <div class="step-card">
+          <div class="step-number">01</div>
+          <div class="step-body">
+            <h3>Place the mapping file</h3>
+            <p>Copy your <code>RAW_SDTM_Mappings.xlsx</code> into <code>assets/</code>. Without it, the pipeline cannot run.</p>
+          </div>
+        </div>
+        <div class="step-card">
+          <div class="step-number">02</div>
+          <div class="step-body">
+            <h3>Launch the application</h3>
+            <p>Run <code>python app.py</code>. The native window opens at 1440 × 900 px.</p>
+          </div>
+        </div>
+        <div class="step-card">
+          <div class="step-number">03</div>
+          <div class="step-body">
+            <h3>Upload your CRF PDF</h3>
+            <p>Click <strong>"Upload PDF"</strong> in the side panel (or drag-and-drop). The PDF is rendered page-by-page in the central canvas.</p>
+          </div>
+        </div>
+        <div class="step-card">
+          <div class="step-number">04</div>
+          <div class="step-body">
+            <h3>Run the pipeline</h3>
+            <p>Click <strong>"Run Pipeline"</strong>. The five-step extraction and annotation pipeline runs automatically. A progress indicator appears during processing.</p>
+          </div>
+        </div>
+        <div class="step-card">
+          <div class="step-number">05</div>
+          <div class="step-body">
+            <h3>Review &amp; Export</h3>
+            <p>Work through the Review Queue, correct any <span class="status-pill" style="background:#FF8A0022;color:#FF8A00;font-size:.75rem;padding:.15rem .5rem;">NEEDS_REVIEW</span> or <span class="status-pill" style="background:#E0525222;color:#E05252;font-size:.75rem;padding:.15rem .5rem;">UNMAPPED</span> items, then click <strong>"Export PDF"</strong>.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ INTERFACE OVERVIEW ════════════════════════════════════════════ -->
+    <section id="interface-overview" class="section">
+      <h2 class="section-title">Interface Overview</h2>
+      <p class="section-intro">The application window is divided into three main zones — the Side Panel on the left, the PDF Canvas in the centre, and the Edit Panel on the right.</p>
+
+      <div class="interface-diagram">
+        <div class="iface-zone iface-left">
+          <div class="iface-label">Side Panel</div>
+          <div class="iface-sub">Upload · Pipeline · Analytics · Review Queue · Export</div>
+        </div>
+        <div class="iface-zone iface-center">
+          <div class="iface-label">PDF Canvas</div>
+          <div class="iface-sub">Page view · Annotation overlays · Drag to draw · Right-click to edit · Dataset chips</div>
+        </div>
+        <div class="iface-zone iface-right">
+          <div class="iface-label">Edit Panel</div>
+          <div class="iface-sub">SDTM fields · AI suggestions · Action buttons</div>
+        </div>
+      </div>
+
+      <h3>Colour Coding</h3>
+      <p>Every annotation box on the canvas is colour-coded by its status:</p>
+
+      <div class="colour-swatches">
+        <div class="swatch-item">
+          <div class="swatch" style="background:#00E676;"></div>
+          <div><strong>Green</strong><br/><span class="dim">RESOLVED / USER_CORRECTED — mapping confirmed</span></div>
+        </div>
+        <div class="swatch-item">
+          <div class="swatch" style="background:#FF8A00;"></div>
+          <div><strong>Amber</strong><br/><span class="dim">NEEDS_REVIEW — confidence 60–79 %, in the active queue</span></div>
+        </div>
+        <div class="swatch-item">
+          <div class="swatch" style="background:#E05252;"></div>
+          <div><strong>Red</strong><br/><span class="dim">UNMAPPED — confidence &lt; 60 %, no match found</span></div>
+        </div>
+        <div class="swatch-item">
+          <div class="swatch" style="background:#888;"></div>
+          <div><strong>Grey</strong><br/><span class="dim">NOT_SUBMITTED — annotation exists but is not part of this submission</span></div>
+        </div>
+        <div class="swatch-item">
+          <div class="swatch" style="background:#A374FF;"></div>
+          <div><strong>Violet</strong><br/><span class="dim">User-drawn annotation — newly created, not yet submitted to the pipeline</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ SIDE PANEL ════════════════════════════════════════════════════ -->
+    <section id="side-panel" class="section">
+      <h2 class="section-title">Side Panel</h2>
+      <p class="section-intro">The collapsible left sidebar contains all session controls, organised into tabs.</p>
+
+      <div class="tabs-demo">
+        <div class="tab-block">
+          <div class="tab-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Upload
+          </div>
+          <div class="tab-content">
+            <p>Click <strong>"Upload PDF"</strong> or drag-and-drop a PDF file. The canvas renders the first page immediately. File name and page count are shown.</p>
+          </div>
+        </div>
+
+        <div class="tab-block">
+          <div class="tab-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 2 13 9 20 9"/><path d="M20 9L13 2H6C4.9 2 4 2.9 4 4v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V9z"/></svg>
+            Pipeline
+          </div>
+          <div class="tab-content">
+            <p>Click <strong>"Run Pipeline"</strong> to execute all five pipeline steps: text extraction, field identification, mapping lookup, confidence scoring, and box annotation. Progress is shown during the run.</p>
+            <p>Once complete, a summary table lists every field with its matched SDTM variable and confidence score.</p>
+          </div>
+        </div>
+
+        <div class="tab-block">
+          <div class="tab-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Analytics
+          </div>
+          <div class="tab-content">
+            <p>Displays a live animated ring chart showing the overall resolution percentage. Below it, per-status counters show the breakdown across RESOLVED, NEEDS_REVIEW, UNMAPPED, USER_CORRECTED, and NOT_SUBMITTED. The ring resets and animates from zero every time the percentage changes.</p>
+          </div>
+        </div>
+
+        <div class="tab-block">
+          <div class="tab-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            Review Queue
+          </div>
+          <div class="tab-content">
+            <p>Contains two sub-lists: <strong>Active</strong> (UNMAPPED + NEEDS_REVIEW) and <strong>Resolved</strong> (USER_CORRECTED + NOT_SUBMITTED). Click any row to jump to that annotation on the canvas. Right-click a row for context actions.</p>
+          </div>
+        </div>
+
+        <div class="tab-block">
+          <div class="tab-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export
+          </div>
+          <div class="tab-content">
+            <p>Click <strong>"Export PDF"</strong> to render an annotated copy of your CRF. The output is saved to <code>outputs/&lt;session_id&gt;/CRF_Annotated.pdf</code>. A file-save dialog lets you choose a destination.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ CANVAS ════════════════════════════════════════════════════════ -->
+    <section id="canvas" class="section">
+      <h2 class="section-title">PDF Canvas</h2>
+      <p class="section-intro">The central pane renders the PDF page-by-page and overlays all annotation boxes. This is where you visually inspect and interact with annotations.</p>
+
+      <h3>Navigation</h3>
+      <ul class="doc-list">
+        <li>Use the <strong>page controls</strong> (arrow buttons or the page number input) at the bottom of the canvas to move between pages.</li>
+        <li>Press <kbd>←</kbd> / <kbd>→</kbd> to navigate pages via keyboard.</li>
+        <li>The current page and total page count are always visible in the status bar.</li>
+      </ul>
+
+      <h3>Annotation Boxes</h3>
+      <p>Each coloured box represents one extracted CRF field. The box label shows the SDTM variable name (e.g. <code>CM.CMTRT</code>). Hover over a box to see its full details in a tooltip.</p>
+
+      <h3>Drawing New Annotations</h3>
+      <ul class="doc-list">
+        <li>Click and drag on any blank area of the canvas to draw a new annotation box.</li>
+        <li>Release the mouse to open the Edit Panel for that new annotation.</li>
+        <li>New user-drawn annotations start as violet and are assigned a local ID starting with <code>user_</code>.</li>
+      </ul>
+
+      <h3>Right-Click Context Menu</h3>
+      <p>Right-clicking on a canvas annotation box opens the context menu with these options:</p>
+
+      <table>
+        <thead><tr><th>Option</th><th>When visible</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td>Edit</td><td>Always</td><td>Opens the Edit Panel for this annotation</td></tr>
+          <tr><td>Add to Review Queue</td><td>Not already NEEDS_REVIEW or UNMAPPED</td><td>Sets status to NEEDS_REVIEW and adds to the active queue</td></tr>
+          <tr><td>Remove from Review Queue</td><td>Status is NEEDS_REVIEW</td><td>Sets status back to UNMAPPED; removes from queue</td></tr>
+          <tr><td>Mark as Not Submitted</td><td>Status is not NOT_SUBMITTED</td><td>Flags annotation as NOT_SUBMITTED (moves to resolved list)</td></tr>
+          <tr><td>Remove Annotation</td><td>Always</td><td>Permanently deletes this annotation (undoable)</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="margin-top:2rem;">Dataset Chips</h3>
+      <p>In addition to field-level boxes, dataset-level annotation chips (<code>.ann-chip</code>) appear on the canvas for entire SDTM domains (e.g. a chip for the CM domain on a concomitant medications page). Clicking a dataset chip row in the Review Queue shakes and scrolls to the corresponding chip on the canvas.</p>
+    </section>
+
+    <!-- ══ EDIT PANEL ════════════════════════════════════════════════════ -->
+    <section id="edit-panel" class="section">
+      <h2 class="section-title">Edit Panel</h2>
+      <p class="section-intro">The right-side panel opens when you click any annotation or draw a new one. It shows all editable SDTM fields and action buttons.</p>
+
+      <h3>Fields</h3>
+      <table>
+        <thead><tr><th>Field</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>SDTM Domain</td><td>Target SDTM domain code (e.g. CM, AE, DM)</td></tr>
+          <tr><td>SDTM Variable</td><td>Target variable name within the domain (e.g. CMTRT)</td></tr>
+          <tr><td>SDTM Label</td><td>Human-readable label for the variable</td></tr>
+          <tr><td>Source Variable</td><td>Original raw field name from the CRF</td></tr>
+          <tr><td>Confidence</td><td>Match confidence score (read-only, set by the pipeline)</td></tr>
+          <tr><td>Status</td><td>Current status (editable via dropdown)</td></tr>
+          <tr><td>Notes</td><td>Free-text notes you can attach to the annotation</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="margin-top:2rem;">AI Suggestions Panel</h3>
+      <p>Below the fields, the <strong>Suggestions</strong> accordion lists the top TF-IDF–ranked SDTM variable candidates for the current raw field name. Click any suggestion to auto-fill the SDTM Domain, Variable, and Label fields instantly.</p>
+
+      <h3>Action Buttons</h3>
+      <table>
+        <thead><tr><th>Button</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td>Save</td><td>Persists the current field values and updates the annotation on the canvas</td></tr>
+          <tr><td>Add to Review Queue</td><td>Adds the annotation to the active review queue (sets NEEDS_REVIEW)</td></tr>
+          <tr><td>Remove Annotation</td><td>Deletes the annotation permanently (red button, undoable)</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout callout-tip">
+        When no annotation is selected, the Edit Panel shows an empty state with a pencil icon. Click any box on the canvas or draw a new one to activate it.
+      </div>
+    </section>
+
+    <!-- ══ REVIEW QUEUE ═══════════════════════════════════════════════════ -->
+    <section id="review-queue" class="section">
+      <h2 class="section-title">Review Queue</h2>
+      <p class="section-intro">The Review Queue (in the side panel's fourth tab) surfaces all annotations that need attention, grouped into Active and Resolved lists.</p>
+
+      <h3>Active List</h3>
+      <p>Contains annotations with status <span class="status-pill" style="background:#E0525222;color:#E05252;">UNMAPPED</span> or <span class="status-pill" style="background:#FF8A0022;color:#FF8A00;">NEEDS_REVIEW</span>. These require manual action before export.</p>
+
+      <h3>Resolved List</h3>
+      <p>Contains annotations with status <span class="status-pill" style="background:#00E67622;color:#00E676;">USER_CORRECTED</span> or <span class="status-pill" style="background:#88888822;color:#aaa;">NOT_SUBMITTED</span>. These have been handled.</p>
+
+      <h3>Row Interactions</h3>
+      <ul class="doc-list">
+        <li><strong>Click</strong> a row — jumps to that annotation on the canvas (scrolls to the page and highlights the box).</li>
+        <li><strong>Click a dataset chip row</strong> — shakes and scrolls to the corresponding dataset chip on the canvas.</li>
+        <li><strong>Right-click</strong> a row — opens a context menu with queue-specific actions.</li>
+      </ul>
+
+      <h3>Right-Click Context Menu (Queue)</h3>
+      <table>
+        <thead><tr><th>Option</th><th>When visible</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td>Edit annotation</td><td>Non-dataset rows</td><td>Opens the Edit Panel for this annotation</td></tr>
+          <tr><td>Jump to page</td><td>Always</td><td>Navigates the canvas to the page containing this annotation</td></tr>
+          <tr><td>Remove from Review Queue</td><td>NEEDS_REVIEW only</td><td>Sets status to UNMAPPED; removes from active queue</td></tr>
+          <tr><td>Mark as Not Submitted</td><td>Non-dataset rows</td><td>Moves annotation to the resolved list</td></tr>
+          <tr><td>Remove annotation</td><td>Non-dataset rows</td><td>Permanently deletes the annotation (undoable)</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ══ PIPELINE ═══════════════════════════════════════════════════════ -->
+    <section id="pipeline" class="section">
+      <h2 class="section-title">Running the Pipeline</h2>
+      <p class="section-intro">The pipeline is a five-step automated process that turns a raw CRF PDF into a fully annotated output.</p>
+
+      <div class="steps">
+        <div class="step-card">
+          <div class="step-number">1</div>
+          <div class="step-body">
+            <h3>Text Extraction</h3>
+            <p>PyMuPDF extracts all text blocks from each page of the PDF, preserving coordinates and font metadata.</p>
+          </div>
+        </div>
+        <div class="step-card">
+          <div class="step-number">2</div>
+          <div class="step-body">
+            <h3>Field Identification</h3>
+            <p>Heuristic rules segment the extracted text blocks into candidate CRF field names, labels, and values.</p>
+          </div>
+        </div>
+        <div class="step-card">
+          <div class="step-number">3</div>
+          <div class="step-body">
+            <h3>Mapping Lookup</h3>
+            <p>Each candidate field is looked up in the in-memory table built from <code>RAW_SDTM_Mappings.xlsx</code>. Exact matches are flagged immediately.</p>
+          </div>
+        </div>
+        <div class="step-card">
+          <div class="step-number">4</div>
+          <div class="step-body">
+            <h3>Confidence Scoring</h3>
+            <p>For each field, TF-IDF cosine similarity assigns a confidence score. Scores ≥ 80 % → RESOLVED; 60–79 % → NEEDS_REVIEW; &lt; 60 % → UNMAPPED.</p>
+          </div>
+        </div>
+        <div class="step-card">
+          <div class="step-number">5</div>
+          <div class="step-body">
+            <h3>PDF Annotation</h3>
+            <p>PyMuPDF renders coloured boxes at each field's PDF coordinates. The annotated image is returned to the canvas renderer.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout callout-info" style="margin-top:2rem;">
+        Pipeline results are saved to <code>outputs/&lt;session_id&gt;/components/</code>. Re-running the pipeline on the same session overwrites the previous results.
+      </div>
+    </section>
+
+    <!-- ══ ANNOTATIONS ════════════════════════════════════════════════════ -->
+    <section id="annotations" class="section">
+      <h2 class="section-title">Working with Annotations</h2>
+
+      <h3>Correcting an Annotation</h3>
+      <ol class="doc-list numbered">
+        <li>Click a box on the canvas (or click its row in the Review Queue) to open the Edit Panel.</li>
+        <li>Edit the SDTM Domain, Variable, and Label fields — or click a suggestion from the AI panel.</li>
+        <li>Click <strong>Save</strong>. Status becomes USER_CORRECTED and the box turns green.</li>
+      </ol>
+
+      <h3>Drawing a New Annotation</h3>
+      <ol class="doc-list numbered">
+        <li>Click and drag on blank canvas space to draw a box.</li>
+        <li>Release — the Edit Panel opens for the new annotation.</li>
+        <li>Fill in the SDTM fields and click <strong>Save</strong>.</li>
+      </ol>
+
+      <h3>Marking as Not Submitted</h3>
+      <p>Right-click a box → <em>Mark as Not Submitted</em>. The annotation turns grey and moves to the Resolved list. It will not appear in the exported PDF's review overlay but its box is still drawn.</p>
+
+      <h3>Removing an Annotation</h3>
+      <p>Right-click → <em>Remove Annotation</em> (red button). The action is undoable via <kbd>Ctrl</kbd>+<kbd>Z</kbd>.</p>
+
+      <h3>Adding / Removing from Review Queue</h3>
+      <ul class="doc-list">
+        <li><strong>Add to Review Queue:</strong> Right-click any resolved annotation → <em>Add to Review Queue</em>. Status becomes NEEDS_REVIEW.</li>
+        <li><strong>Remove from Review Queue:</strong> Right-click a NEEDS_REVIEW annotation (on canvas or in the queue) → <em>Remove from Review Queue</em>. Status reverts to UNMAPPED.</li>
+      </ul>
+    </section>
+
+    <!-- ══ EXPORT ════════════════════════════════════════════════════════ -->
+    <section id="export" class="section">
+      <h2 class="section-title">Exporting</h2>
+      <p class="section-intro">Export produces a pixel-perfect annotated PDF with all annotation boxes and labels rendered onto the original pages.</p>
+
+      <ol class="doc-list numbered">
+        <li>Switch to the <strong>Export</strong> tab in the side panel.</li>
+        <li>Click <strong>"Export PDF"</strong>.</li>
+        <li>Choose the save destination in the file dialog.</li>
+        <li>The output is also auto-saved to <code>outputs/&lt;session_id&gt;/CRF_Annotated.pdf</code>.</li>
+      </ol>
+
+      <div class="callout callout-warn">
+        Export renders the PDF at high resolution — processing time scales with page count. For large CRFs (&gt; 50 pages) allow up to a minute.
+      </div>
+
+      <h3>Output Directory Structure</h3>
+      <div class="code-block">
+        <pre><code>outputs/
+└── &lt;session_id&gt;/
+    ├── components/
+    │   ├── annotation_data.json   ← All annotation records
+    │   └── pipeline_summary.txt   ← Pipeline run log
+    ├── editor_state.json          ← Saved undo/redo history
+    └── CRF_Annotated.pdf          ← Exported annotated PDF</code></pre>
+      </div>
+
+      <p>Session IDs are derived from the PDF filename plus a random 8-character hex suffix (e.g. <code>STUDY001_CRF_a3f8b21c</code>). Running the same PDF twice creates two independent sessions.</p>
+    </section>
+
+    <!-- ══ UNDO / REDO ════════════════════════════════════════════════════ -->
+    <section id="undo-redo" class="section">
+      <h2 class="section-title">Undo / Redo</h2>
+      <p>The editor maintains a full undo history for all annotation changes within a session.</p>
+
+      <table>
+        <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>Undo last annotation change</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td>Redo</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td>Redo (alternate)</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout callout-info">
+        Undo history is persisted to <code>outputs/&lt;session_id&gt;/editor_state.json</code> on every change, so it survives application restarts.
+      </div>
+    </section>
+
+    <!-- ══ STATUS REFERENCE ═══════════════════════════════════════════════ -->
+    <section id="status-reference" class="section">
+      <h2 class="section-title">Status Reference</h2>
+      <p class="section-intro">Every annotation carries one of six statuses. Statuses control colour, queue membership, and export behaviour.</p>
+
+      <table>
+        <thead>
+          <tr><th>Status</th><th>Colour</th><th>Set by</th><th>Queue</th><th>Meaning</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="status-pill" style="background:#00E67622;color:#00E676;">RESOLVED</span></td>
+            <td>Green</td>
+            <td>Pipeline (≥ 80 %)</td>
+            <td>—</td>
+            <td>Auto-matched with high confidence; no action needed</td>
+          </tr>
+          <tr>
+            <td><span class="status-pill" style="background:#FF8A0022;color:#FF8A00;">NEEDS_REVIEW</span></td>
+            <td>Amber</td>
+            <td>Pipeline (60–79 %) or user</td>
+            <td>Active</td>
+            <td>Probable match but warrants human verification</td>
+          </tr>
+          <tr>
+            <td><span class="status-pill" style="background:#E0525222;color:#E05252;">UNMAPPED</span></td>
+            <td>Red</td>
+            <td>Pipeline (&lt; 60 %) or user</td>
+            <td>Active</td>
+            <td>No reliable SDTM match found; needs manual correction</td>
+          </tr>
+          <tr>
+            <td><span class="status-pill" style="background:#00E67622;color:#00E676;">USER_CORRECTED</span></td>
+            <td>Green</td>
+            <td>User (after editing &amp; saving)</td>
+            <td>Resolved</td>
+            <td>Manually reviewed and confirmed by the user</td>
+          </tr>
+          <tr>
+            <td><span class="status-pill" style="background:#88888822;color:#aaa;">NOT_SUBMITTED</span></td>
+            <td>Grey</td>
+            <td>User (right-click action)</td>
+            <td>Resolved</td>
+            <td>Field exists on the CRF but is excluded from the submission</td>
+          </tr>
+          <tr>
+            <td><span class="status-pill" style="background:#E0525222;color:#E05252;">REMOVED</span></td>
+            <td>Invisible</td>
+            <td>User (delete action)</td>
+            <td>—</td>
+            <td>Annotation deleted; no longer rendered or exported</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ══ KEYBOARD SHORTCUTS ════════════════════════════════════════════ -->
+    <section id="keyboard-shortcuts" class="section">
+      <h2 class="section-title">Keyboard Shortcuts</h2>
+
+      <h3>Canvas Navigation</h3>
+      <table>
+        <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>←</kbd></td><td>Previous page</td></tr>
+          <tr><td><kbd>→</kbd></td><td>Next page</td></tr>
+          <tr><td><kbd>Home</kbd></td><td>First page</td></tr>
+          <tr><td><kbd>End</kbd></td><td>Last page</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="margin-top:2rem;">Editing</h3>
+      <table>
+        <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>Undo</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td>Redo</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td>Redo (alternate)</td></tr>
+          <tr><td><kbd>Escape</kbd></td><td>Close context menu / deselect annotation</td></tr>
+          <tr><td><kbd>Delete</kbd></td><td>Delete the selected annotation</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="margin-top:2rem;">Application</h3>
+      <table>
+        <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Save current annotation (when Edit Panel is active)</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Trigger PDF export</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ══ TROUBLESHOOTING ═══════════════════════════════════════════════ -->
+    <section id="troubleshooting" class="section">
+      <h2 class="section-title">Troubleshooting</h2>
+
+      <table>
+        <thead>
+          <tr><th>Error / Symptom</th><th>Likely Cause</th><th>Fix</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>FileNotFoundError: assets/RAW_SDTM_Mappings.xlsx</code></td>
+            <td>Excel file missing or misnamed</td>
+            <td>Place the file at <code>assets/RAW_SDTM_Mappings.xlsx</code></td>
+          </tr>
+          <tr>
+            <td><code>ModuleNotFoundError: No module named 'fitz'</code></td>
+            <td>PyMuPDF not installed</td>
+            <td><code>pip install pymupdf</code></td>
+          </tr>
+          <tr>
+            <td><code>ModuleNotFoundError: No module named 'webview'</code></td>
+            <td>pywebview not installed</td>
+            <td><code>pip install pywebview</code></td>
+          </tr>
+          <tr>
+            <td><code>ModuleNotFoundError: No module named 'sklearn'</code></td>
+            <td>scikit-learn not installed</td>
+            <td><code>pip install scikit-learn</code></td>
+          </tr>
+          <tr>
+            <td><code>ModuleNotFoundError: No module named 'gi'</code> (Linux)</td>
+            <td>GTK bindings missing</td>
+            <td>Install <code>python3-gi</code> and <code>gir1.2-webkit2-4.1</code> via apt/dnf/pacman</td>
+          </tr>
+          <tr>
+            <td>Window opens but PDF canvas is blank</td>
+            <td>WebView engine not installed (Windows)</td>
+            <td>Install Edge WebView2 Runtime from Microsoft</td>
+          </tr>
+          <tr>
+            <td>Pipeline runs but no annotations appear</td>
+            <td>Excel column names don't match</td>
+            <td>Update column constants in <code>config.py</code></td>
+          </tr>
+          <tr>
+            <td>All suggestions show low confidence</td>
+            <td>Mapping file is sparse or domain sheets are misnamed</td>
+            <td>Ensure sheet names match SDTM domain codes exactly (CM, AE, etc.)</td>
+          </tr>
+          <tr>
+            <td><code>ValueError: No sheet named 'RAW-SDTM Mappings'</code></td>
+            <td>Neither Format A nor B detected</td>
+            <td>Rename consolidated sheet to <code>RAW-SDTM Mappings</code> or use per-domain sheets</td>
+          </tr>
+          <tr>
+            <td><code>PermissionError</code> on <code>outputs/</code></td>
+            <td>Insufficient write permissions</td>
+            <td>Run from a directory where your user has write access</td>
+          </tr>
+          <tr>
+            <td>App window too small / content cut off</td>
+            <td>OS display scaling &gt; 100 %</td>
+            <td>Set display scaling to 100 % or resize manually</td>
+          </tr>
+          <tr>
+            <td><code>KeyError</code> in pipeline for a column</td>
+            <td>Column header has extra whitespace</td>
+            <td>Strip whitespace from column headers in your Excel file</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout callout-tip" style="margin-top:2rem;">
+        <strong>Debug mode:</strong> The app starts with <code>debug=True</code> by default. Right-click the web area to open browser DevTools and inspect console errors. Set <code>debug=False</code> in <code>app.py</code> for production use.
+      </div>
+    </section>
+
+    <!-- ── Footer ─────────────────────────────────────────────────────── -->
+    <footer class="site-footer">
+      <div class="footer-logo">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" width="28" height="28">
+          <rect x="4" y="2" width="20" height="26" rx="3" fill="url(#flg1)" opacity="0.9"/>
+          <rect x="8" y="8" width="12" height="2" rx="1" fill="#fff" opacity="0.8"/>
+          <rect x="8" y="13" width="9" height="2" rx="1" fill="#fff" opacity="0.6"/>
+          <rect x="8" y="18" width="6" height="2" rx="1" fill="#fff" opacity="0.4"/>
+          <circle cx="23" cy="23" r="7" fill="url(#flg2)"/>
+          <path d="M20 23 l2 2 4-4" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <defs>
+            <linearGradient id="flg1" x1="4" y1="2" x2="24" y2="28" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#A374FF"/><stop offset="1" stop-color="#3DB7FF"/>
+            </linearGradient>
+            <linearGradient id="flg2" x1="16" y1="16" x2="30" y2="30" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#00E676"/><stop offset="1" stop-color="#3DB7FF"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <span>CRF Annotation Editor</span>
+      </div>
+      <p class="footer-text">Documentation for the Automated aCRF Editor. Built for clinical data standards teams working with SDTM.</p>
+      <div class="footer-links">
+        <a href="https://github.com/rishitmahapatra/automated-acrf" class="footer-link">GitHub Repository</a>
+        <a href="https://github.com/rishitmahapatra/automated-acrf/blob/main/USER_MANUAL.md" class="footer-link">User Manual (Markdown)</a>
+        <a href="https://github.com/rishitmahapatra/automated-acrf/blob/main/INSTALLATION_GUIDE.md" class="footer-link">Installation Guide (Markdown)</a>
+      </div>
+    </footer>
+
+  </main>
+
+  <!-- Back-to-top button -->
+  <button id="back-to-top" class="back-to-top" aria-label="Back to top">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="18 15 12 9 6 15"/>
+    </svg>
+  </button>
+
+  <script src="script.js"></script>
+</body>
+</html>
