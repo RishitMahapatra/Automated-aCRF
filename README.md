@@ -7,14 +7,27 @@
 
 <p align="center">
   <b>Automated CRF Annotation Editor</b><br>
-  Full documentation is available at: <strong><a href="https://rishitmahapatra.github.io/Automated-aCRF/">https://rishitmahapatra.github.io/Automated-aCRF/</a></strong>
+  Full documentation is available at: <strong><a href="https://rishitmahapatra.github.io/Automated-aCRF/">Documentation</a></strong>
   
 </p>
-
 <p align="center">
 
-   ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge\&logo=python\&logoColor=white)
-   ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
+<img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white" />
+
+<img src="https://img.shields.io/badge/PyWebView-Desktop_UI-2F855A?style=for-the-badge" />
+
+<img src="https://img.shields.io/badge/PyMuPDF-PDF_Engine-EA4335?style=for-the-badge" />
+
+<img src="https://img.shields.io/badge/OpenPyXL-Excel_Parser-217346?style=for-the-badge" />
+
+<img src="https://img.shields.io/badge/SQLite-Database-003B57?style=for-the-badge&logo=sqlite&logoColor=white" />
+
+<img src="https://img.shields.io/badge/.acrf-Project_Format-8B5CF6?style=for-the-badge" />
+
+<img src="https://img.shields.io/badge/NLP-Heuristic_Annotator-F59E0B?style=for-the-badge" />
+
+<img src="https://img.shields.io/badge/License-MIT-339AF0?style=for-the-badge" />
+
 </p>
 
 
