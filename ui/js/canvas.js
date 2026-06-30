@@ -503,6 +503,7 @@ function updateDatasetChip(chipRecord, fields = {}) {
     document.getElementById('ctx-mark-not-submitted').style.display = '';
     document.getElementById('ctx-show-in-queue').style.display = '';
     document.getElementById('ctx-remove-annotation').style.display = '';
+    document.getElementById('ctx-add-comment').style.display = '';
 
     const addToReviewBtn = document.getElementById('ctx-add-to-review');
     if (addToReviewBtn) {
@@ -517,9 +518,10 @@ function updateDatasetChip(chipRecord, fields = {}) {
     const removeFromReviewBtn = document.getElementById('ctx-remove-from-review');
     if (removeFromReviewBtn) removeFromReviewBtn.style.display = isInReview ? '' : 'none';
 
-    ctxMenu.style.left = `${Math.min(x, window.innerWidth - 200)}px`;
-    ctxMenu.style.top = `${Math.min(y, window.innerHeight - 310)}px`;
     ctxMenu.classList.remove('hidden');
+    const menuH = ctxMenu.getBoundingClientRect().height || 310;
+    ctxMenu.style.left = `${Math.min(x, window.innerWidth - 200)}px`;
+    ctxMenu.style.top = `${Math.min(y, window.innerHeight - menuH - 8)}px`;
   }
 
   function _showBlankContextMenu(ctxMenu, x, y) {
@@ -530,6 +532,7 @@ function updateDatasetChip(chipRecord, fields = {}) {
     document.getElementById('ctx-add-to-review').style.display = 'none';
     document.getElementById('ctx-remove-from-review').style.display = 'none';
     document.getElementById('ctx-show-in-queue').style.display = 'none';
+    document.getElementById('ctx-add-comment').style.display = 'none';
     document.getElementById('ctx-remove-annotation').style.display = 'none';
     ctxMenu.style.left = `${x}px`;
     ctxMenu.style.top = `${y}px`;
@@ -754,6 +757,17 @@ function updateDatasetChip(chipRecord, fields = {}) {
         Sidebar.highlightInQueue(pendingAnnotationCtxRec.annotation_id, pendingAnnotationCtxRec.status);
       }
       pendingAnnotationCtxRec = null;
+    });
+
+    document.getElementById('ctx-add-comment')?.addEventListener('click', () => {
+      ctxMenu.classList.add('hidden');
+      if (!pendingAnnotationCtxRec) return;
+      const rec = pendingAnnotationCtxRec;
+      pendingAnnotationCtxRec = null;
+      // Open the shared comment dialog (owned by Sidebar)
+      if (typeof Sidebar !== 'undefined' && Sidebar.openCommentForAnnotation) {
+        Sidebar.openCommentForAnnotation(rec);
+      }
     });
 
     document.getElementById('ctx-remove-annotation')?.addEventListener('click', () => {
@@ -2581,6 +2595,80 @@ function _persistDatasetChipVisualState(rec, box) {
     applyZoom();
   }
 
+  /**
+   * Restore geometry overrides and user-created annotations from a saved
+   * editor-state objects array. Call this before loadPage() on session open
+   * so that dragged/resized positions and user-drawn boxes are correct.
+   */
+  function restoreSessionGeometry(objects) {
+    if (!Array.isArray(objects)) return;
+
+    // Clear stale state
+    for (const k in annotationGeometryOverrides) delete annotationGeometryOverrides[k];
+    for (const k in datasetChipUiOverrides) delete datasetChipUiOverrides[k];
+    userCreatedAnnotations.length = 0;
+
+    for (const obj of objects) {
+      if (!obj || !obj.object_id) continue;
+
+      if (obj.object_type === 'annotation') {
+        // Restore pixel-accurate position override from saved rect_pts
+        if (obj.rect_pts &&
+            obj.rect_pts.x0 != null && obj.rect_pts.y0 != null &&
+            obj.rect_pts.x1 != null && obj.rect_pts.y1 != null) {
+          annotationGeometryOverrides[obj.object_id] = {
+            x0_pts: Number(obj.rect_pts.x0),
+            y0_pts: Number(obj.rect_pts.y0),
+            x1_pts: Number(obj.rect_pts.x1),
+            y1_pts: Number(obj.rect_pts.y1),
+          };
+        }
+
+        // Re-add user-created annotations to the local array
+        if (obj.source === 'USER' || String(obj.object_id).startsWith('user_')) {
+          const data = obj.data || {};
+          const r = annotationGeometryOverrides[obj.object_id] || {};
+          _addUserAnnotation({
+            annotation_id: obj.object_id,
+            page: Number(obj.page || 1),
+            status: data.status || 'UNMAPPED',
+            form_code: data.form_code || '',
+            raw_variable: data.raw_variable || '',
+            raw_label: data.raw_label || '',
+            sdtm_dataset: data.sdtm_dataset || '',
+            sdtm_variable: data.sdtm_variable || '',
+            sdtm_label: data.sdtm_label || '',
+            component: data.raw_label || '',
+            x0_pts: r.x0_pts,
+            y0_pts: r.y0_pts,
+            x1_pts: r.x1_pts,
+            y1_pts: r.y1_pts,
+            source: 'USER',
+            _hasGeometryOverride: !!annotationGeometryOverrides[obj.object_id],
+          });
+        }
+
+      } else if (obj.object_type === 'dataset_chip') {
+        // Restore CSS position for dragged/resized dataset chips
+        if (obj._ui_left || obj._ui_top) {
+          // chip_id format: "datasetchip::FORMCODE::DSCODE"
+          const raw = String(obj.object_id).replace(/^datasetchip::/, '');
+          const sep = raw.indexOf('::');
+          if (sep > 0) {
+            const fc = raw.slice(0, sep).toUpperCase();
+            const ds = raw.slice(sep + 2).toUpperCase();
+            datasetChipUiOverrides[`${fc}::${ds}`] = {
+              _ui_left: obj._ui_left || '50%',
+              _ui_top: obj._ui_top || '1%',
+              _ui_width: obj._ui_width || '',
+              _ui_height: obj._ui_height || '',
+            };
+          }
+        }
+      }
+    }
+  }
+
   return {
   init,
   loadPage,
@@ -2602,5 +2690,6 @@ function _persistDatasetChipVisualState(rec, box) {
   updateUserAnnotation,
   updateDatasetChip,
   updateFormColour,
+  restoreSessionGeometry,
 };
 })();

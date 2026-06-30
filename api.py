@@ -274,6 +274,15 @@ class Api:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
+    def get_annotation(self, annotation_id):
+        try:
+            rec = annotation_bridge.get_annotation(self._session_id, str(annotation_id or "").strip())
+            if rec is None:
+                return {"ok": False, "error": "Not found"}
+            return {"ok": True, "record": rec}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
     def update_comment(self, annotation_id, comment=""):
         try:
             return annotation_bridge.update_comment(
@@ -581,7 +590,10 @@ class Api:
             if ann_id in existing_ids:
                 for i, ex in enumerate(existing):
                     if str(ex.get("annotation_id", "")) == ann_id:
-                        existing[i] = {**ex, **rec}
+                        # Never overwrite comment — it's always authoritative in
+                        # annotation_data.json (saved directly via update_comment)
+                        rec_for_merge = {k: v for k, v in rec.items() if k != "comment"}
+                        existing[i] = {**ex, **rec_for_merge}
                         break
             else:
                 existing.append(rec)

@@ -295,6 +295,12 @@ async function _restoreEditorStateIfAny() {
 
     Store.setEditorObjects(saved.objects);
 
+    // Repopulate canvas geometry overrides and user-created annotations
+    // so that dragged/resized boxes appear at the correct positions
+    if (typeof Canvas !== 'undefined' && Canvas.restoreSessionGeometry) {
+      Canvas.restoreSessionGeometry(saved.objects);
+    }
+
     const chips = saved.objects
       .filter(o => o && o.object_type === 'dataset_chip' && o.visible !== false && o.removed !== true)
       .map(o => ({
@@ -304,6 +310,10 @@ async function _restoreEditorStateIfAny() {
         full_name: o?.data?.full_name || '',
         display_text: o.display_text || '',
         rect_pts: o.rect_pts || null,
+        _ui_left: o._ui_left || '',
+        _ui_top: o._ui_top || '',
+        _ui_width: o._ui_width || '',
+        _ui_height: o._ui_height || '',
         fill_rgb: o?.style?.fill_rgb || [191, 224, 255],
         visible: true,
         removed: false,
@@ -312,6 +322,13 @@ async function _restoreEditorStateIfAny() {
 
     if (chips.length) {
       Store.setDatasetChips(chips);
+    }
+
+    // Restore dataset review queue items (in-memory in sidebar, not in annotation_data.json)
+    if (saved.datasetReviews && Array.isArray(saved.datasetReviews) && saved.datasetReviews.length) {
+      if (typeof Sidebar !== 'undefined' && Sidebar.setDatasetReviews) {
+        Sidebar.setDatasetReviews(saved.datasetReviews);
+      }
     }
 
   } catch (e) {

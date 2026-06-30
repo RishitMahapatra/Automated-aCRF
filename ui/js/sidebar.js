@@ -1474,9 +1474,11 @@ async function _handleZoomChange(direction) {
     const removeFromReviewBtn = document.getElementById('qctx-remove-from-review');
     if (removeFromReviewBtn) removeFromReviewBtn.style.display = statusUpper === 'NEEDS_REVIEW' ? '' : 'none';
 
-    menu.style.left = `${Math.min(x, window.innerWidth - 190)}px`;
-    menu.style.top = `${Math.min(y, window.innerHeight - 240)}px`;
     menu.classList.remove('hidden');
+    // Position after un-hiding so getBoundingClientRect is accurate
+    const menuH = menu.getBoundingClientRect().height || 280;
+    menu.style.left = `${Math.min(x, window.innerWidth - 200)}px`;
+    menu.style.top = `${Math.min(y, window.innerHeight - menuH - 8)}px`;
   }
 
   function _updateDatasetReviewStatus(annotationId, newStatus) {
@@ -1627,7 +1629,7 @@ async function _handleZoomChange(direction) {
     setTimeout(() => highlightInQueue(id, 'NEEDS_REVIEW'), 100);
   }
 
-  function _openCommentForRecord(rec) {
+  async function _openCommentForRecord(rec) {
     const dialog = document.getElementById('comment-dialog');
     const titleEl = document.getElementById('comment-dialog-title');
     const input = document.getElementById('comment-dialog-input');
@@ -1637,7 +1639,22 @@ async function _handleZoomChange(direction) {
     _currentCommentRec = rec;
     const label = rec.sdtm_variable || rec.best_sdtm_variable || rec.raw_variable || 'Annotation';
     if (titleEl) titleEl.textContent = `Comment — ${label}`;
-    input.value = rec.comment || '';
+
+    // For regular (non-dataset-review) annotations, fetch the latest comment
+    // from the backend so we always show the most up-to-date value even if
+    // Store.annotations hasn't been refreshed since the last save.
+    let latestComment = rec.comment || '';
+    if (!rec.is_dataset_review && rec.annotation_id) {
+      try {
+        const r = await window.pywebview.api.get_annotation(String(rec.annotation_id));
+        if (r && r.ok && r.record) {
+          latestComment = r.record.comment || '';
+          _currentCommentRec = { ...rec, comment: latestComment };
+        }
+      } catch (_) { /* fall back to cached value */ }
+    }
+
+    input.value = latestComment;
     if (placeholder) placeholder.style.opacity = input.value ? '0' : '1';
     dialog.classList.remove('hidden');
     setTimeout(() => input.focus(), 50);
@@ -1694,12 +1711,28 @@ async function _handleZoomChange(direction) {
       .replaceAll("'", '&#39;');
   }
 
+  function getDatasetReviews() {
+    return _datasetReviews.map(r => ({ ...r }));
+  }
+
+  function setDatasetReviews(reviews) {
+    if (!Array.isArray(reviews)) return;
+    _datasetReviews = reviews.map(r => ({ ...r }));
+  }
+
+  function openCommentForAnnotation(rec) {
+    _openCommentForRecord(rec);
+  }
+
   return {
     init,
     refreshStats,
     refreshUnmappedQueue,
     highlightInQueue,
     addDatasetReview,
+    getDatasetReviews,
+    setDatasetReviews,
+    openCommentForAnnotation,
     goPrev,
     goNext,
     isPipelineRunning: () => pipelineRunning,
