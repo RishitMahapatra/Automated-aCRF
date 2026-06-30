@@ -1,10 +1,15 @@
 # CRF Annotation Editor
 
-
-#### Documentation 
+### Documentation 
 Full documentation is available at: 
 **[https://rishitmahapatra.github.io/Automated-aCRF/](https://rishitmahapatra.github.io/Automated-aCRF/)**
 
+### Important References
+* Full step by step installation guide is present at: **[https://github.com/RishitMahapatra/Automated-aCRF/blob/main/INSTALLATION_GUIDE.md](https://github.com/RishitMahapatra/Automated-aCRF/blob/main/INSTALLATION_GUIDE.md)**
+
+* The User Manual is present at: **[https://github.com/RishitMahapatra/Automated-aCRF/blob/main/USER_MANUAL.md](https://github.com/RishitMahapatra/Automated-aCRF/blob/main/USER_MANUAL.md)**
+
+## About the Tool
 A desktop annotation and review tool for PDF Case Report Forms (**CRFs**) that helps users inspect extracted field mappings, review unresolved items, correct annotations visually, and export an updated annotated PDF.
 
 This application is designed around a simple workflow: load a CRF PDF, run the pipeline, review page-by-page annotations, correct what needs correction, and export the final annotated output.
