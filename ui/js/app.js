@@ -97,6 +97,8 @@ async function initApp() {
     // Expose save entry-point for sidebar (restart save dialog)
     window._doAcrfSave = _doSaveSession;
 
+    _bindCloseConfirmDialog();
+
     await _restoreStateIfAny();
     await _restoreEditorStateIfAny();
 
@@ -670,6 +672,43 @@ function _bindFileShortcuts() {
     }
   });
 }
+
+function _bindCloseConfirmDialog() {
+  const overlay = document.getElementById('close-confirm-overlay');
+  if (!overlay) return;
+
+  document.getElementById('close-save-yes')?.addEventListener('click', async () => {
+    overlay.classList.add('hidden');
+    const saved = await _doSaveSession();
+    if (saved === false) {
+      // User cancelled the file picker — re-show so they can choose Discard or try again
+      overlay.classList.remove('hidden');
+      return;
+    }
+    await window.pywebview?.api?.confirm_close?.();
+  });
+
+  document.getElementById('close-save-skip')?.addEventListener('click', async () => {
+    overlay.classList.add('hidden');
+    await window.pywebview?.api?.confirm_close?.();
+  });
+
+  document.getElementById('close-save-cancel')?.addEventListener('click', () => {
+    overlay.classList.add('hidden');
+  });
+}
+
+window._showCloseDialog = function() {
+  const overlay = document.getElementById('close-confirm-overlay');
+  if (overlay) {
+    overlay.classList.remove('hidden');
+  } else {
+    // Fallback: no custom dialog — ask natively and close if confirmed
+    if (window.confirm('You have unsaved changes. Close without saving?')) {
+      window.pywebview?.api?.confirm_close?.();
+    }
+  }
+};
 
 async function _doSaveSession() {
   if (!Store.pdfLoaded || !Store.sessionId) {

@@ -645,3 +645,18 @@ class Api:
             return {"ok": True, "sessions": sessions}
         except Exception as e:
             return {"ok": False, "error": str(e)}
+
+    # ==========================================================================
+    # WINDOW LIFECYCLE
+    # ==========================================================================
+
+    def confirm_close(self):
+        """
+        Called from JS after the user confirms they want to close the window
+        (via the unsaved-changes dialog).  Destroys the window unconditionally.
+        """
+        try:
+            if self._window:
+                self._window.destroy()
+        except Exception as e:
+            print(f"[api] confirm_close error: {e}")

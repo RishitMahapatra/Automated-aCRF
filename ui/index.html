@@ -1074,6 +1074,23 @@
   </div>
 </div>
 
+<!-- ── Close Confirm Dialog (unsaved changes on window close) ── -->
+<div id="close-confirm-overlay" class="add-ann-overlay hidden">
+  <div class="add-ann-dialog" style="min-width:280px;max-width:380px">
+    <div class="add-ann-header">
+      <span class="add-ann-title">Unsaved Changes</span>
+    </div>
+    <div style="font-size:13px;color:#C8CCEC;margin-bottom:16px">
+      You have unsaved changes. Save your session before closing?
+    </div>
+    <div class="add-ann-actions">
+      <button class="btn btn-primary" id="close-save-yes">Save &amp; Close</button>
+      <button class="btn" id="close-save-skip">Discard &amp; Close</button>
+      <button class="btn" id="close-save-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Annotation Remove Confirm Dialog ───────────────── -->
 <div id="ann-remove-confirm" class="add-ann-overlay hidden">
   <div class="add-ann-dialog" style="min-width:280px;max-width:340px">
