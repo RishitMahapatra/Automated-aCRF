@@ -165,8 +165,12 @@ const Sidebar = (() => {
 
     document.getElementById('restart-confirm-yes')?.addEventListener('click', () => {
       document.getElementById('restart-confirm-overlay')?.classList.add('hidden');
-      const saveOverlay = document.getElementById('restart-save-overlay');
-      if (saveOverlay) saveOverlay.classList.remove('hidden');
+      if (typeof window._isSessionDirty === 'function' && window._isSessionDirty()) {
+        const saveOverlay = document.getElementById('restart-save-overlay');
+        if (saveOverlay) saveOverlay.classList.remove('hidden');
+      } else {
+        _doRestartSession();
+      }
     });
 
     document.getElementById('restart-save-cancel')?.addEventListener('click', () => {
@@ -181,13 +185,10 @@ const Sidebar = (() => {
     document.getElementById('restart-save-yes')?.addEventListener('click', async () => {
       document.getElementById('restart-save-overlay')?.classList.add('hidden');
       try {
-        if (Store.pipelineRan && typeof _captureAllPagesForExport === 'function') {
-          const pageImages = await _captureAllPagesForExport();
-          const saveRes = await window.pywebview.api.export_pdf_from_images(pageImages);
-          if (!saveRes || !saveRes.ok) return; // user cancelled save dialog — abort restart
-        }
+        const saved = await window._doAcrfSave?.();
+        if (saved === false) return; // user cancelled save dialog — abort restart
       } catch (e) {
-        console.error('[sidebar] export before restart failed:', e);
+        console.error('[sidebar] save before restart failed:', e);
         return; // abort restart on error
       }
       await _doRestartSession();
@@ -260,6 +261,7 @@ const Sidebar = (() => {
       if (typeof EditPanel !== 'undefined' && EditPanel.close) EditPanel.close();
 
       _closeCommentViewer();
+      window._clearSessionDirty?.();
     } catch (e) {
       console.error('[sidebar] _doRestartSession error:', e);
     }
@@ -426,6 +428,7 @@ const Sidebar = (() => {
 
         Store.currentPage = 1;
         Store.pipelineRan = true;
+        window._markSessionDirty?.();
 
         _updatePageDisplay();
         _updateNavPageCount();
@@ -1226,6 +1229,7 @@ async function _handleZoomChange(direction) {
         // Local-only record — update in _datasetReviews array
         const idx = _datasetReviews.findIndex(r => r.annotation_id === _currentCommentRec.annotation_id);
         if (idx >= 0) _datasetReviews[idx].comment = comment;
+        window._markSessionDirty?.();
         await refreshUnmappedQueue();
       } else {
         try {
@@ -1233,6 +1237,7 @@ async function _handleZoomChange(direction) {
             String(_currentCommentRec.annotation_id || ''),
             comment
           );
+          window._markSessionDirty?.();
           await refreshStats();
           await refreshUnmappedQueue();
         } catch (e) {

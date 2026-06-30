@@ -4674,3 +4674,21 @@ body.theme-light .nav-export-btn:hover {
 .sidebar-icon-only .sidebar-tabs {
   gap: 2px;
 }
+
+/* ── Dirty / unsaved-changes indicator ──────────────────────── */
+.dirty-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--orange);
+  margin-left: 5px;
+  vertical-align: middle;
+  animation: dirty-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes dirty-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}

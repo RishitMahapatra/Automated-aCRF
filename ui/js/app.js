@@ -6,6 +6,23 @@
 const SIDEBAR_MIN_WIDTH = 84;
 const SIDEBAR_MAX_WIDTH = 520;
 
+// ── Dirty / unsaved-changes indicator ──────────────────────────
+let _dirty = false;
+
+function _markDirty() {
+  _dirty = true;
+  document.getElementById('dirty-dot')?.classList.remove('hidden');
+}
+
+function _clearDirty() {
+  _dirty = false;
+  document.getElementById('dirty-dot')?.classList.add('hidden');
+}
+
+window._markSessionDirty  = _markDirty;
+window._clearSessionDirty = _clearDirty;
+window._isSessionDirty    = () => _dirty;
+
 const EDIT_PANEL_MIN_WIDTH = 200;
 const EDIT_PANEL_MAX_WIDTH = 560;
 
@@ -67,6 +84,19 @@ async function initApp() {
     _bindExportButton();
     _bindFileMenu();
     _bindFileShortcuts();
+
+    // Intercept EditorState.scheduleAutosave so any drag/resize marks the session dirty
+    if (typeof EditorState !== 'undefined' && EditorState.scheduleAutosave) {
+      const _origSchedule = EditorState.scheduleAutosave;
+      EditorState.scheduleAutosave = function(...args) {
+        _markDirty();
+        return _origSchedule.apply(this, args);
+      };
+    }
+
+    // Expose save entry-point for sidebar (restart save dialog)
+    window._doAcrfSave = _doSaveSession;
+
     await _restoreStateIfAny();
     await _restoreEditorStateIfAny();
 
@@ -644,7 +674,7 @@ function _bindFileShortcuts() {
 async function _doSaveSession() {
   if (!Store.pdfLoaded || !Store.sessionId) {
     showToast('No active session to save.', 'warning');
-    return;
+    return false;
   }
 
   try {
@@ -659,22 +689,26 @@ async function _doSaveSession() {
     const res = await window.pywebview.api.save_session_file(editorState, frontendAnnotations);
 
     if (res && res.ok) {
+      _clearDirty();
       showToast('Session saved: ' + (res.path || '').split(/[\\/]/).pop(), 'success');
+      return true;
     } else if (res && res.error === 'Save cancelled') {
-      // user cancelled, no toast
+      return false;
     } else {
       showToast('Save failed: ' + (res?.error || 'Unknown error'), 'error');
+      return false;
     }
   } catch (e) {
     console.error('[app] save session error:', e);
     showToast('Save failed: ' + e, 'error');
+    return false;
   }
 }
 
 async function _doSaveSessionAs() {
   if (!Store.pdfLoaded || !Store.sessionId) {
     showToast('No active session to save.', 'warning');
-    return;
+    return false;
   }
 
   try {
@@ -689,15 +723,19 @@ async function _doSaveSessionAs() {
     const res = await window.pywebview.api.save_session_file_as(editorState, frontendAnnotations);
 
     if (res && res.ok) {
+      _clearDirty();
       showToast('Session saved: ' + (res.path || '').split(/[\\/]/).pop(), 'success');
+      return true;
     } else if (res && res.error === 'Save cancelled') {
-      // user cancelled
+      return false;
     } else {
       showToast('Save failed: ' + (res?.error || 'Unknown error'), 'error');
+      return false;
     }
   } catch (e) {
     console.error('[app] save-as error:', e);
     showToast('Save failed: ' + e, 'error');
+    return false;
   }
 }
 
@@ -764,6 +802,7 @@ async function _doOpenSession() {
       await Sidebar.refreshUnmappedQueue();
     }
 
+    _clearDirty();
     showToast('Session loaded: ' + (res.pdf_name || Store.sessionId), 'success');
 
   } catch (e) {
