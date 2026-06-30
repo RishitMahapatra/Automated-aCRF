@@ -1,10 +1,10 @@
 # CRF Annotation Editor
 
-### Documentation 
+## Documentation 
 Full documentation is available at: 
 **[https://rishitmahapatra.github.io/Automated-aCRF/](https://rishitmahapatra.github.io/Automated-aCRF/)**
 
-### Important References
+## Important References
 * Full step by step installation guide is present at: **[https://github.com/RishitMahapatra/Automated-aCRF/blob/main/INSTALLATION_GUIDE.md](https://github.com/RishitMahapatra/Automated-aCRF/blob/main/INSTALLATION_GUIDE.md)**
 
 * The User Manual is present at: **[https://github.com/RishitMahapatra/Automated-aCRF/blob/main/USER_MANUAL.md](https://github.com/RishitMahapatra/Automated-aCRF/blob/main/USER_MANUAL.md)**
