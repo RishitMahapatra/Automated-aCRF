@@ -1,14 +1,19 @@
 
 <h1 align="center"> CRF Annotation Editor </h1>
+
+<p align = "center">
+<img width="1983" height="793" alt="crf logo" src="https://github.com/user-attachments/assets/b726e2bf-8921-4eb9-a93d-68fe173655b7" />
+</p>
+
 <p align="center">
   <b>Automated CRF Annotation Editor</b><br>
-  Full documentation is available at:<br>
-  <strong><a href="https://rishitmahapatra.github.io/Automated-aCRF/">https://rishitmahapatra.github.io/Automated-aCRF/</a></strong>
+  Full documentation is available at: <strong><a href="https://rishitmahapatra.github.io/Automated-aCRF/">https://rishitmahapatra.github.io/Automated-aCRF/</a></strong>
+  
 </p>
 
 <p align="center">
 
-  ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge\&logo=python\&logoColor=white)
+   ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge\&logo=python\&logoColor=white)
    ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 </p>
 
