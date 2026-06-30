@@ -631,8 +631,15 @@ async function _doSaveSession() {
   }
 
   try {
-    const editorState = _collectEditorState();
-    const res = await window.pywebview.api.save_session_file(editorState);
+    // Flush the full editor state snapshot to disk first
+    if (typeof EditorState !== 'undefined' && EditorState.saveNow) {
+      await EditorState.saveNow();
+    }
+
+    const editorState = await _collectEditorState();
+    const frontendAnnotations = _collectAllFrontendAnnotations();
+
+    const res = await window.pywebview.api.save_session_file(editorState, frontendAnnotations);
 
     if (res && res.ok) {
       showToast('Session saved: ' + (res.path || '').split(/[\\/]/).pop(), 'success');
@@ -654,8 +661,15 @@ async function _doSaveSessionAs() {
   }
 
   try {
-    const editorState = _collectEditorState();
-    const res = await window.pywebview.api.save_session_file_as(editorState);
+    // Flush the full editor state snapshot to disk first
+    if (typeof EditorState !== 'undefined' && EditorState.saveNow) {
+      await EditorState.saveNow();
+    }
+
+    const editorState = await _collectEditorState();
+    const frontendAnnotations = _collectAllFrontendAnnotations();
+
+    const res = await window.pywebview.api.save_session_file_as(editorState, frontendAnnotations);
 
     if (res && res.ok) {
       showToast('Session saved: ' + (res.path || '').split(/[\\/]/).pop(), 'success');
@@ -688,34 +702,43 @@ async function _doOpenSession() {
     Store.pdfName = res.pdf_name || '';
     Store.pdfPath = res.pdf_path || '';
     Store.pageCount = res.page_count || 0;
-    Store.pipelineRan = (res.annotation_count || 0) > 0;
+    Store.pipelineRan = true;
 
+    // Update navbar
     const navSession = document.getElementById('nav-session');
     if (navSession) navSession.textContent = Store.sessionId;
 
     const sessionInput = document.getElementById('session-input');
     if (sessionInput) sessionInput.value = Store.sessionId;
 
+    // Update file-loaded area
     const fileLoaded = document.getElementById('file-loaded');
     const fileNameLabel = document.getElementById('file-name-label');
     const filePagesLabel = document.getElementById('file-pages-label');
     const dropZone = document.getElementById('drop-zone');
     const emptyState = document.getElementById('empty-state');
+    const pdfContainer = document.getElementById('pdf-container');
 
     if (fileLoaded) fileLoaded.classList.remove('hidden');
     if (fileNameLabel) fileNameLabel.textContent = Store.pdfName || '—';
     if (filePagesLabel) filePagesLabel.textContent = `${Store.pageCount || 0} pages`;
     if (dropZone) dropZone.classList.add('hidden');
     if (emptyState) emptyState.classList.add('hidden');
+    if (pdfContainer) pdfContainer.classList.remove('hidden');
 
     if (typeof Canvas !== 'undefined' && Canvas.showEmpty) {
       Canvas.showEmpty(false);
     }
 
+    // Restore editor state (dataset chips, annotation objects)
+    await _restoreEditorStateIfAny();
+
+    // Load the first page with annotations
     if (Store.pageCount > 0 && typeof Canvas !== 'undefined' && Canvas.loadPage) {
       await Canvas.loadPage(1);
     }
 
+    // Refresh all sidebar data
     if (typeof Sidebar !== 'undefined' && Sidebar.refreshStats) {
       await Sidebar.refreshStats();
     }
@@ -723,8 +746,6 @@ async function _doOpenSession() {
     if (typeof Sidebar !== 'undefined' && Sidebar.refreshUnmappedQueue) {
       await Sidebar.refreshUnmappedQueue();
     }
-
-    await _restoreEditorStateIfAny();
 
     showToast('Session loaded: ' + (res.pdf_name || Store.sessionId), 'success');
 
@@ -734,12 +755,89 @@ async function _doOpenSession() {
   }
 }
 
-function _collectEditorState() {
-  const state = {
+async function _collectEditorState() {
+  // Build the full snapshot via EditorState (merges backend + frontend annotations)
+  if (typeof EditorState !== 'undefined' && EditorState.buildSnapshot) {
+    try {
+      return await EditorState.buildSnapshot();
+    } catch (e) {
+      console.warn('[app] buildSnapshot failed, falling back:', e);
+    }
+  }
+
+  return {
+    session_id: Store.sessionId,
+    pdf_name: Store.pdfName,
     objects: Store.editorObjects || [],
     datasetChips: Store.datasetChips || [],
-    undoStack: Store.undoStack || [],
-    redoStack: Store.redoStack || [],
   };
-  return state;
+}
+
+function _collectAllFrontendAnnotations() {
+  // Gather every annotation the frontend knows about — including user-created
+  // ones that only live in Store.annotations and never reached the backend
+  const all = [];
+  const seen = new Set();
+
+  (Store.annotations || []).forEach(rec => {
+    if (!rec || !rec.annotation_id) return;
+    if (seen.has(rec.annotation_id)) return;
+    seen.add(rec.annotation_id);
+    all.push(rec);
+  });
+
+  // Also gather from Store.editorObjects (user-drawn annotations stored as objects)
+  (Store.editorObjects || []).forEach(obj => {
+    if (!obj || !obj.object_id) return;
+    if (obj.object_type !== 'annotation') return;
+    if (obj.removed || obj.visible === false) return;
+    if (seen.has(obj.object_id)) return;
+    seen.add(obj.object_id);
+
+    const data = obj.data || {};
+    all.push({
+      annotation_id: obj.object_id,
+      page: obj.page || 1,
+      status: data.status || 'UNMAPPED',
+      form_code: data.form_code || '',
+      raw_variable: data.raw_variable || '',
+      raw_label: data.raw_label || '',
+      sdtm_dataset: data.sdtm_dataset || '',
+      sdtm_variable: data.sdtm_variable || '',
+      sdtm_label: data.sdtm_label || '',
+      component: data.raw_label || '',
+      x0_pts: obj.rect_pts?.x0,
+      y0_pts: obj.rect_pts?.y0,
+      x1_pts: obj.rect_pts?.x1,
+      y1_pts: obj.rect_pts?.y1,
+      source: obj.source || 'USER',
+    });
+  });
+
+  // Dataset chips as pseudo-annotations for persistence
+  (Store.datasetChips || []).forEach(chip => {
+    if (!chip || !chip.chip_id) return;
+    if (chip.removed || chip.visible === false) return;
+    if (seen.has(chip.chip_id)) return;
+    seen.add(chip.chip_id);
+
+    all.push({
+      annotation_id: chip.chip_id,
+      page: chip.page || 1,
+      page_type: 'DATASET_CHIP',
+      status: 'RESOLVED',
+      sdtm_dataset: chip.dataset || '',
+      sdtm_variable: '',
+      sdtm_label: chip.full_name || '',
+      component: chip.display_text || '',
+      x0_pts: chip.rect_pts?.x0,
+      y0_pts: chip.rect_pts?.y0,
+      x1_pts: chip.rect_pts?.x1,
+      y1_pts: chip.rect_pts?.y1,
+      source: chip.source || 'AUTO',
+      fill_rgb: chip.fill_rgb || null,
+    });
+  });
+
+  return all;
 }

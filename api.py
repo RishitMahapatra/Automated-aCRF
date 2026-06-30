@@ -467,9 +467,11 @@ class Api:
     # SESSION FILE (.acrf) — Save / Open / Save As
     # ==========================================================================
 
-    def save_session_file(self, editor_state=None):
+    def save_session_file(self, editor_state=None, frontend_annotations=None):
         """
         Save to the current .acrf path (or prompt Save As if no path yet).
+        frontend_annotations: list of annotation records from the JS Store,
+        including user-created ones that only exist in the frontend.
         """
         try:
             if not self._pdf_path:
@@ -477,8 +479,10 @@ class Api:
             if not self._session_id:
                 return {"ok": False, "error": "No session ID"}
 
+            self._merge_frontend_annotations(frontend_annotations)
+
             if not self._acrf_path:
-                return self.save_session_file_as(editor_state)
+                return self.save_session_file_as(editor_state, frontend_annotations)
 
             result = session_bridge.save_session(
                 save_path=self._acrf_path,
@@ -491,7 +495,7 @@ class Api:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
-    def save_session_file_as(self, editor_state=None):
+    def save_session_file_as(self, editor_state=None, frontend_annotations=None):
         """
         Prompt for location and save the .acrf session file.
         """
@@ -500,6 +504,8 @@ class Api:
                 return {"ok": False, "error": "No PDF loaded"}
             if not self._session_id:
                 return {"ok": False, "error": "No session ID"}
+
+            self._merge_frontend_annotations(frontend_annotations)
 
             suggested_name = f"{self._session_id}.acrf"
 
@@ -534,6 +540,59 @@ class Api:
 
         except Exception as e:
             return {"ok": False, "error": str(e)}
+
+    def _merge_frontend_annotations(self, frontend_annotations):
+        """
+        Merge frontend-only annotations (user-drawn, with user_ or
+        userdschip_ prefixed IDs) into the backend annotation_data.json
+        so they survive save/restore.
+        """
+        if not frontend_annotations or not isinstance(frontend_annotations, list):
+            return
+        if not self._session_id:
+            return
+
+        from config import get_annotation_json_path
+        import json
+
+        json_path = get_annotation_json_path(self._session_id)
+
+        existing = []
+        if json_path.exists():
+            try:
+                existing = json.loads(json_path.read_text(encoding="utf-8"))
+                if not isinstance(existing, list):
+                    existing = []
+            except Exception:
+                existing = []
+
+        existing_ids = {
+            str(r.get("annotation_id", "")) for r in existing if r
+        }
+
+        added = 0
+        for rec in frontend_annotations:
+            if not rec or not isinstance(rec, dict):
+                continue
+            ann_id = str(rec.get("annotation_id", ""))
+            if not ann_id:
+                continue
+
+            if ann_id in existing_ids:
+                for i, ex in enumerate(existing):
+                    if str(ex.get("annotation_id", "")) == ann_id:
+                        existing[i] = {**ex, **rec}
+                        break
+            else:
+                existing.append(rec)
+                existing_ids.add(ann_id)
+                added += 1
+
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        json_path.write_text(
+            json.dumps(existing, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
 
     def open_session_file(self):
         """

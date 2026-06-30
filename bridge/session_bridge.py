@@ -173,7 +173,7 @@ def save_session(
     except Exception:
         pass
 
-    if editor_state and not editor_state_json.exists():
+    if editor_state:
         editor_state_json.parent.mkdir(parents=True, exist_ok=True)
         editor_state_json.write_text(
             json.dumps({"session_id": session_id, "version": 1, "state": editor_state}, indent=2),
