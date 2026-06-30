@@ -115,6 +115,7 @@ The Side Panel sits on the left edge of the interface. It has three tabs that co
 
 ---
 
+
 ### 📤 Upload Tab
 
 | Control | Description |
@@ -126,6 +127,9 @@ The Side Panel sits on the left edge of the interface. It has three tabs that co
 | **Progress bar** | Appears during pipeline execution |
 | **↺ Restart Session** | Clears all annotations and resets to a clean state |
 
+<p align="center">
+<img width="959" height="539" alt="image" src="https://github.com/user-attachments/assets/69bdb236-3401-452f-a013-2fc81715f8e0" />
+</p>
 ---
 
 ### 📊 Analytics Tab
@@ -166,6 +170,10 @@ The ring **sweeps from zero** every time the percentage updates — the animatio
 ### 🔍 Review Tab
 
 The Review tab is the primary workspace for human evaluation of annotations flagged by the pipeline.
+
+<p align = "center">
+<img width="959" height="539" alt="image" src="https://github.com/user-attachments/assets/29156d45-152a-4e68-9fba-1ebea7836a8b" />
+</p>
 
 #### Summary Badge
 
@@ -211,6 +219,9 @@ Use the **Active / Resolved** inner tabs to switch between work queues.
  ⚠  CM.CMTRT                    [CM]
      RAW: Concomitant Medication      💬
 ```
+<p align="centre">
+<img width="954" height="539" alt="image" src="https://github.com/user-attachments/assets/6fcd8cc2-ccbc-4366-9f68-cfc8fc95f5af" />
+</p>
 
 | Element | Meaning |
 |---------|---------|
@@ -254,10 +265,13 @@ Use the **Active / Resolved** inner tabs to switch between work queues.
 
 ---
 
-## 🔵 Editor / Canvas
+## Editor / Canvas
 
 The central canvas renders the PDF with annotation overlays. Every annotation is interactive.
 
+<p align="centre">
+<img width="959" height="539" alt="image" src="https://github.com/user-attachments/assets/05aa673a-d00a-46d8-94ac-0ef6508af4f6" />
+</p>
 ---
 
 ### Annotation Types & Colour Coding
@@ -355,9 +369,11 @@ Right-clicking opens a context-sensitive menu. Options vary depending on whether
 
 ---
 
-## 🟤 Edit Panel
+## Edit Panel
 
 The Edit Panel opens on the right side when you click any annotation or queue item.
+
+
 
 ### Empty State
 
@@ -377,26 +393,9 @@ When nothing is selected, the panel shows:
 
 When an annotation is selected, the panel is divided into collapsible sections:
 
-```
-┌──────────────────────────────────┐
-│ ● Edit Annotation           [×]  │  ← Header
-├──────────────────────────────────┤
-│ RAW: [CMTRT]  Component: [field] │  ← Identity
-│ Form: [FORM_001]                 │
-├──────────────────────────────────┤
-│ Current: CM.CMTRT                │  ← Current Mapping
-│ "Concomitant Med Treatment"      │
-├──────────────────────────────────┤
-│ ▾ Suggestions         [—————]    │  ← Collapsible
-├──────────────────────────────────┤
-│ ▾ Manual Override     [—————]    │  ← Collapsible
-├──────────────────────────────────┤
-│ ▾ Change Dataset Colour [————]   │  ← Collapsible
-├──────────────────────────────────┤
-│ ▾ Actions             [—————]    │  ← Collapsible
-└──────────────────────────────────┘
-```
-
+<p  align="center">
+<img width="959" height="518" alt="image" src="https://github.com/user-attachments/assets/8298a7cf-2523-4fee-970c-5d6f5538cbe1" />
+</p>
 ---
 
 ### Header
@@ -506,15 +505,15 @@ Click the section header to expand. Use this to enter a mapping that wasn't sugg
 
 ### Change Dataset Colour Section ▾
 
-Applies a colour to **all annotations in the same dataset on the same form**.
+Applies a colour to **all annotations in the same dataset on the same form**. The colors applied follow the CDISC standards apart from the two additional colours used; Vermillion and Reddish Purple. 
 
 | Swatch | Colour | Name |
 |--------|--------|------|
-| 🟡 | `rgb(255,255,150)` | Yellow |
-| 🩵 | `rgb(191,255,255)` | Sky Blue |
-| 🟢 | `rgb(150,255,150)` | Bluish Green |
-| 🍑 | `rgb(255,190,155)` | Vermillion |
-| 🟣 | `rgb(204,121,167)` | Reddish Purple |
+| <img width="23" height="23" alt="image" src="https://github.com/user-attachments/assets/76460b7e-f90d-4283-b2d3-983389c8e619" /> | `rgb(255,255,150)` | Yellow |
+| <img width="20" height="19" alt="image" src="https://github.com/user-attachments/assets/fe9db098-3cd1-4aec-bfd5-9c6b3e22c496" /> | `rgb(191,255,255)` | Sky Blue |
+| <img width="23" height="22" alt="image" src="https://github.com/user-attachments/assets/f4751584-5a16-4b16-bf56-dca95fe5743f" /> | `rgb(150,255,150)` | Bluish Green |
+| <img width="20" height="17" alt="image" src="https://github.com/user-attachments/assets/3002ff4f-8866-4ed6-8e0a-df88bf04b013" /> | `rgb(255,190,155)` | Vermillion |
+| <img width="22" height="17" alt="image" src="https://github.com/user-attachments/assets/45f26a03-3ef7-4513-928e-e3f382171317" /> | `rgb(204,121,167)` | Reddish Purple |
 
 Click any swatch to apply immediately. The change is undoable.
 
@@ -588,13 +587,13 @@ The export runs first. If export succeeds, the session clears. If export fails, 
 
 ---
 
-## ⚫ Bottom Navigation Bar
+## Bottom Navigation Bar
 
 The sticky bar at the very bottom of the canvas area:
 
-```
- [‹]   [−]   [ 5 / 20 ]   [+]   [›]
-```
+<p align="center">
+<img width="239" height="38" alt="image" src="https://github.com/user-attachments/assets/5887d69d-e4a1-4df8-ab46-6c22a80705e3" />
+</p>
 
 | Control | Function |
 |---------|----------|
@@ -738,13 +737,13 @@ Domain badges in the review queue use distinct colours to help you visually iden
 
 | Component | Technology |
 |-----------|-----------|
-| **Desktop shell** | 🐍 Python + PyWebView |
-| **PDF rendering** | 📄 PDF.js |
-| **Frontend** | 🌐 Vanilla JS (no framework) |
-| **Styles** | 🎨 Custom CSS (dark neumorphic glass design) |
-| **PDF export** | 📦 jsPDF + html2canvas |
-| **AI pipeline** | 🤖 Python backend (SDTM matching) |
-| **Data persistence** | 💾 Python backend session store |
+| **Desktop shell** |  Python + PyWebView |
+| **PDF rendering** |  PDF.js |
+| **Frontend** |  Vanilla JS (no framework) |
+| **Styles** |  Custom CSS (dark neumorphic glass design) |
+| **PDF export** |  jsPDF + html2canvas |
+| **AI pipeline** |  Python backend (SDTM matching) |
+| **Data persistence** |  Python backend session store |
 
 ---
 
