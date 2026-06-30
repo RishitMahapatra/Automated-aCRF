@@ -282,6 +282,61 @@
         </div>
         <span class="nav-title">CRF Annotator</span>
         <div class="nav-divider"></div>
+
+        <!-- File menu -->
+        <div class="file-menu-wrap" id="file-menu-wrap">
+          <button class="file-menu-trigger" id="file-menu-trigger" title="File menu">
+            File
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" style="margin-left:3px;opacity:0.6"><path d="M2 3.5L5 7l3-3.5H2z"/></svg>
+          </button>
+          <div class="file-menu-dropdown hidden" id="file-menu-dropdown">
+            <button class="file-menu-item" id="fm-new-session">
+              <span class="file-menu-icon">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 1.5H4a1.5 1.5 0 0 0-1.5 1.5v11A1.5 1.5 0 0 0 4 15.5h8A1.5 1.5 0 0 0 13.5 14V6L9 1.5z"/><path d="M9 1.5V6h4.5"/><path d="M8 10V13"/><path d="M6.5 11.5H9.5"/></svg>
+              </span>
+              <span class="file-menu-label">New Session</span>
+            </button>
+            <button class="file-menu-item" id="fm-open">
+              <span class="file-menu-icon">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12.5v-9A1.5 1.5 0 0 1 4 2h3l2 2h3.5A1.5 1.5 0 0 1 14 5.5v7a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5z"/></svg>
+              </span>
+              <span class="file-menu-label">Open Session…</span>
+              <span class="file-menu-shortcut">Ctrl+O</span>
+            </button>
+            <div class="file-menu-divider"></div>
+            <button class="file-menu-item" id="fm-save">
+              <span class="file-menu-icon">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 14.5h-9A1.5 1.5 0 0 1 2 13V3a1.5 1.5 0 0 1 1.5-1.5h7l4 4V13a1.5 1.5 0 0 1-1.5 1.5z"/><path d="M11.5 14.5v-4h-7v4"/><path d="M4.5 1.5V5h5"/></svg>
+              </span>
+              <span class="file-menu-label">Save</span>
+              <span class="file-menu-shortcut">Ctrl+S</span>
+            </button>
+            <button class="file-menu-item" id="fm-save-as">
+              <span class="file-menu-icon">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 14.5h-9A1.5 1.5 0 0 1 2 13V3a1.5 1.5 0 0 1 1.5-1.5h7l4 4V13a1.5 1.5 0 0 1-1.5 1.5z"/><path d="M11.5 14.5v-4h-7v4"/><path d="M4.5 1.5V5h5"/></svg>
+              </span>
+              <span class="file-menu-label">Save As…</span>
+              <span class="file-menu-shortcut">Ctrl+Shift+S</span>
+            </button>
+            <div class="file-menu-divider"></div>
+            <button class="file-menu-item" id="fm-export">
+              <span class="file-menu-icon">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 10v3a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13v-3"/><polyline points="5 6 8 3 11 6"/><line x1="8" y1="3" x2="8" y2="11"/></svg>
+              </span>
+              <span class="file-menu-label">Export PDF…</span>
+              <span class="file-menu-shortcut">Ctrl+E</span>
+            </button>
+            <div class="file-menu-divider"></div>
+            <button class="file-menu-item" id="fm-restart">
+              <span class="file-menu-icon">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 8 5 8"/><path d="M3.51 11A6 6 0 1 0 2 7"/></svg>
+              </span>
+              <span class="file-menu-label">Restart Session</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="nav-divider"></div>
         <span class="nav-session mono" id="nav-session">
           No session
         </span>

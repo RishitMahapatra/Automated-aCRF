@@ -65,6 +65,8 @@ async function initApp() {
     _bindZoomControls();
     _bindCtrlWheelZoom();
     _bindExportButton();
+    _bindFileMenu();
+    _bindFileShortcuts();
     await _restoreStateIfAny();
     await _restoreEditorStateIfAny();
 
@@ -523,4 +525,221 @@ function _syncThemeToggleTooltip() {
   const isLight = document.body.classList.contains('theme-light');
   btn.title = isLight ? 'Switch to dark mode' : 'Switch to light mode';
   btn.setAttribute('aria-label', btn.title);
+}
+
+// ==========================================================================
+// FILE MENU
+// ==========================================================================
+
+function _bindFileMenu() {
+  const trigger = document.getElementById('file-menu-trigger');
+  const dropdown = document.getElementById('file-menu-dropdown');
+  if (!trigger || !dropdown) return;
+
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = !dropdown.classList.contains('hidden');
+    if (isOpen) {
+      _closeFileMenu();
+    } else {
+      dropdown.classList.remove('hidden');
+      trigger.classList.add('open');
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!dropdown.classList.contains('hidden')) {
+      const wrap = document.getElementById('file-menu-wrap');
+      if (wrap && !wrap.contains(e.target)) {
+        _closeFileMenu();
+      }
+    }
+  });
+
+  document.getElementById('fm-new-session')?.addEventListener('click', () => {
+    _closeFileMenu();
+    document.getElementById('btn-restart-session')?.click();
+  });
+
+  document.getElementById('fm-open')?.addEventListener('click', () => {
+    _closeFileMenu();
+    _doOpenSession();
+  });
+
+  document.getElementById('fm-save')?.addEventListener('click', () => {
+    _closeFileMenu();
+    _doSaveSession();
+  });
+
+  document.getElementById('fm-save-as')?.addEventListener('click', () => {
+    _closeFileMenu();
+    _doSaveSessionAs();
+  });
+
+  document.getElementById('fm-export')?.addEventListener('click', () => {
+    _closeFileMenu();
+    document.getElementById('btn-export-pdf')?.click();
+  });
+
+  document.getElementById('fm-restart')?.addEventListener('click', () => {
+    _closeFileMenu();
+    document.getElementById('btn-restart-session')?.click();
+  });
+}
+
+function _closeFileMenu() {
+  const dropdown = document.getElementById('file-menu-dropdown');
+  const trigger = document.getElementById('file-menu-trigger');
+  if (dropdown) dropdown.classList.add('hidden');
+  if (trigger) trigger.classList.remove('open');
+}
+
+function _bindFileShortcuts() {
+  document.addEventListener('keydown', (e) => {
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (!ctrl) return;
+
+    if (e.key === 's' || e.key === 'S') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        _doSaveSessionAs();
+      } else {
+        _doSaveSession();
+      }
+    }
+
+    if (e.key === 'o' || e.key === 'O') {
+      if (!e.shiftKey) {
+        e.preventDefault();
+        _doOpenSession();
+      }
+    }
+
+    if (e.key === 'e' || e.key === 'E') {
+      if (!e.shiftKey) {
+        e.preventDefault();
+        document.getElementById('btn-export-pdf')?.click();
+      }
+    }
+  });
+}
+
+async function _doSaveSession() {
+  if (!Store.pdfLoaded || !Store.sessionId) {
+    showToast('No active session to save.', 'warning');
+    return;
+  }
+
+  try {
+    const editorState = _collectEditorState();
+    const res = await window.pywebview.api.save_session_file(editorState);
+
+    if (res && res.ok) {
+      showToast('Session saved: ' + (res.path || '').split(/[\\/]/).pop(), 'success');
+    } else if (res && res.error === 'Save cancelled') {
+      // user cancelled, no toast
+    } else {
+      showToast('Save failed: ' + (res?.error || 'Unknown error'), 'error');
+    }
+  } catch (e) {
+    console.error('[app] save session error:', e);
+    showToast('Save failed: ' + e, 'error');
+  }
+}
+
+async function _doSaveSessionAs() {
+  if (!Store.pdfLoaded || !Store.sessionId) {
+    showToast('No active session to save.', 'warning');
+    return;
+  }
+
+  try {
+    const editorState = _collectEditorState();
+    const res = await window.pywebview.api.save_session_file_as(editorState);
+
+    if (res && res.ok) {
+      showToast('Session saved: ' + (res.path || '').split(/[\\/]/).pop(), 'success');
+    } else if (res && res.error === 'Save cancelled') {
+      // user cancelled
+    } else {
+      showToast('Save failed: ' + (res?.error || 'Unknown error'), 'error');
+    }
+  } catch (e) {
+    console.error('[app] save-as error:', e);
+    showToast('Save failed: ' + e, 'error');
+  }
+}
+
+async function _doOpenSession() {
+  try {
+    const res = await window.pywebview.api.open_session_file();
+
+    if (!res || !res.ok) {
+      if (res && res.error !== 'No file selected') {
+        showToast('Open failed: ' + (res?.error || 'Unknown error'), 'error');
+      }
+      return;
+    }
+
+    Store.resetSession();
+
+    Store.sessionId = res.session_id;
+    Store.pdfLoaded = true;
+    Store.pdfName = res.pdf_name || '';
+    Store.pdfPath = res.pdf_path || '';
+    Store.pageCount = res.page_count || 0;
+    Store.pipelineRan = (res.annotation_count || 0) > 0;
+
+    const navSession = document.getElementById('nav-session');
+    if (navSession) navSession.textContent = Store.sessionId;
+
+    const sessionInput = document.getElementById('session-input');
+    if (sessionInput) sessionInput.value = Store.sessionId;
+
+    const fileLoaded = document.getElementById('file-loaded');
+    const fileNameLabel = document.getElementById('file-name-label');
+    const filePagesLabel = document.getElementById('file-pages-label');
+    const dropZone = document.getElementById('drop-zone');
+    const emptyState = document.getElementById('empty-state');
+
+    if (fileLoaded) fileLoaded.classList.remove('hidden');
+    if (fileNameLabel) fileNameLabel.textContent = Store.pdfName || '—';
+    if (filePagesLabel) filePagesLabel.textContent = `${Store.pageCount || 0} pages`;
+    if (dropZone) dropZone.classList.add('hidden');
+    if (emptyState) emptyState.classList.add('hidden');
+
+    if (typeof Canvas !== 'undefined' && Canvas.showEmpty) {
+      Canvas.showEmpty(false);
+    }
+
+    if (Store.pageCount > 0 && typeof Canvas !== 'undefined' && Canvas.loadPage) {
+      await Canvas.loadPage(1);
+    }
+
+    if (typeof Sidebar !== 'undefined' && Sidebar.refreshStats) {
+      await Sidebar.refreshStats();
+    }
+
+    if (typeof Sidebar !== 'undefined' && Sidebar.refreshUnmappedQueue) {
+      await Sidebar.refreshUnmappedQueue();
+    }
+
+    await _restoreEditorStateIfAny();
+
+    showToast('Session loaded: ' + (res.pdf_name || Store.sessionId), 'success');
+
+  } catch (e) {
+    console.error('[app] open session error:', e);
+    showToast('Open failed: ' + e, 'error');
+  }
+}
+
+function _collectEditorState() {
+  const state = {
+    objects: Store.editorObjects || [],
+    datasetChips: Store.datasetChips || [],
+    undoStack: Store.undoStack || [],
+    redoStack: Store.redoStack || [],
+  };
+  return state;
 }

@@ -146,6 +146,107 @@ html, body {
   flex-shrink: 0;
 }
 
+
+/* ── File Menu ─────────────────────────────────────────── */
+.file-menu-wrap {
+  position: relative;
+}
+
+.file-menu-trigger {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 3px 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.file-menu-trigger:hover,
+.file-menu-trigger.open {
+  color: var(--bright);
+  background: rgba(142, 84, 255, 0.10);
+  border-color: rgba(142, 84, 255, 0.25);
+}
+
+.file-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 220px;
+  background: #1A1730;
+  border: 1px solid rgba(142, 84, 255, 0.35);
+  border-radius: 8px;
+  padding: 4px 0;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+  z-index: 9999;
+  animation: fileMenuIn 120ms ease-out;
+}
+
+@keyframes fileMenuIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.file-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 14px;
+  background: none;
+  border: none;
+  color: #E0D6FF;
+  font-size: 12.5px;
+  font-weight: 500;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.file-menu-item:hover {
+  background: rgba(142, 84, 255, 0.18);
+}
+
+.file-menu-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(163, 116, 255, 0.75);
+}
+
+.file-menu-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.file-menu-label {
+  flex: 1;
+}
+
+.file-menu-shortcut {
+  font-size: 10px;
+  color: rgba(168, 159, 204, 0.55);
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
+
+.file-menu-divider {
+  height: 1px;
+  background: rgba(142, 84, 255, 0.15);
+  margin: 3px 10px;
+}
+
 .nav-page-count {
   color: var(--muted);
   font-size: 12px;

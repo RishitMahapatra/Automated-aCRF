@@ -18,6 +18,7 @@ from config import ROOT_DIR, OUTPUTS_DIR, EXCEL_PATH, get_session_output_dir
 from bridge.pipeline_bridge import PipelineBridge, run_full_pipeline
 from bridge import annotation_bridge
 from bridge import editor_state_bridge
+from bridge import session_bridge
 from bridge.export_bridge import ExportBridge
 
 
@@ -28,6 +29,7 @@ class Api:
         self._window = None
         self._pdf_path: Path | None = None
         self._session_id: str = ""
+        self._acrf_path: Path | None = None
         self._pipeline = PipelineBridge()
         self._export = ExportBridge()
 
@@ -99,6 +101,7 @@ class Api:
         try:
             self._pdf_path = None
             self._session_id = ""
+            self._acrf_path = None
             self._export = ExportBridge()
             return {"ok": True}
         except Exception as e:
@@ -457,5 +460,117 @@ class Api:
             )
             return result
 
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    # ==========================================================================
+    # SESSION FILE (.acrf) — Save / Open / Save As
+    # ==========================================================================
+
+    def save_session_file(self, editor_state=None):
+        """
+        Save to the current .acrf path (or prompt Save As if no path yet).
+        """
+        try:
+            if not self._pdf_path:
+                return {"ok": False, "error": "No PDF loaded"}
+            if not self._session_id:
+                return {"ok": False, "error": "No session ID"}
+
+            if not self._acrf_path:
+                return self.save_session_file_as(editor_state)
+
+            result = session_bridge.save_session(
+                save_path=self._acrf_path,
+                session_id=self._session_id,
+                pdf_path=self._pdf_path,
+                editor_state=editor_state,
+            )
+            return result
+
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def save_session_file_as(self, editor_state=None):
+        """
+        Prompt for location and save the .acrf session file.
+        """
+        try:
+            if not self._pdf_path:
+                return {"ok": False, "error": "No PDF loaded"}
+            if not self._session_id:
+                return {"ok": False, "error": "No session ID"}
+
+            suggested_name = f"{self._session_id}.acrf"
+
+            save_result = self._window.create_file_dialog(
+                webview.SAVE_DIALOG,
+                save_filename=suggested_name,
+                file_types=("aCRF Session (*.acrf)",),
+            )
+
+            if not save_result:
+                return {"ok": False, "error": "Save cancelled"}
+
+            if isinstance(save_result, (list, tuple)):
+                out_path = Path(save_result[0])
+            else:
+                out_path = Path(save_result)
+
+            if out_path.suffix.lower() != ".acrf":
+                out_path = out_path.with_suffix(".acrf")
+
+            result = session_bridge.save_session(
+                save_path=out_path,
+                session_id=self._session_id,
+                pdf_path=self._pdf_path,
+                editor_state=editor_state,
+            )
+
+            if result.get("ok"):
+                self._acrf_path = out_path
+
+            return result
+
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def open_session_file(self):
+        """
+        Open file picker for .acrf files and load the session.
+        """
+        try:
+            result = self._window.create_file_dialog(
+                webview.OPEN_DIALOG,
+                allow_multiple=False,
+                file_types=("aCRF Session (*.acrf)",),
+            )
+
+            if not result or len(result) == 0:
+                return {"ok": False, "error": "No file selected"}
+
+            acrf_path = Path(result[0])
+            load_result = session_bridge.open_session(acrf_path)
+
+            if not load_result.get("ok"):
+                return load_result
+
+            self._session_id = load_result["session_id"]
+            self._pdf_path = Path(load_result["pdf_path"])
+            self._acrf_path = acrf_path
+            self._export.set_pdf(self._pdf_path)
+
+            return load_result
+
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def get_recent_sessions(self):
+        """
+        Return the 10 most recently opened .acrf sessions.
+        """
+        try:
+            sessions = session_bridge.get_recent_sessions(limit=10)
+            return {"ok": True, "sessions": sessions}
         except Exception as e:
             return {"ok": False, "error": str(e)}
