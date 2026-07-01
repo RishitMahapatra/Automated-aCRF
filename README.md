@@ -1,11 +1,49 @@
-# CRF Annotation Editor
 
+<h1 align="center"> CRF Annotation Editor </h1>
+
+<p align = "center">
+<img width="1983" height="793" alt="crf logo" src="https://github.com/user-attachments/assets/b726e2bf-8921-4eb9-a93d-68fe173655b7" />
+</p>
+
+<p align="center">
+  <b>Automated CRF Annotation Editor</b><br>
+  Full documentation is available at: <strong><a href="https://rishitmahapatra.github.io/Automated-aCRF/">Documentation</a></strong>
+  
+</p>
+<p align="center">
+
+<img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white" />
+
+<img src="https://img.shields.io/badge/PyWebView-Desktop_UI-2F855A?style=for-the-badge" />
+
+<img src="https://img.shields.io/badge/PyMuPDF-PDF_Engine-EA4335?style=for-the-badge" />
+
+<img src="https://img.shields.io/badge/OpenPyXL-Excel_Parser-217346?style=for-the-badge" />
+
+<img src="https://img.shields.io/badge/SQLite-Database-003B57?style=for-the-badge&logo=sqlite&logoColor=white" />
+
+<img src="https://img.shields.io/badge/.acrf-Project_Format-8B5CF6?style=for-the-badge" />
+
+<img src="https://img.shields.io/badge/NLP-Heuristic_Annotator-F59E0B?style=for-the-badge" />
+
+<img src="https://img.shields.io/badge/License-MIT-339AF0?style=for-the-badge" />
+
+</p>
+
+
+
+## Important References
+* Full step by step installation guide is present at: **[https://github.com/RishitMahapatra/Automated-aCRF/blob/main/INSTALLATION_GUIDE.md](https://github.com/RishitMahapatra/Automated-aCRF/blob/main/INSTALLATION_GUIDE.md)**
+
+* The User Manual is present at: **[https://github.com/RishitMahapatra/Automated-aCRF/blob/main/USER_MANUAL.md](https://github.com/RishitMahapatra/Automated-aCRF/blob/main/USER_MANUAL.md)**
+
+## About the Tool
 A desktop annotation and review tool for PDF Case Report Forms (**CRFs**) that helps users inspect extracted field mappings, review unresolved items, correct annotations visually, and export an updated annotated PDF.
 
 This application is designed around a simple workflow: load a CRF PDF, run the pipeline, review page-by-page annotations, correct what needs correction, and export the final annotated output.
 
 <p align="center">
-  <img width="959" height="505" alt="image" src="https://github.com/user-attachments/assets/5f87635a-3751-4f29-8557-1df97605e830" />
+  <img width="949" height="499" alt="image" src="https://github.com/user-attachments/assets/9d87cbea-6a54-4ee4-b160-ea2a04a803c2" />
 </p>
 
 
@@ -77,6 +115,16 @@ The focus of the tool is **review and usability**, allowing users to quickly mov
 6. **Export the Final PDF**  
    When review is complete, export the annotated PDF to save the reviewed version.
 
+## Workflow Diagram
+
+The end-to-end workflow is illustrated below. The application reads the CRF PDF, classifies pages, extracts and links annotation data, resolves SDTM mappings where possible, and surfaces unresolved items for manual review in the editor.
+
+<p align="center">
+<img width="959" height="539" alt="image" src="https://github.com/user-attachments/assets/2c24482b-22f4-42e8-a5e8-317a6d2d1dee" />
+</p>
+
+
+
 ## User Interface Guide
 
 ### Sidebar
@@ -92,7 +140,7 @@ The sidebar acts as the main control center for the session. It is used for:
 Depending on the build and layout version, the sidebar may include workspace controls, statistics, and review-related summary panels.
 
 <p align="center">
-<img width="237" height="453" alt="image" src="https://github.com/user-attachments/assets/1cc77988-549c-4f23-93d3-7cb21d80c2df" />
+<img width="353" height="494" alt="image" src="https://github.com/user-attachments/assets/e6506302-752e-4920-8faf-83e3745c0db3" />
 </p>
 
 
@@ -108,7 +156,7 @@ The canvas area displays the active CRF page and all visible annotations. It sup
 - **Zoomed review** for detailed reading
 
 <p align="center">
-<img width="439" height="454" alt="image" src="https://github.com/user-attachments/assets/a26b79a5-18cf-415a-b422-b285cd299e01" />
+<img width="752" height="539" alt="image" src="https://github.com/user-attachments/assets/ad1b19c0-c05a-4b97-9589-433708cc3116" />
 </p>
 
 ### Sticky Bottom Navigation
@@ -197,7 +245,7 @@ The tool may display summary metrics to help track review progress, such as:
 These indicators help users monitor how much review remains.
 
 <p align="center">
-<img width="241" height="185" alt="image" src="https://github.com/user-attachments/assets/6fd33f62-9ed9-42bd-a26e-ed42b469bfdd" />
+<img width="244" height="290" alt="image" src="https://github.com/user-attachments/assets/d638ea72-6a53-4a19-a9d2-c473883b927c" />
 </p>
 
 ## Export
@@ -210,13 +258,6 @@ Typical export flow:
 2. Confirm export settings (if applicable)  
 3. Save the annotated PDF for downstream use or documentation
 
-## Workflow Diagram
-
-The end-to-end workflow is illustrated below. The application reads the CRF PDF, classifies pages, extracts and links annotation data, resolves SDTM mappings where possible, and surfaces unresolved items for manual review in the editor.
-
-<p align="center">
-<img width="457" height="254" alt="image" src="https://github.com/user-attachments/assets/88fd0744-4ad0-4250-bf97-02ad6da6517d" />
-</p>
 
 ---
 
