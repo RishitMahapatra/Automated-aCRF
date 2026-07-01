@@ -7,15 +7,21 @@ Every public method is callable from JS via window.pywebview.api.method_name()
 
 from __future__ import annotations
 
+import csv
+import io
+import json
 import shutil
 import traceback
 import uuid
 import webbrowser
 from pathlib import Path
 
+import openpyxl
 import webview
 
 from config import ROOT_DIR, OUTPUTS_DIR, EXCEL_PATH, get_session_output_dir
+
+MAPPING_DB_PATH = ROOT_DIR / "assets" / "mapping_database.json"
 from bridge.pipeline_bridge import PipelineBridge, run_full_pipeline
 from bridge import annotation_bridge
 from bridge import editor_state_bridge
@@ -683,3 +689,222 @@ class Api:
             webbrowser.open(url)
         except Exception as e:
             print(f"[api] open_url error: {e}")
+
+    # ==========================================================================
+    # MAPPING DATABASE
+    # ==========================================================================
+
+    def select_excel_for_import(self):
+        """File picker for Excel files to import into mapping DB."""
+        try:
+            result = self._window.create_file_dialog(
+                webview.OPEN_DIALOG,
+                file_types=('Excel Files (*.xlsx;*.xls)', 'All Files (*.*)'),
+            )
+            if result and len(result) > 0:
+                return {"ok": True, "path": str(result[0])}
+            return {"ok": False, "error": "No file selected"}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def read_excel_preview(self, file_path, header_row=1):
+        """Read first 10 rows and all column headers from the Excel file."""
+        try:
+            wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+            ws = wb.active
+            rows = []
+            for i, row in enumerate(ws.iter_rows(values_only=True), start=1):
+                if i > header_row + 10:
+                    break
+                cells = [str(c) if c is not None else "" for c in row]
+                rows.append({"row_num": i, "cells": cells})
+            col_count = ws.max_column or 0
+            wb.close()
+            return {"ok": True, "rows": rows, "col_count": col_count}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def import_excel_mapping(self, file_path, config):
+        """
+        Parse an Excel file using the user's column configuration.
+        config = {
+          header_row: int,
+          data_start_row: int,
+          src_dataset_col: int (1-based),
+          raw_variable_col: int (1-based),
+          sdtm_dataset_col: int (1-based),
+          sdtm_variable_col: int (1-based),
+          sdtm_label_col: int (1-based) or 0 for none,
+          raw_label_col: int (1-based) or 0 for none,
+        }
+        Returns list of entry dicts.
+        """
+        try:
+            wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+            ws = wb.active
+            entries = []
+            src_ds_idx  = int(config.get("src_dataset_col", 0)) - 1
+            raw_var_idx = int(config.get("raw_variable_col", 0)) - 1
+            sdtm_ds_idx = int(config.get("sdtm_dataset_col", 0)) - 1
+            sdtm_v_idx  = int(config.get("sdtm_variable_col", 0)) - 1
+            sdtm_l_idx  = int(config.get("sdtm_label_col", 0)) - 1
+            raw_l_idx   = int(config.get("raw_label_col", 0)) - 1
+            data_start  = int(config.get("data_start_row", 2))
+
+            def _cell(row, idx):
+                if idx < 0 or idx >= len(row):
+                    return ""
+                return str(row[idx] or "").strip()
+
+            for i, row in enumerate(ws.iter_rows(values_only=True), start=1):
+                if i < data_start:
+                    continue
+                cells = list(row)
+                src_ds   = _cell(cells, src_ds_idx).upper()
+                raw_var  = _cell(cells, raw_var_idx).upper()
+                sdtm_ds  = _cell(cells, sdtm_ds_idx).upper()
+                sdtm_var = _cell(cells, sdtm_v_idx).upper()
+                sdtm_lbl = _cell(cells, sdtm_l_idx) if sdtm_l_idx >= 0 else ""
+                raw_lbl  = _cell(cells, raw_l_idx) if raw_l_idx >= 0 else ""
+
+                if not raw_var or raw_var in ("NONE", "NAN", ""):
+                    continue
+
+                entries.append({
+                    "id": str(uuid.uuid4())[:8],
+                    "src_dataset": src_ds,
+                    "raw_variable": raw_var,
+                    "raw_label": raw_lbl,
+                    "sdtm_dataset": sdtm_ds,
+                    "sdtm_variable": sdtm_var,
+                    "sdtm_label": sdtm_lbl,
+                    "source": "import",
+                })
+            wb.close()
+            return {"ok": True, "entries": entries, "count": len(entries)}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def save_mapping_db(self, data):
+        """Save mapping database JSON to assets/mapping_database.json."""
+        try:
+            MAPPING_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with open(MAPPING_DB_PATH, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            return {"ok": True, "path": str(MAPPING_DB_PATH)}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def load_mapping_db(self):
+        """Load mapping database JSON from assets/mapping_database.json."""
+        try:
+            if not MAPPING_DB_PATH.exists():
+                return {"ok": True, "data": None}
+            with open(MAPPING_DB_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return {"ok": True, "data": data}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def export_mapping_excel(self, entries):
+        """Export mapping entries to an Excel file (user picks save location)."""
+        try:
+            result = self._window.create_file_dialog(
+                webview.SAVE_DIALOG,
+                save_filename="mapping_export.xlsx",
+                file_types=('Excel Files (*.xlsx)',),
+            )
+            if not result:
+                return {"ok": False, "error": "No location selected"}
+            save_path = str(result) if isinstance(result, str) else str(result[0]) if result else None
+            if not save_path:
+                return {"ok": False, "error": "No location selected"}
+
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Mapping Database"
+            headers = ["Source Dataset", "Raw Variable", "Raw Label",
+                       "SDTM Dataset", "SDTM Variable", "SDTM Label"]
+            ws.append(headers)
+            for e in entries:
+                ws.append([
+                    e.get("src_dataset", ""),
+                    e.get("raw_variable", ""),
+                    e.get("raw_label", ""),
+                    e.get("sdtm_dataset", ""),
+                    e.get("sdtm_variable", ""),
+                    e.get("sdtm_label", ""),
+                ])
+            wb.save(save_path)
+            return {"ok": True, "path": save_path}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def export_mapping_csv(self, entries):
+        """Export mapping entries to a CSV file."""
+        try:
+            result = self._window.create_file_dialog(
+                webview.SAVE_DIALOG,
+                save_filename="mapping_export.csv",
+                file_types=('CSV Files (*.csv)',),
+            )
+            if not result:
+                return {"ok": False, "error": "No location selected"}
+            save_path = str(result) if isinstance(result, str) else str(result[0]) if result else None
+            if not save_path:
+                return {"ok": False, "error": "No location selected"}
+
+            with open(save_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["Source Dataset", "Raw Variable", "Raw Label",
+                                 "SDTM Dataset", "SDTM Variable", "SDTM Label"])
+                for e in entries:
+                    writer.writerow([
+                        e.get("src_dataset", ""),
+                        e.get("raw_variable", ""),
+                        e.get("raw_label", ""),
+                        e.get("sdtm_dataset", ""),
+                        e.get("sdtm_variable", ""),
+                        e.get("sdtm_label", ""),
+                    ])
+            return {"ok": True, "path": save_path}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def save_mapping_file(self, data):
+        """Save mapping database as a .mtbl file (portable versioned snapshot)."""
+        try:
+            result = self._window.create_file_dialog(
+                webview.SAVE_DIALOG,
+                save_filename="mapping_table.mtbl",
+                file_types=('Mapping Table (*.mtbl)',),
+            )
+            if not result:
+                return {"ok": False, "error": "No location selected"}
+            save_path = str(result) if isinstance(result, str) else str(result[0]) if result else None
+            if not save_path:
+                return {"ok": False, "error": "No location selected"}
+            if not save_path.endswith(".mtbl"):
+                save_path += ".mtbl"
+
+            with open(save_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            return {"ok": True, "path": save_path}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def load_mapping_file(self):
+        """Load a .mtbl file."""
+        try:
+            result = self._window.create_file_dialog(
+                webview.OPEN_DIALOG,
+                file_types=('Mapping Table (*.mtbl)', 'All Files (*.*)'),
+            )
+            if not result or len(result) == 0:
+                return {"ok": False, "error": "No file selected"}
+            file_path = str(result[0])
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return {"ok": True, "data": data, "path": file_path}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}

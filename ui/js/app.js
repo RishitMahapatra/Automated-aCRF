@@ -88,6 +88,7 @@ async function initApp() {
     _bindFileMenu();
     _bindHelpMenu();
     _bindFileShortcuts();
+    _bindSettingsButton();
 
     // Intercept EditorState.scheduleAutosave so any drag/resize marks the session dirty
     if (typeof EditorState !== 'undefined' && EditorState.scheduleAutosave) {
@@ -729,6 +730,19 @@ function _closeHelpMenu() {
   const trigger = document.getElementById('help-menu-trigger');
   if (dropdown) dropdown.classList.add('hidden');
   if (trigger) trigger.classList.remove('open');
+}
+
+// ==========================================================================
+// SETTINGS BUTTON
+// ==========================================================================
+
+function _bindSettingsButton() {
+  document.getElementById('btn-settings')?.addEventListener('click', () => {
+    if (typeof Settings !== 'undefined' && Settings.show) {
+      Settings.init();
+      Settings.show();
+    }
+  });
 }
 
 function _bindFileShortcuts() {

@@ -4704,3 +4704,497 @@ body.theme-light .nav-export-btn:hover {
   border: 1px solid rgba(59,130,246,0.45);
 }
 
+
+/* ══════════════════════════════════════════════════════════════
+   SETTINGS PAGE — Mapping Manager
+   ══════════════════════════════════════════════════════════════ */
+
+.settings-page {
+  position: fixed;
+  inset: 0;
+  z-index: 800;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.settings-page.hidden { display: none; }
+
+/* ── Top Bar ──────────────────────────────────────────────── */
+
+.settings-topbar {
+  display: flex;
+  align-items: center;
+  height: var(--nav-h);
+  padding: 0 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.settings-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--body);
+  font: 500 12px var(--font-ui);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.settings-back-btn:hover {
+  background: var(--elevated);
+  border-color: var(--violet);
+  color: var(--bright);
+}
+
+.settings-title {
+  font: 600 14px var(--font-ui);
+  color: var(--bright);
+  flex: 1;
+}
+
+.settings-topbar-right {
+  display: flex;
+  gap: 8px;
+}
+
+/* ── Nav settings button ──────────────────────────────────── */
+
+.nav-settings-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-right: 8px;
+}
+.nav-settings-btn:hover {
+  background: var(--elevated);
+  color: var(--bright);
+  border-color: var(--violet);
+}
+
+/* ── Toolbar ──────────────────────────────────────────────── */
+
+.settings-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.settings-toolbar-left,
+.settings-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.settings-toolbar-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+.sett-btn {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--elevated);
+  color: var(--body);
+  font: 500 11px var(--font-ui);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.sett-btn:hover {
+  background: var(--border);
+  color: var(--bright);
+}
+
+.sett-btn-accent {
+  background: var(--violet);
+  color: var(--bright);
+  border-color: var(--violet);
+}
+.sett-btn-accent:hover {
+  background: #7a43e6;
+}
+
+.sett-btn-sm {
+  padding: 3px 8px;
+  font-size: 10px;
+}
+.sett-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.sett-search {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--bright);
+  font: 12px var(--font-mono);
+  width: 200px;
+  outline: none;
+  transition: border 0.15s;
+}
+.sett-search:focus {
+  border-color: var(--violet);
+}
+
+/* ── Table ────────────────────────────────────────────────── */
+
+.settings-table-wrap {
+  flex: 1;
+  overflow: auto;
+  padding: 0;
+}
+
+.mdb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font: 12px var(--font-mono);
+  table-layout: fixed;
+}
+
+.mdb-th {
+  position: sticky;
+  top: 0;
+  background: var(--elevated);
+  color: var(--muted);
+  font: 600 10px var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  z-index: 1;
+}
+.mdb-th-num { width: 44px; text-align: center; }
+.mdb-th-actions { width: 36px; }
+
+.mdb-cell {
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(42,45,74,0.4);
+  color: var(--body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+}
+.mdb-cell-num {
+  text-align: center;
+  color: var(--muted);
+  font-size: 10px;
+}
+.mdb-cell-edit {
+  cursor: text;
+}
+.mdb-cell-edit:hover {
+  background: rgba(142,84,255,0.06);
+}
+
+.mdb-cell-actions {
+  text-align: center;
+  padding: 2px 4px;
+}
+
+.mdb-row-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--muted);
+  padding: 2px 6px;
+  border-radius: 3px;
+  transition: all 0.15s;
+}
+.mdb-row-del:hover {
+  color: #f87171;
+  background: rgba(248,113,113,0.1);
+}
+
+.mdb-table tbody tr:hover {
+  background: rgba(142,84,255,0.04);
+}
+
+.mdb-inline-input {
+  width: 100%;
+  padding: 2px 4px;
+  border: 1px solid var(--violet);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--bright);
+  font: 12px var(--font-mono);
+  outline: none;
+}
+
+.mdb-table-compact { font-size: 11px; }
+.mdb-table-compact .mdb-cell { padding: 3px 6px; }
+
+/* ── Footer / Pagination ──────────────────────────────────── */
+
+.settings-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.mdb-stats {
+  font: 11px var(--font-ui);
+  color: var(--muted);
+}
+
+.mdb-pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mdb-page-info {
+  font: 11px var(--font-ui);
+  color: var(--body);
+}
+
+/* ── Import Dialog ────────────────────────────────────────── */
+
+.import-body { padding: 16px 20px; }
+
+.import-file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.import-label {
+  font: 600 12px var(--font-ui);
+  color: var(--muted);
+}
+.import-file-path {
+  font: 12px var(--font-mono);
+  color: var(--blue);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.import-config-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.import-config-2col { grid-template-columns: 1fr 1fr; }
+
+.import-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.import-field-label {
+  font: 500 11px var(--font-ui);
+  color: var(--body);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.import-hint {
+  font: 10px var(--font-ui);
+  color: var(--muted);
+  font-weight: 400;
+}
+.import-optional {
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.import-input {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--bright);
+  font: 12px var(--font-mono);
+  outline: none;
+  transition: border 0.15s;
+}
+.import-input:focus { border-color: var(--violet); }
+
+.import-section-title {
+  font: 600 11px var(--font-ui);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.import-preview-wrap {
+  max-height: 180px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.import-header-row td {
+  background: rgba(142,84,255,0.12) !important;
+  font-weight: 600;
+  color: var(--bright) !important;
+}
+
+/* ── Merge Dialog ─────────────────────────────────────────── */
+
+.merge-summary {
+  display: flex;
+  gap: 16px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.merge-stat {
+  font: 600 12px var(--font-ui);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.merge-stat span { font: 700 14px var(--font-mono); }
+.merge-stat-unchanged { color: var(--muted); }
+.merge-stat-added { color: var(--green); }
+.merge-stat-conflicts { color: var(--orange); }
+
+.merge-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 20px;
+  background: var(--elevated);
+  border-bottom: 1px solid var(--border);
+}
+.merge-nav.hidden { display: none; }
+.merge-nav-label {
+  font: 500 11px var(--font-ui);
+  color: var(--body);
+}
+
+.merge-conflicts-wrap {
+  padding: 12px 20px;
+}
+
+.merge-conflict-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.merge-conflict-active {
+  border-color: var(--violet);
+  box-shadow: 0 0 0 1px var(--violet);
+}
+
+.merge-conflict-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--elevated);
+  border-bottom: 1px solid var(--border);
+}
+.merge-conflict-key {
+  font: 600 12px var(--font-mono);
+  color: var(--bright);
+}
+.merge-conflict-num {
+  font: 10px var(--font-ui);
+  color: var(--muted);
+}
+
+.merge-diff { padding: 0; }
+.merge-diff-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  transition: opacity 0.2s;
+}
+.merge-diff-old {
+  background: rgba(248,113,113,0.08);
+  border-left: 3px solid #f87171;
+}
+.merge-diff-new {
+  background: rgba(0,230,118,0.08);
+  border-left: 3px solid var(--green);
+}
+.merge-diff-label {
+  font: 600 10px var(--font-ui);
+  text-transform: uppercase;
+  color: var(--muted);
+  min-width: 60px;
+}
+.merge-diff-val {
+  font: 600 12px var(--font-mono);
+  color: var(--bright);
+}
+.merge-diff-sublabel {
+  font: 11px var(--font-ui);
+  color: var(--muted);
+  flex: 1;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.merge-dim { opacity: 0.35; }
+
+.merge-conflict-actions {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.merge-btn-keep,
+.merge-btn-use {
+  flex: 1;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--elevated);
+  color: var(--body);
+  font: 500 11px var(--font-ui);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.merge-btn-keep:hover { border-color: #f87171; color: #f87171; }
+.merge-btn-use:hover { border-color: var(--green); color: var(--green); }
+
+.merge-btn-selected {
+  background: var(--violet) !important;
+  border-color: var(--violet) !important;
+  color: var(--bright) !important;
+}
+

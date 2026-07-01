@@ -378,6 +378,9 @@
         <span class="dirty-dot hidden" id="dirty-dot" title="Unsaved changes">●</span>
       </div>
       <div class="nav-right">
+        <button class="nav-settings-btn" id="btn-settings" title="Mapping Manager">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
         <button class="nav-export-btn" id="btn-export-pdf" title="Export annotated PDF">
           Export ↗
         </button>
@@ -916,6 +919,247 @@
 
     </div>
   </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       SETTINGS PAGE — Mapping Manager (full-page overlay)
+       ══════════════════════════════════════════════════════════ -->
+  <div id="settings-page" class="settings-page hidden">
+
+    <!-- Top bar -->
+    <div class="settings-topbar">
+      <button class="settings-back-btn" id="mdb-back-btn">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 3L5 8l5 5"/></svg>
+        Back to Editor
+      </button>
+      <span class="settings-title">Mapping Manager</span>
+      <div class="settings-topbar-right">
+        <button class="btn btn-primary" id="mdb-save-btn">Save Database</button>
+      </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="settings-toolbar">
+      <div class="settings-toolbar-left">
+        <button class="sett-btn" id="mdb-import-btn" title="Import from an Excel file">Import Excel</button>
+        <button class="sett-btn" id="mdb-merge-btn" title="Import &amp; merge with existing table">Merge Excel</button>
+        <button class="sett-btn" id="mdb-new-btn" title="Clear table and start from scratch">New from Scratch</button>
+        <div class="settings-toolbar-sep"></div>
+        <button class="sett-btn" id="mdb-export-excel" title="Export table as .xlsx">Export Excel</button>
+        <button class="sett-btn" id="mdb-export-csv" title="Export table as .csv">Export CSV</button>
+        <div class="settings-toolbar-sep"></div>
+        <button class="sett-btn" id="mdb-save-mtbl" title="Save a portable snapshot (.mtbl) for versioning">Save as .mtbl</button>
+        <button class="sett-btn" id="mdb-load-mtbl" title="Load a previously saved .mtbl snapshot">Load .mtbl</button>
+      </div>
+      <div class="settings-toolbar-right">
+        <input type="text" class="sett-search" id="mdb-search" placeholder="Search entries…">
+        <button class="sett-btn sett-btn-accent" id="mdb-add-btn">+ Add Record</button>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="settings-table-wrap">
+      <table class="mdb-table">
+        <thead>
+          <tr>
+            <th class="mdb-th mdb-th-num">#</th>
+            <th class="mdb-th">Source Dataset</th>
+            <th class="mdb-th">Raw Variable</th>
+            <th class="mdb-th">Raw Label</th>
+            <th class="mdb-th">SDTM Dataset</th>
+            <th class="mdb-th">SDTM Variable</th>
+            <th class="mdb-th">SDTM Label</th>
+            <th class="mdb-th mdb-th-actions"></th>
+          </tr>
+        </thead>
+        <tbody id="mdb-table-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Pagination + Stats -->
+    <div class="settings-footer">
+      <span class="mdb-stats" id="mdb-stats"></span>
+      <div class="mdb-pagination">
+        <button class="sett-btn sett-btn-sm" id="mdb-page-prev" disabled>&larr; Prev</button>
+        <span class="mdb-page-info" id="mdb-page-info">No entries</span>
+        <button class="sett-btn sett-btn-sm" id="mdb-page-next" disabled>Next &rarr;</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Import Wizard Dialog ──────────────────────────────── -->
+  <div id="mdb-import-dialog" class="comment-dialog-overlay hidden">
+    <div class="comment-dialog" style="max-width:640px;width:90vw;">
+      <div class="comment-dialog-header">
+        <span class="comment-dialog-title">Import Excel Mapping</span>
+        <button class="comment-dialog-close" id="import-cancel-btn">&times;</button>
+      </div>
+      <div class="import-body">
+        <div class="import-file-row">
+          <span class="import-label">File:</span>
+          <span class="import-file-path mono" id="import-file-path">—</span>
+        </div>
+
+        <div class="import-config-grid">
+          <div class="import-field">
+            <label class="import-field-label">Header row number
+              <span class="import-hint">Which row has column titles (e.g., 2)</span>
+            </label>
+            <input type="number" class="import-input" id="imp-header-row" value="2" min="1" data-default="2">
+          </div>
+          <div class="import-field">
+            <label class="import-field-label">Data starts from row
+              <span class="import-hint">First row with actual data (e.g., 3)</span>
+            </label>
+            <input type="number" class="import-input" id="imp-data-start" value="3" min="1" data-default="3">
+          </div>
+          <div class="import-field">
+            <label class="import-field-label">Source Dataset column
+              <span class="import-hint">The domain / form code, e.g. AE, CM, DM</span>
+            </label>
+            <input type="number" class="import-input" id="imp-src-ds-col" placeholder="e.g. 2" min="1" data-default="">
+          </div>
+          <div class="import-field">
+            <label class="import-field-label">Raw Variable column
+              <span class="import-hint">The CRF field name, e.g. AETERM, CMTRT</span>
+            </label>
+            <input type="number" class="import-input" id="imp-raw-var-col" placeholder="e.g. 3" min="1" data-default="">
+          </div>
+          <div class="import-field">
+            <label class="import-field-label">Raw Label column <span class="import-optional">(optional)</span>
+              <span class="import-hint">Description of the CRF field, e.g. "Adverse Event Term"</span>
+            </label>
+            <input type="number" class="import-input" id="imp-raw-label-col" placeholder="0 = skip" min="0" data-default="0">
+          </div>
+          <div class="import-field">
+            <label class="import-field-label">SDTM Dataset column
+              <span class="import-hint">Target SDTM domain, e.g. AE, CM</span>
+            </label>
+            <input type="number" class="import-input" id="imp-sdtm-ds-col" placeholder="e.g. 9" min="1" data-default="">
+          </div>
+          <div class="import-field">
+            <label class="import-field-label">SDTM Variable column
+              <span class="import-hint">Target SDTM variable, e.g. AETERM, CMTRT</span>
+            </label>
+            <input type="number" class="import-input" id="imp-sdtm-var-col" placeholder="e.g. 10" min="1" data-default="">
+          </div>
+          <div class="import-field">
+            <label class="import-field-label">SDTM Label column <span class="import-optional">(optional)</span>
+              <span class="import-hint">SDTM variable label, e.g. "Reported Term"</span>
+            </label>
+            <input type="number" class="import-input" id="imp-sdtm-label-col" placeholder="0 = skip" min="0" data-default="0">
+          </div>
+        </div>
+
+        <div style="margin:12px 0 4px;display:flex;justify-content:space-between;align-items:center;">
+          <span class="import-section-title">Preview</span>
+          <button class="sett-btn sett-btn-sm" id="import-preview-btn">Refresh Preview</button>
+        </div>
+        <div class="import-preview-wrap">
+          <table class="mdb-table mdb-table-compact">
+            <tbody id="import-preview-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="comment-dialog-actions">
+        <button class="btn btn-primary" id="import-execute-btn">Import</button>
+        <button class="btn-cancel" id="import-cancel-btn2" onclick="document.getElementById('mdb-import-dialog').classList.add('hidden')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Add Record Dialog ─────────────────────────────────── -->
+  <div id="mdb-add-dialog" class="comment-dialog-overlay hidden">
+    <div class="comment-dialog" style="max-width:480px;">
+      <div class="comment-dialog-header">
+        <span class="comment-dialog-title">Add Mapping Record</span>
+        <button class="comment-dialog-close" onclick="document.getElementById('mdb-add-dialog').classList.add('hidden')">&times;</button>
+      </div>
+      <div class="import-body">
+        <div class="import-config-grid import-config-2col">
+          <div class="import-field">
+            <label class="import-field-label">Source Dataset <span style="color:var(--orange)">*</span>
+              <span class="import-hint">Domain code, e.g. AE, CM, DM</span>
+            </label>
+            <input type="text" class="import-input" id="add-src-ds" placeholder="AE">
+          </div>
+          <div class="import-field">
+            <label class="import-field-label">Raw Variable <span style="color:var(--orange)">*</span>
+              <span class="import-hint">CRF field name, e.g. AETERM</span>
+            </label>
+            <input type="text" class="import-input" id="add-raw-var" placeholder="AETERM">
+          </div>
+          <div class="import-field">
+            <label class="import-field-label">Raw Label
+              <span class="import-hint">Description (optional), e.g. "Event Term"</span>
+            </label>
+            <input type="text" class="import-input" id="add-raw-label" placeholder="">
+          </div>
+          <div class="import-field">
+            <label class="import-field-label">SDTM Dataset <span style="color:var(--orange)">*</span>
+              <span class="import-hint">Target SDTM domain, e.g. AE</span>
+            </label>
+            <input type="text" class="import-input" id="add-sdtm-ds" placeholder="AE">
+          </div>
+          <div class="import-field">
+            <label class="import-field-label">SDTM Variable <span style="color:var(--orange)">*</span>
+              <span class="import-hint">Target variable, e.g. AETERM</span>
+            </label>
+            <input type="text" class="import-input" id="add-sdtm-var" placeholder="AETERM">
+          </div>
+          <div class="import-field">
+            <label class="import-field-label">SDTM Label
+              <span class="import-hint">Variable description (optional)</span>
+            </label>
+            <input type="text" class="import-input" id="add-sdtm-label" placeholder="">
+          </div>
+        </div>
+      </div>
+      <div class="comment-dialog-actions">
+        <button class="btn btn-primary" id="add-record-save">Add</button>
+        <button class="btn-cancel" id="add-record-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Merge Dialog ──────────────────────────────────────── -->
+  <div id="mdb-merge-dialog" class="comment-dialog-overlay hidden">
+    <div class="comment-dialog" style="max-width:680px;width:90vw;max-height:85vh;display:flex;flex-direction:column;">
+      <div class="comment-dialog-header">
+        <span class="comment-dialog-title">Merge Preview</span>
+        <button class="comment-dialog-close" id="merge-cancel-btn">&times;</button>
+      </div>
+      <div class="merge-summary">
+        <span class="merge-stat merge-stat-unchanged"><span id="merge-stat-unchanged">0</span> unchanged</span>
+        <span class="merge-stat merge-stat-added"><span id="merge-stat-added">0</span> new</span>
+        <span class="merge-stat merge-stat-conflicts"><span id="merge-stat-conflicts">0</span> conflicts</span>
+      </div>
+      <div class="merge-nav" id="merge-nav">
+        <button class="sett-btn sett-btn-sm" id="merge-prev-btn">&larr; Prev</button>
+        <span id="merge-nav-label" class="merge-nav-label">Conflict 1 of 1</span>
+        <button class="sett-btn sett-btn-sm" id="merge-next-btn">Next &rarr;</button>
+      </div>
+      <div class="merge-conflicts-wrap" id="merge-conflicts-list" style="flex:1;overflow-y:auto;"></div>
+      <div class="comment-dialog-actions">
+        <button class="btn btn-primary" id="merge-apply-btn">Apply Merge</button>
+        <button class="btn-cancel" id="merge-cancel-btn2" onclick="document.getElementById('mdb-merge-dialog').classList.add('hidden')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Confirm Dialog (Settings) ─────────────────────────── -->
+  <div id="mdb-confirm-dialog" class="comment-dialog-overlay hidden">
+    <div class="comment-dialog" style="max-width:380px;">
+      <div class="comment-dialog-header">
+        <span class="comment-dialog-title" id="mdb-confirm-title">Confirm</span>
+      </div>
+      <div style="padding:16px 20px;color:var(--body);font-size:13px;line-height:1.6;" id="mdb-confirm-message"></div>
+      <div class="comment-dialog-actions">
+        <button class="btn btn-primary" id="mdb-confirm-yes">Yes</button>
+        <button class="btn-cancel" id="mdb-confirm-no">No</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Right-click Context Menu ────────────────────────── -->
 <div id="ctx-menu" class="ctx-menu hidden">
   <!-- Blank canvas items -->
@@ -1215,6 +1459,7 @@
 <script src="js/sidebar.js"></script>
 <script src="js/canvas.js"></script>
 <script src="js/editpanel.js"></script>
+<script src="js/settings.js"></script>
 <script src="js/app.js"></script>
 
 </body>
