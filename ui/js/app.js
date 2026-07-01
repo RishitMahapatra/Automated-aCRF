@@ -86,6 +86,7 @@ async function initApp() {
     _bindCtrlWheelZoom();
     _bindExportButton();
     _bindFileMenu();
+    _bindHelpMenu();
     _bindFileShortcuts();
 
     // Intercept EditorState.scheduleAutosave so any drag/resize marks the session dirty
@@ -596,6 +597,7 @@ function _bindFileMenu() {
 
   trigger.addEventListener('click', (e) => {
     e.stopPropagation();
+    _closeHelpMenu();
     const isOpen = !dropdown.classList.contains('hidden');
     if (isOpen) {
       _closeFileMenu();
@@ -648,6 +650,62 @@ function _bindFileMenu() {
 function _closeFileMenu() {
   const dropdown = document.getElementById('file-menu-dropdown');
   const trigger = document.getElementById('file-menu-trigger');
+  if (dropdown) dropdown.classList.add('hidden');
+  if (trigger) trigger.classList.remove('open');
+}
+
+// ==========================================================================
+// HELP MENU
+// ==========================================================================
+
+function _bindHelpMenu() {
+  const trigger = document.getElementById('help-menu-trigger');
+  const dropdown = document.getElementById('help-menu-dropdown');
+  if (!trigger || !dropdown) return;
+
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    _closeFileMenu();
+    const isOpen = !dropdown.classList.contains('hidden');
+    if (isOpen) {
+      _closeHelpMenu();
+    } else {
+      dropdown.classList.remove('hidden');
+      trigger.classList.add('open');
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!dropdown.classList.contains('hidden')) {
+      const wrap = document.getElementById('help-menu-wrap');
+      if (wrap && !wrap.contains(e.target)) {
+        _closeHelpMenu();
+      }
+    }
+  });
+
+  const links = {
+    'hm-docs':          'https://rishitmahapatra.github.io/Automated-aCRF/',
+    'hm-user-manual':   'https://github.com/RishitMahapatra/Automated-aCRF/blob/main/USER_MANUAL.md',
+    'hm-install-guide': 'https://github.com/RishitMahapatra/Automated-aCRF/blob/main/INSTALLATION_GUIDE.md',
+    'hm-codebase':      'https://github.com/RishitMahapatra/Automated-aCRF',
+  };
+
+  for (const [id, url] of Object.entries(links)) {
+    document.getElementById(id)?.addEventListener('click', () => {
+      _closeHelpMenu();
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.open_url) {
+        window.pywebview.api.open_url(url);
+      } else {
+        window.open(url, '_blank');
+      }
+    });
+  }
+}
+
+function _closeHelpMenu() {
+  const dropdown = document.getElementById('help-menu-dropdown');
+  const trigger = document.getElementById('help-menu-trigger');
   if (dropdown) dropdown.classList.add('hidden');
   if (trigger) trigger.classList.remove('open');
 }

@@ -10,6 +10,7 @@ from __future__ import annotations
 import shutil
 import traceback
 import uuid
+import webbrowser
 from pathlib import Path
 
 import webview
@@ -675,3 +676,10 @@ class Api:
                 self._window.destroy()
         except Exception as e:
             print(f"[api] confirm_close error: {e}")
+
+    def open_url(self, url):
+        """Open an external URL in the user's default browser."""
+        try:
+            webbrowser.open(url)
+        except Exception as e:
+            print(f"[api] open_url error: {e}")
