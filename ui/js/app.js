@@ -166,7 +166,7 @@ async function _captureCurrentRenderedPage() {
   return canvas.toDataURL('image/png');
 }
 
-async function _captureAllPagesForExport() {
+async function _captureAllPagesForExport(includeTables) {
   if (!Store.pageCount || Store.pageCount < 1) {
     throw new Error('No pages available for export');
   }
@@ -192,9 +192,11 @@ async function _captureAllPagesForExport() {
 
       await _sleep(300);
 
-      const records = Store.annotations || [];
-      const firstRec = records[0] || {};
-      if ((firstRec.page_type || 'FORM').toUpperCase() === 'TABLE') continue;
+      if (!includeTables) {
+        const records = Store.annotations || [];
+        const firstRec = records[0] || {};
+        if ((firstRec.page_type || 'FORM').toUpperCase() === 'TABLE') continue;
+      }
 
       const img = await _captureCurrentRenderedPage();
 
@@ -223,17 +225,31 @@ function _bindExportButton() {
   const btn = document.getElementById('btn-export-pdf');
   if (!btn) return;
 
-  btn.addEventListener('click', async () => {
-    try {
-      if (!Store.pipelineRan) {
-        showToast('Run the pipeline first.', 'warning'); return;
-      }
+  const dialog   = document.getElementById('export-options-dialog');
+  const chk      = document.getElementById('export-include-tables');
+  const btnOk    = document.getElementById('export-options-confirm');
+  const btnCancel = document.getElementById('export-options-cancel');
+  const btnClose = document.getElementById('export-options-close');
 
+  function openDialog() {
+    if (!Store.pipelineRan) {
+      showToast('Run the pipeline first.', 'warning'); return;
+    }
+    if (chk) chk.checked = false;
+    dialog?.classList.remove('hidden');
+  }
+
+  function closeDialog() {
+    dialog?.classList.add('hidden');
+  }
+
+  async function doExport(includeTables) {
+    closeDialog();
+    try {
       btn.disabled = true;
-      const oldText = btn.textContent;
       btn.textContent = 'Exporting...';
 
-      const pageData = await _captureAllPagesForExport();
+      const pageData = await _captureAllPagesForExport(includeTables);
       if (!pageData || !pageData.length) {
         showToast('No page images captured for export.', 'error'); return;
       }
@@ -253,7 +269,12 @@ function _bindExportButton() {
       btn.disabled = false;
       btn.textContent = 'Export ↗';
     }
-  });
+  }
+
+  btn.addEventListener('click', openDialog);
+  btnOk?.addEventListener('click', () => doExport(chk?.checked || false));
+  btnCancel?.addEventListener('click', closeDialog);
+  btnClose?.addEventListener('click', closeDialog);
 }
 
 

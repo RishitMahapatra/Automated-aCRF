@@ -1043,6 +1043,26 @@
 </div>
 
 <!-- ── Queue Not Found Dialog ─────────────────────────── -->
+<!-- ── Export Options Dialog ───────────────────────────── -->
+<div id="export-options-dialog" class="comment-dialog-overlay hidden">
+  <div class="comment-dialog" style="max-width:380px;">
+    <div class="comment-dialog-header">
+      <span class="comment-dialog-title">Export Options</span>
+      <button class="comment-dialog-close" id="export-options-close">&times;</button>
+    </div>
+    <div style="padding:16px 20px; color:var(--text); font-size:13px; line-height:1.8;">
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+        <input type="checkbox" id="export-include-tables" style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
+        <span>Include Table pages</span>
+      </label>
+    </div>
+    <div class="comment-dialog-actions">
+      <button class="btn btn-primary" id="export-options-confirm">Export</button>
+      <button class="btn-cancel" id="export-options-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <div id="queue-not-found-dialog" class="comment-dialog-overlay hidden">
   <div class="comment-dialog" style="max-width:380px;">
     <div class="comment-dialog-header">
