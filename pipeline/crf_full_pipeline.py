@@ -135,14 +135,28 @@ def load_mapping_format_a(xl: pd.ExcelFile) -> dict:
 # FORMAT B LOADER
 # =============================================================================
 
+def _find_col_idx(headers: list, target: str):
+    """Find column index in a header list by exact then partial match."""
+    target = target.lower().strip()
+    for i, h in enumerate(headers):
+        if str(h or "").lower().strip() == target:
+            return i
+    for i, h in enumerate(headers):
+        if target in str(h or "").lower().strip():
+            return i
+    return None
+
+
 def load_mapping_format_b(excel_path: str) -> dict:
     mapping = {}
 
     try:
         wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
-    except PermissionError:
+    except PermissionError as e:
+        print(f"[mapping] Permission denied opening Excel: {e}")
         return {}
-    except Exception:
+    except Exception as e:
+        print(f"[mapping] Error reading Excel (Format B): {e}")
         return {}
 
     if RAW_SDTM_SHEET not in wb.sheetnames:
@@ -150,25 +164,56 @@ def load_mapping_format_b(excel_path: str) -> dict:
         return {}
 
     ws = wb[RAW_SDTM_SHEET]
+
+    # Read header row (row 2) to locate columns by name — not by hard-coded index
+    header_row = next(ws.iter_rows(min_row=2, max_row=2, values_only=True), None)
+    if not header_row:
+        print(f"[mapping] Format B: no header row found in '{RAW_SDTM_SHEET}'")
+        wb.close()
+        return {}
+
+    headers = [str(h or "").strip() for h in header_row]
+    idx_src_ds  = _find_col_idx(headers, COL_SRC_DATASET)
+    idx_src_var = _find_col_idx(headers, COL_SRC_VARIABLE)
+    idx_sdtm_ds = _find_col_idx(headers, COL_SDTM_DATASET)
+    idx_sdtm_v  = _find_col_idx(headers, COL_SDTM_VAR)
+    idx_sdtm_l  = _find_col_idx(headers, COL_SDTM_LABEL)
+
+    missing = [name for name, idx in [
+        (COL_SRC_DATASET, idx_src_ds), (COL_SRC_VARIABLE, idx_src_var),
+        (COL_SDTM_DATASET, idx_sdtm_ds), (COL_SDTM_VAR, idx_sdtm_v),
+    ] if idx is None]
+    if missing:
+        print(f"[mapping] Format B: required columns not found: {missing}. "
+              f"Available headers: {headers}")
+        wb.close()
+        return {}
+
     rows = list(ws.iter_rows(min_row=3, values_only=True))
     wb.close()
 
     for row in rows:
-        if not row or len(row) < 11:
+        if not row:
             continue
 
-        src_dataset = str(row[1] or "").strip().split("\n")[0].strip().upper()
-        sdtm_dataset = str(row[8] or "").strip().split("\n")[0].strip().upper()
-        sdtm_var = str(row[9] or "").strip().split("\n")[0].strip().upper()
-        sdtm_label = str(row[10] or "").strip().split("\n")[0].strip()
+        def _cell(idx):
+            if idx is None or idx >= len(row):
+                return ""
+            return str(row[idx] or "").strip().split("\n")[0].strip()
+
+        src_dataset  = _cell(idx_src_ds).upper()
+        sdtm_dataset = _cell(idx_sdtm_ds).upper()
+        sdtm_var     = _cell(idx_sdtm_v).upper()
+        sdtm_label   = _cell(idx_sdtm_l)
 
         if not src_dataset or src_dataset in ("NONE", "NAN", ""):
             continue
 
-        raw_var_cell = str(row[2] or "").strip()
+        # Fix #4: split on both \n and | (consistent with Format A)
+        raw_var_cell = str(row[idx_src_var] or "").strip() if idx_src_var < len(row) else ""
         src_variables = [
             v.strip().upper()
-            for v in raw_var_cell.split("\n")
+            for v in re.split(r"[\n|]+", raw_var_cell)
             if v and str(v).strip()
         ]
 
@@ -219,8 +264,12 @@ def load_mapping(excel_path=None) -> dict:
         raise RuntimeError(f"No recognised sheets in Excel. Found: {sheet_names}")
 
     if not mapping:
-        raise RuntimeError("Mapping loaded but is empty.")
+        raise RuntimeError(
+            f"Mapping loaded from '{path.name}' but is empty. "
+            f"Check that the file has the expected column headers and data rows."
+        )
 
+    print(f"[mapping] Loaded {len(mapping)} entries from '{path.name}'")
     return mapping
 
 
@@ -242,14 +291,31 @@ def resolve_sdtm(domain: str, raw_var: str, mapping: dict):
     if not raw_var:
         return None
 
+    # Exact domain + variable match — always preferred
     result = mapping.get((domain, raw_var))
     if result:
         return result
 
-    for (d, v), val in mapping.items():
-        if v == raw_var:
+    # Collect all cross-domain matches
+    fallbacks = [
+        (d, val) for (d, v), val in mapping.items() if v == raw_var
+    ]
+
+    if not fallbacks:
+        return None
+
+    # Prefer SUPP<domain> (supplemental of same domain)
+    for d, val in fallbacks:
+        if d == f"SUPP{domain}":
             return val
 
+    # Only resolve when there is exactly one match — unambiguous
+    if len(fallbacks) == 1:
+        return fallbacks[0][1]
+
+    # Multiple domains claim the same variable name — do not guess
+    print(f"[mapping] Ambiguous cross-domain match for '{raw_var}' "
+          f"in domains {[d for d, _ in fallbacks]} — leaving unresolved")
     return None
 
 
@@ -286,15 +352,29 @@ def get_horizontal_lines(page: fitz.Page) -> list:
 # FOOTER DETECTION
 # =============================================================================
 
+_FOOTER_PATTERNS = [
+    re.compile(r'D\d+C\d+_\w+_V[\d.]+'),           # AZ study ID format
+    re.compile(r'(?i)\bpage\s+\d+\s+of\s+\d+\b'),  # "Page X of Y"
+    re.compile(r'(?i)\bconfidential\b'),             # common footer word
+    re.compile(r'(?i)\bversion\s*[\d.]+\b'),         # "Version 1.0"
+    re.compile(r'(?i)\bproprietary\b'),              # proprietary notice
+]
+
+
 def get_footer_y(page: fitz.Page):
     page_h = page.rect.height
-    study_id_re = re.compile(r'D\d+C\d+_\w+_V[\d.]+')
+    # Only search in the bottom 25% of the page to avoid false positives
+    search_threshold = page_h * 0.75
     footer_y = None
 
     for w in page.get_text("words"):
-        if study_id_re.search(w[4]) and w[1] > page_h * 0.5:
-            if footer_y is None or w[1] < footer_y:
-                footer_y = w[1]
+        if w[1] < search_threshold:
+            continue
+        for pat in _FOOTER_PATTERNS:
+            if pat.search(w[4]):
+                if footer_y is None or w[1] < footer_y:
+                    footer_y = w[1]
+                break
 
     return footer_y
 
@@ -346,15 +426,36 @@ def classify_page(page: fitz.Page) -> str:
 # FORM CODE EXTRACTION
 # =============================================================================
 
+_FORM_CODE_STOP = {
+    # Generic English words that would match [A-Z]{2,4}
+    "CRF", "PDF", "THE", "FOR", "AND", "NOT", "ARE", "WAS",
+    "HAS", "HAD", "BUT", "ALL", "ANY", "CAN", "HER", "HIS",
+    "HOW", "ITS", "MAY", "NEW", "NOW", "OLD", "OUR", "OUT",
+    "OWN", "SAY", "SHE", "TOO", "USE", "WAY", "WHO", "DID",
+    "GET", "LET", "PUT", "RUN", "TOP", "DAY",
+    # CRF-specific words that are not domain codes
+    "FORM", "PAGE", "DATE", "NAME", "TYPE", "NOTE", "ITEM",
+    "SITE", "DRUG", "DOSE", "UNIT", "CODE", "SIGN", "TERM",
+    "TEXT", "BODY", "WEEK", "YEAR", "TIME", "TEST", "FIELD",
+    "DATA", "NONE", "NULL", "TRUE", "YES", "NO",
+}
+
+
 def extract_form_code(page: fitz.Page):
     text = page.get_text()
 
+    # Primary: explicit form label e.g. "Form: Adverse Events (AE)"
     m = re.search(r'Form:\s+.+?\(([A-Z]{1,6}\d*)\)', text, re.IGNORECASE)
     if m:
         return m.group(1).upper()
 
-    m = re.search(r'\b([A-Z]{2,4}\d?)\b', text[:300])
-    return m.group(1).upper() if m else None
+    # Fallback: first 2-4 uppercase token in first 300 chars not in stoplist
+    for m in re.finditer(r'\b([A-Z]{2,4}\d?)\b', text[:300]):
+        candidate = m.group(1).upper()
+        if candidate not in _FORM_CODE_STOP:
+            return candidate
+
+    return None
 
 
 # =============================================================================
@@ -636,13 +737,16 @@ def apply_confidence_thresholds(records, mapping):
         if candidates:
             best = candidates[0]
             score = best.score
-            if score >= 0.80:
+
+            if score >= 0.95:
+                # Near-exact character match only — safe to auto-resolve
                 rec["confidence"] = round(score, 4)
                 rec["status"] = "RESOLVED"
                 rec["sdtm_dataset"] = best.sdtm_dataset
                 rec["sdtm_variable"] = best.sdtm_variable
                 rec["sdtm_label"] = best.sdtm_label
-            elif score >= 0.60:
+            elif score >= 0.50:
+                # Reasonable match — surface for human review
                 rec["confidence"] = round(score, 4)
                 rec["status"] = "NEEDS_REVIEW"
                 rec["sdtm_dataset"] = best.sdtm_dataset
@@ -651,7 +755,7 @@ def apply_confidence_thresholds(records, mapping):
             else:
                 rec["confidence"] = round(score, 4)
                 rec["status"] = "UNMAPPED"
-                # Store the best low-confidence suggestion so the queue can show it
+                # Keep best low-confidence suggestion so the queue can show it
                 rec["best_sdtm_dataset"] = best.sdtm_dataset
                 rec["best_sdtm_variable"] = best.sdtm_variable
         else:
