@@ -189,13 +189,14 @@ async function _captureAllPagesForExport() {
         throw new Error('Canvas.loadPage is unavailable');
       }
 
-      // Let image + annotations + chips fully render
       await _sleep(300);
+
+      const records = Store.annotations || [];
+      const firstRec = records[0] || {};
+      if ((firstRec.page_type || 'FORM').toUpperCase() === 'TABLE') continue;
 
       const img = await _captureCurrentRenderedPage();
 
-      // Store original PDF page dimensions in points alongside the image so
-      // the backend can create correctly-sized PDF pages (not pixel-sized).
       pageData.push({
         image: img,
         widthPts: Store.pageWidthPts || 0,
