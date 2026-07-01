@@ -8,8 +8,7 @@ const Sidebar = (() => {
   let _currentCommentRec = null;
   let _commentCalloutVisible = false;
   let _datasetReviews = [];
-  let _reviewNotSubmittedSet = new Set(); // NOT_SUBMITTED annotation IDs shown in active review queue
-  let _queueDismissedSet = new Set();     // NEEDS_REVIEW IDs explicitly removed from queue view
+  let _reviewQueueSet = new Set();
 
   const DOMAIN_BADGE_COLORS = {
     DM:'#3B6FD4', CM:'#2E9E5B', AE:'#D4522E', LB:'#7B42CC',
@@ -246,8 +245,7 @@ const Sidebar = (() => {
       if (progressWrap) progressWrap.classList.add('hidden');
 
       _datasetReviews = [];
-      _reviewNotSubmittedSet.clear();
-      _queueDismissedSet.clear();
+      _reviewQueueSet.clear();
 
       const btnRun = document.getElementById('btn-run');
       if (btnRun) {
@@ -1035,70 +1033,49 @@ async function _handleZoomChange(direction) {
     });
   }
 
-  function _buildQueueRow(rec) {
+  function _buildQueueRow(rec, isActive) {
     const row = document.createElement('div');
 
     const statusUpper = String(rec.status || '').toUpperCase();
     const annotationId = String(rec.annotation_id || '');
-    const isNeedsReview = statusUpper === 'NEEDS_REVIEW';
-    const isUnmapped = statusUpper === 'UNMAPPED';
-    const isNsInReview = statusUpper === 'NOT_SUBMITTED' && _reviewNotSubmittedSet.has(annotationId);
-    const isResolved = (statusUpper === 'USER_CORRECTED') || (statusUpper === 'NOT_SUBMITTED' && !isNsInReview);
-
     const hasComment = !!(rec.comment && String(rec.comment).trim());
-    // Blue "comment" style: in active review queue AND has a comment
-    const isCommentRow = (isNeedsReview || isNsInReview) && hasComment;
+    const isCommentRow = isActive && hasComment;
 
-    // Status class suffix
     let statusCls = 'unmapped';
     if (isCommentRow) statusCls = 'comment';
-    else if (isNeedsReview) statusCls = 'review';
-    else if (isNsInReview) statusCls = 'nsreview';
-    else if (isResolved) statusCls = 'resolved';
+    else if (statusUpper === 'USER_CORRECTED') statusCls = 'resolved';
+    else if (statusUpper === 'NEEDS_REVIEW') statusCls = 'review';
+    else if (statusUpper === 'NOT_SUBMITTED') statusCls = isActive ? 'review' : 'resolved';
 
-    // Status icon
     let statusIcon = '';
-    if (isUnmapped) statusIcon = '<span style="color:#DC3545">&#9888;</span>';
-    else if (isNeedsReview) statusIcon = '<span style="color:#FFC107">&#9210;</span>';
-    else if (isNsInReview) statusIcon = '<span style="color:#6B7280">&#9210;</span>';
+    if (statusUpper === 'UNMAPPED') statusIcon = '<span style="color:#DC3545">&#9888;</span>';
+    else if (statusUpper === 'NEEDS_REVIEW') statusIcon = '<span style="color:#FFC107">&#9210;</span>';
+    else if (statusUpper === 'NOT_SUBMITTED' && isActive) statusIcon = '<span style="color:#6B7280">&#9210;</span>';
     else if (statusUpper === 'USER_CORRECTED') statusIcon = '<span style="color:#00E676">&#10003;</span>';
     else if (statusUpper === 'NOT_SUBMITTED') statusIcon = '<span style="color:#888">&ndash;</span>';
 
     const page = rec.page_number ?? rec.page ?? rec.page_num ?? '—';
 
-    // Primary SDTM label
     let sdtmLabel = '—';
     let sdtmDataset = '';
 
     if (rec.is_dataset_review) {
       sdtmDataset = rec.sdtm_dataset || '';
       sdtmLabel = `DATASET: ${rec.raw_variable || rec.sdtm_dataset || '—'}`;
-    } else if (isNsInReview) {
-      sdtmDataset = rec.sdtm_dataset || '';
-      sdtmLabel = rec.sdtm_variable
-        ? (sdtmDataset ? `${sdtmDataset}.${rec.sdtm_variable}` : rec.sdtm_variable)
-        : `Not Submitted (${rec.raw_variable || '—'})`;
-    } else if (isNeedsReview && rec.sdtm_variable) {
+    } else if (rec.sdtm_variable) {
       sdtmDataset = rec.sdtm_dataset || '';
       sdtmLabel = sdtmDataset ? `${sdtmDataset}.${rec.sdtm_variable}` : rec.sdtm_variable;
-    } else if (isNeedsReview) {
-      sdtmLabel = `Unmapped (${rec.raw_variable || '—'})`;
-    } else if (isUnmapped && rec.best_sdtm_variable) {
+    } else if (statusUpper === 'UNMAPPED' && rec.best_sdtm_variable) {
       sdtmDataset = rec.best_sdtm_dataset || '';
       sdtmLabel = sdtmDataset ? `${sdtmDataset}.${rec.best_sdtm_variable}` : rec.best_sdtm_variable;
-    } else if (isUnmapped) {
+    } else if (statusUpper === 'NOT_SUBMITTED') {
+      sdtmLabel = `Not Submitted (${rec.raw_variable || '—'})`;
+    } else {
       sdtmLabel = `Unmapped (${rec.raw_variable || '—'})`;
-    } else if (isResolved) {
-      sdtmDataset = rec.sdtm_dataset || '';
-      if (rec.sdtm_variable) {
-        sdtmLabel = sdtmDataset ? `${sdtmDataset}.${rec.sdtm_variable}` : rec.sdtm_variable;
-      } else {
-        sdtmLabel = statusUpper === 'NOT_SUBMITTED' ? 'Not Submitted' : '—';
-      }
     }
 
     const rawVar = rec.raw_variable || '—';
-    const filterStatus = (isNeedsReview || isNsInReview) ? 'review' : isUnmapped ? 'unreviewed' : 'resolved';
+    const filterStatus = isActive ? (statusUpper === 'UNMAPPED' ? 'unreviewed' : 'review') : 'resolved';
     const domainBadge = (sdtmDataset || 'NA').toUpperCase();
     const badgeColor = DOMAIN_BADGE_COLORS[domainBadge] || '#5B6BA3';
 
@@ -1112,7 +1089,7 @@ async function _handleZoomChange(direction) {
     row.dataset.isDataset = rec.is_dataset_review ? 'true' : '';
 
     const commentBadgeHtml = isCommentRow
-      ? `<span class="qr-comment-badge">Comments</span>`
+      ? `<span class="qr-comment-badge">Comment</span>`
       : '';
     const commentBtnHtml = (hasComment && !isCommentRow)
       ? `<button class="qr-comment-btn" title="View comment">&#x1F4AC;</button>`
@@ -1136,7 +1113,6 @@ async function _handleZoomChange(direction) {
       </div>
     `;
 
-    // Bind comment button — opens the comment viewer panel
     if (hasComment && !isCommentRow) {
       const commentBtn = row.querySelector('.qr-comment-btn');
       if (commentBtn) {
@@ -1157,7 +1133,6 @@ async function _handleZoomChange(direction) {
 
       const annotationId = String(rec.annotation_id || '');
 
-      // Dataset review row — highlight the chip on canvas without navigating
       if (rec.is_dataset_review) {
         const parts = annotationId.replace(/^dsreview_/, '').split('_');
         const dsFormCode = parts[0] || '';
@@ -1266,24 +1241,10 @@ async function _handleZoomChange(direction) {
             await window.pywebview.api.update_comment(annotationId, comment);
           }
 
-          // Auto-add to review when comment is non-empty
           if (comment.trim()) {
-            if (statusUpper === 'NOT_SUBMITTED') {
-              if (!_reviewNotSubmittedSet.has(annotationId)) {
-                _reviewNotSubmittedSet.add(annotationId);
-              }
-            } else if (statusUpper !== 'NEEDS_REVIEW') {
-              // Convert to NEEDS_REVIEW so it appears in review queue with blue badge
-              if (isUserCreatedRec) {
-                if (typeof Canvas !== 'undefined' && Canvas.updateUserAnnotation) {
-                  Canvas.updateUserAnnotation(annotationId, { status: 'NEEDS_REVIEW', comment });
-                }
-              } else {
-                await window.pywebview.api.update_annotation(
-                  annotationId, 'NEEDS_REVIEW',
-                  rec.sdtm_dataset || '', rec.sdtm_variable || '', rec.sdtm_label || ''
-                );
-              }
+            const s = statusUpper;
+            if (s !== 'UNMAPPED' && s !== 'NEEDS_REVIEW') {
+              _reviewQueueSet.add(annotationId);
             }
           }
 
@@ -1299,6 +1260,12 @@ async function _handleZoomChange(direction) {
     });
   }
 
+  async function _refreshAll() {
+    await refreshStats();
+    await refreshUnmappedQueue();
+    if (typeof Canvas !== 'undefined' && Canvas.loadPage) await Canvas.loadPage(Store.currentPage);
+  }
+
   async function refreshUnmappedQueue() {
     try {
       const res = await window.pywebview.api.get_annotations();
@@ -1310,7 +1277,6 @@ async function _handleZoomChange(direction) {
 
       const records = Array.isArray(res.records) ? res.records : [];
 
-      // Merge in user-created annotations from canvas (all pages — getAllUserAnnotations covers every page)
       const backendIds = new Set(records.map(r => r.annotation_id));
       let userCreatedAll = [];
       if (typeof Canvas !== 'undefined' && Canvas.getAllUserAnnotations) {
@@ -1322,21 +1288,19 @@ async function _handleZoomChange(direction) {
       }
       const allRecords = [...records, ...userCreatedAll];
 
-      // FORM pages only — TABLE pages are reference-only
       const formRecords = allRecords.filter((r) => {
         return String(r.page_type || 'FORM').toUpperCase() !== 'TABLE';
       });
 
       const _isUserCreatedRec = (r) => String(r.annotation_id || '').startsWith('user_');
 
-      // Active queue: UNMAPPED + NEEDS_REVIEW (not dismissed) + NOT_SUBMITTED in _reviewNotSubmittedSet
+      // Active: UNMAPPED + NEEDS_REVIEW + anything in _reviewQueueSet
       const activeBackend = formRecords.filter((r) => {
         const s = String(r.status || '').toUpperCase();
         const id = String(r.annotation_id || '');
         if (s === 'UNMAPPED') return true;
-        if (s === 'NEEDS_REVIEW') return !_queueDismissedSet.has(id);
-        if (s === 'NOT_SUBMITTED') return _reviewNotSubmittedSet.has(id);
-        return false;
+        if (s === 'NEEDS_REVIEW') return true;
+        return _reviewQueueSet.has(id);
       }).sort((a, b) => (_isUserCreatedRec(a) ? 1 : 0) - (_isUserCreatedRec(b) ? 1 : 0));
 
       const activeDatasetReviews = _datasetReviews.filter(r => {
@@ -1346,13 +1310,12 @@ async function _handleZoomChange(direction) {
 
       const activeQueue = [...activeBackend, ...activeDatasetReviews];
 
-      // Resolved queue: USER_CORRECTED + NOT_SUBMITTED not in _reviewNotSubmittedSet
+      // Resolved: USER_CORRECTED only (not already in active via _reviewQueueSet)
       const resolvedBackend = formRecords.filter((r) => {
         const s = String(r.status || '').toUpperCase();
         const id = String(r.annotation_id || '');
-        if (s === 'USER_CORRECTED') return true;
-        if (s === 'NOT_SUBMITTED') return !_reviewNotSubmittedSet.has(id);
-        return false;
+        if (_reviewQueueSet.has(id)) return false;
+        return s === 'USER_CORRECTED';
       }).sort((a, b) => (_isUserCreatedRec(a) ? 1 : 0) - (_isUserCreatedRec(b) ? 1 : 0));
 
       const resolvedDatasetReviews = _datasetReviews.filter(r => {
@@ -1366,24 +1329,22 @@ async function _handleZoomChange(direction) {
         summaryEl.textContent = `${activeQueue.length} pending`;
       }
 
-      // Populate active pane
       activeListEl.innerHTML = '';
       if (!activeQueue.length) {
         activeListEl.innerHTML = `<div class="muted small" style="padding:8px 4px;">No pending items</div>`;
       } else {
         activeQueue.slice(0, 300).forEach((rec) => {
-          activeListEl.appendChild(_buildQueueRow(rec));
+          activeListEl.appendChild(_buildQueueRow(rec, true));
         });
       }
 
-      // Populate resolved pane
       if (resolvedListEl) {
         resolvedListEl.innerHTML = '';
         if (!resolvedQueue.length) {
           resolvedListEl.innerHTML = `<div class="muted small" style="padding:8px 4px;">No resolved items yet</div>`;
         } else {
           resolvedQueue.slice(0, 300).forEach((rec) => {
-            resolvedListEl.appendChild(_buildQueueRow(rec));
+            resolvedListEl.appendChild(_buildQueueRow(rec, false));
           });
         }
       }
@@ -1412,17 +1373,10 @@ async function _handleZoomChange(direction) {
       _queueCtxRec = null;
     });
 
-    document.getElementById('qctx-ignore')?.addEventListener('click', async () => {
-      if (!_queueCtxRec) return;
-      menu.classList.add('hidden');
-      await _ignoreQueueItem(_queueCtxRec);
-      _queueCtxRec = null;
-    });
-
     document.getElementById('qctx-mark-review')?.addEventListener('click', async () => {
       if (!_queueCtxRec) return;
       menu.classList.add('hidden');
-      await _markForReviewQueueItem(_queueCtxRec);
+      await addToReview(String(_queueCtxRec.annotation_id || ''), _queueCtxRec);
       _queueCtxRec = null;
     });
 
@@ -1443,9 +1397,7 @@ async function _handleZoomChange(direction) {
       const isUserCreatedRec = annotationId.startsWith('user_');
       _queueCtxRec = null;
 
-      // Remove from review sets if present
-      _reviewNotSubmittedSet.delete(annotationId);
-      _queueDismissedSet.delete(annotationId);
+      _reviewQueueSet.delete(annotationId);
 
       if (typeof Canvas !== 'undefined' && Canvas.pushUndoAction) {
         Canvas.pushUndoAction({
@@ -1467,21 +1419,10 @@ async function _handleZoomChange(direction) {
         if (typeof Canvas !== 'undefined' && Canvas.updateUserAnnotation) {
           Canvas.updateUserAnnotation(annotationId, { status: 'UNMAPPED', sdtm_dataset: '', sdtm_variable: '', sdtm_label: '' });
         }
-        await refreshStats();
-        await refreshUnmappedQueue();
-        if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
-          await Canvas.loadPage(Store.currentPage);
-        }
       } else {
-        const res = await window.pywebview.api.update_annotation(annotationId, 'UNMAPPED', '', '', '');
-        if (res && res.ok) {
-          await refreshStats();
-          await refreshUnmappedQueue();
-          if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
-            await Canvas.loadPage(Store.currentPage);
-          }
-        }
+        await window.pywebview.api.update_annotation(annotationId, 'UNMAPPED', '', '', '');
       }
+      await _refreshAll();
     });
 
     document.getElementById('qctx-add-comment')?.addEventListener('click', () => {
@@ -1504,40 +1445,34 @@ async function _handleZoomChange(direction) {
 
     const statusUpper = String(rec.status || '').toUpperCase();
     const annotId = String(rec.annotation_id || '');
-    const isNsInReview = statusUpper === 'NOT_SUBMITTED' && _reviewNotSubmittedSet.has(annotId);
-    const isAlreadyResolved = (statusUpper === 'USER_CORRECTED') || (statusUpper === 'NOT_SUBMITTED' && !isNsInReview);
-    const isAlreadyUnmapped = statusUpper === 'UNMAPPED';
-
-    const resolveBtn = document.getElementById('qctx-resolve');
-    const ignoreBtn = document.getElementById('qctx-ignore');
-    const markReviewBtn = document.getElementById('qctx-mark-review');
-    const convertUnmappedBtn = document.getElementById('qctx-convert-unmapped');
-
+    const isResolved = statusUpper === 'USER_CORRECTED';
+    const isUnmapped = statusUpper === 'UNMAPPED';
+    const isInReview = statusUpper === 'NEEDS_REVIEW' || _reviewQueueSet.has(annotId);
     const isDatasetReview = !!rec.is_dataset_review;
 
-    // Already in review = NEEDS_REVIEW, UNMAPPED, or NOT_SUBMITTED in review set
-    const isAlreadyNeedsReview = statusUpper === 'NEEDS_REVIEW' || statusUpper === 'UNMAPPED' || isNsInReview;
-
-    if (resolveBtn) resolveBtn.style.display = isAlreadyResolved ? 'none' : '';
-    if (ignoreBtn) ignoreBtn.style.display = isAlreadyResolved ? 'none' : '';
-    if (markReviewBtn) {
-      markReviewBtn.style.display = '';
-      markReviewBtn.disabled = isAlreadyNeedsReview;
-      markReviewBtn.style.opacity = isAlreadyNeedsReview ? '0.4' : '';
-      markReviewBtn.style.cursor = isAlreadyNeedsReview ? 'default' : '';
-      markReviewBtn.title = isAlreadyNeedsReview ? 'Already in review queue' : '';
-    }
-    // Dataset reviews and pure unmapped cannot be converted to unmapped
-    if (convertUnmappedBtn) convertUnmappedBtn.style.display =
-      (isAlreadyUnmapped || isAlreadyResolved || isDatasetReview) ? 'none' : '';
-
-    // "Remove from Review" for NEEDS_REVIEW or NOT_SUBMITTED-in-review
+    const resolveBtn = document.getElementById('qctx-resolve');
+    const markReviewBtn = document.getElementById('qctx-mark-review');
+    const convertUnmappedBtn = document.getElementById('qctx-convert-unmapped');
     const removeFromReviewBtn = document.getElementById('qctx-remove-from-review');
+
+    if (resolveBtn) resolveBtn.style.display = isResolved ? 'none' : '';
+
+    if (markReviewBtn) {
+      const alreadyActive = isUnmapped || isInReview;
+      markReviewBtn.style.display = '';
+      markReviewBtn.disabled = alreadyActive;
+      markReviewBtn.style.opacity = alreadyActive ? '0.4' : '';
+      markReviewBtn.style.cursor = alreadyActive ? 'default' : '';
+      markReviewBtn.title = alreadyActive ? 'Already in review queue' : '';
+    }
+
+    if (convertUnmappedBtn) convertUnmappedBtn.style.display =
+      (isUnmapped || isResolved || isDatasetReview) ? 'none' : '';
+
     if (removeFromReviewBtn) removeFromReviewBtn.style.display =
-      (statusUpper === 'NEEDS_REVIEW' || isNsInReview) ? '' : 'none';
+      (isInReview && !isUnmapped) ? '' : 'none';
 
     menu.classList.remove('hidden');
-    // Position after un-hiding so getBoundingClientRect is accurate
     const menuH = menu.getBoundingClientRect().height || 280;
     menu.style.left = `${Math.min(x, window.innerWidth - 200)}px`;
     menu.style.top = `${Math.min(y, window.innerHeight - menuH - 8)}px`;
@@ -1563,9 +1498,7 @@ async function _handleZoomChange(direction) {
     const variable = rec.sdtm_variable || rec.best_sdtm_variable || '';
     const label = rec.sdtm_label || '';
 
-    // Clear from review sets
-    _reviewNotSubmittedSet.delete(annotationId);
-    _queueDismissedSet.delete(annotationId);
+    _reviewQueueSet.delete(annotationId);
 
     if (typeof Canvas !== 'undefined' && Canvas.pushUndoAction) {
       Canvas.pushUndoAction({
@@ -1587,164 +1520,39 @@ async function _handleZoomChange(direction) {
       if (typeof Canvas !== 'undefined' && Canvas.updateUserAnnotation) {
         Canvas.updateUserAnnotation(annotationId, { status: 'USER_CORRECTED', sdtm_dataset: dataset, sdtm_variable: variable, sdtm_label: label });
       }
-      await refreshStats();
-      await refreshUnmappedQueue();
-      if (typeof Canvas !== 'undefined' && Canvas.loadPage) await Canvas.loadPage(Store.currentPage);
     } else {
-      const res = await window.pywebview.api.update_annotation(
+      await window.pywebview.api.update_annotation(
         annotationId, 'USER_CORRECTED', dataset, variable, label
       );
-      if (res && res.ok) {
-        await refreshStats();
-        await refreshUnmappedQueue();
-        if (typeof Canvas !== 'undefined' && Canvas.loadPage) await Canvas.loadPage(Store.currentPage);
-      }
     }
+    await _refreshAll();
   }
 
-  async function _ignoreQueueItem(rec) {
-    const annotationId = String(rec.annotation_id || '');
-    if (!annotationId) return;
-
-    if (rec.is_dataset_review) {
-      _updateDatasetReviewStatus(annotationId, 'NOT_SUBMITTED');
-      await refreshUnmappedQueue();
-      return;
-    }
-
-    const isUserCreatedRec = annotationId.startsWith('user_');
-
-    // Clear from review sets
-    _reviewNotSubmittedSet.delete(annotationId);
-    _queueDismissedSet.delete(annotationId);
-
-    if (typeof Canvas !== 'undefined' && Canvas.pushUndoAction) {
-      Canvas.pushUndoAction({
-        type: 'status-change',
-        id: annotationId,
-        beforeStatus: rec.status || '',
-        beforeDataset: rec.sdtm_dataset || '',
-        beforeVariable: rec.sdtm_variable || '',
-        beforeLabel: rec.sdtm_label || '',
-        afterStatus: 'NOT_SUBMITTED',
-        afterDataset: '',
-        afterVariable: '',
-        afterLabel: 'Not Submitted',
-        isUserCreated: isUserCreatedRec,
-      });
-    }
-
-    if (isUserCreatedRec) {
-      if (typeof Canvas !== 'undefined' && Canvas.updateUserAnnotation) {
-        Canvas.updateUserAnnotation(annotationId, { status: 'NOT_SUBMITTED', sdtm_dataset: '', sdtm_variable: '', sdtm_label: 'Not Submitted' });
-      }
-      await refreshStats();
-      await refreshUnmappedQueue();
-      if (typeof Canvas !== 'undefined' && Canvas.loadPage) await Canvas.loadPage(Store.currentPage);
-    } else {
-      const res = await window.pywebview.api.update_annotation(
-        annotationId, 'NOT_SUBMITTED', '', '', 'Not Submitted'
-      );
-      if (res && res.ok) {
-        await refreshStats();
-        await refreshUnmappedQueue();
-        if (typeof Canvas !== 'undefined' && Canvas.loadPage) await Canvas.loadPage(Store.currentPage);
-      }
-    }
-  }
-
-  async function _markForReviewQueueItem(rec) {
-    const annotationId = String(rec.annotation_id || '');
-    if (!annotationId) return;
-
-    if (rec.is_dataset_review) {
-      _updateDatasetReviewStatus(annotationId, 'NEEDS_REVIEW');
-      await refreshUnmappedQueue();
-      return;
-    }
-
-    const isUserCreatedRec = annotationId.startsWith('user_');
-    const statusUpper = String(rec.status || '').toUpperCase();
-
-    // NOT_SUBMITTED: add to NS review set without changing status
-    if (statusUpper === 'NOT_SUBMITTED') {
-      await addNotSubmittedToReview(annotationId, rec);
-      return;
-    }
-
-    // Re-mark dismissed item: just remove from dismissed set
-    if (_queueDismissedSet.has(annotationId)) {
-      _queueDismissedSet.delete(annotationId);
-      await refreshStats();
-      await refreshUnmappedQueue();
-      return;
-    }
-
-    const dataset = rec.sdtm_dataset || rec.best_sdtm_dataset || '';
-    const variable = rec.sdtm_variable || rec.best_sdtm_variable || '';
-
-    if (typeof Canvas !== 'undefined' && Canvas.pushUndoAction) {
-      Canvas.pushUndoAction({
-        type: 'status-change',
-        id: annotationId,
-        beforeStatus: rec.status || '',
-        beforeDataset: rec.sdtm_dataset || '',
-        beforeVariable: rec.sdtm_variable || '',
-        beforeLabel: rec.sdtm_label || '',
-        afterStatus: 'NEEDS_REVIEW',
-        afterDataset: dataset,
-        afterVariable: variable,
-        afterLabel: rec.sdtm_label || '',
-        isUserCreated: isUserCreatedRec,
-      });
-    }
-
-    if (isUserCreatedRec) {
-      if (typeof Canvas !== 'undefined' && Canvas.updateUserAnnotation) {
-        Canvas.updateUserAnnotation(annotationId, { status: 'NEEDS_REVIEW', sdtm_dataset: dataset, sdtm_variable: variable, sdtm_label: rec.sdtm_label || '' });
-      }
-      await refreshStats();
-      await refreshUnmappedQueue();
-      if (typeof Canvas !== 'undefined' && Canvas.loadPage) await Canvas.loadPage(Store.currentPage);
-    } else {
-      const res = await window.pywebview.api.update_annotation(
-        annotationId, 'NEEDS_REVIEW', dataset, variable, rec.sdtm_label || ''
-      );
-      if (res && res.ok) {
-        await refreshStats();
-        await refreshUnmappedQueue();
-        if (typeof Canvas !== 'undefined' && Canvas.loadPage) await Canvas.loadPage(Store.currentPage);
-      }
-    }
-  }
-
-  async function addNotSubmittedToReview(annotationId, rec) {
-    if (_reviewNotSubmittedSet.has(annotationId)) {
-      // Already in review — just navigate to it
+  async function addToReview(annotationId, rec) {
+    const statusUpper = String(rec?.status || '').toUpperCase();
+    const alreadyActive = statusUpper === 'UNMAPPED' || statusUpper === 'NEEDS_REVIEW' || _reviewQueueSet.has(annotationId);
+    if (alreadyActive) {
       document.getElementById('tab-analysis')?.click();
       document.querySelector('.queue-inner-tab[data-queue-tab="active"]')?.click();
-      setTimeout(() => highlightInQueue(annotationId, 'NOT_SUBMITTED'), 100);
+      setTimeout(() => highlightInQueue(annotationId, statusUpper), 100);
       return;
     }
-    _reviewNotSubmittedSet.add(annotationId);
+    _reviewQueueSet.add(annotationId);
+    window._markSessionDirty?.();
     await refreshUnmappedQueue();
     document.getElementById('tab-analysis')?.click();
     document.querySelector('.queue-inner-tab[data-queue-tab="active"]')?.click();
-    setTimeout(() => highlightInQueue(annotationId, 'NOT_SUBMITTED'), 100);
+    setTimeout(() => highlightInQueue(annotationId, statusUpper), 100);
   }
 
   async function removeFromReview(annotationId, rec) {
-    const statusUpper = String(rec.status || '').toUpperCase();
-    if (rec.is_dataset_review) {
+    if (rec?.is_dataset_review) {
       _updateDatasetReviewStatus(annotationId, 'UNMAPPED');
-    } else if (_reviewNotSubmittedSet.has(annotationId)) {
-      _reviewNotSubmittedSet.delete(annotationId);
     } else {
-      // NEEDS_REVIEW or other: hide from active queue without status change
-      _queueDismissedSet.add(annotationId);
+      _reviewQueueSet.delete(annotationId);
     }
-    await refreshStats();
-    await refreshUnmappedQueue();
+    window._markSessionDirty?.();
+    await _refreshAll();
   }
 
   async function addDatasetReview(formCode, dsCode, dsLabel, page) {
@@ -1812,7 +1620,7 @@ async function _handleZoomChange(direction) {
 
     const statusUpper = String(status || '').toUpperCase();
     const isActive = statusUpper === 'UNMAPPED' || statusUpper === 'NEEDS_REVIEW' ||
-      (statusUpper === 'NOT_SUBMITTED' && _reviewNotSubmittedSet.has(String(annotationId)));
+      _reviewQueueSet.has(String(annotationId));
 
     const innerTabs = document.querySelectorAll('.queue-inner-tab');
     innerTabs.forEach((t) => {
@@ -1873,12 +1681,16 @@ async function _handleZoomChange(direction) {
 
   function isInActiveReview(annotationId) {
     if (!annotationId) return false;
-    return _reviewNotSubmittedSet.has(String(annotationId));
+    return _reviewQueueSet.has(String(annotationId));
   }
 
-  function isDismissedFromReview(annotationId) {
-    if (!annotationId) return false;
-    return _queueDismissedSet.has(String(annotationId));
+  function getReviewQueue() {
+    return [..._reviewQueueSet];
+  }
+
+  function setReviewQueue(ids) {
+    _reviewQueueSet.clear();
+    if (Array.isArray(ids)) ids.forEach(id => _reviewQueueSet.add(String(id)));
   }
 
   return {
@@ -1887,10 +1699,11 @@ async function _handleZoomChange(direction) {
     refreshUnmappedQueue,
     highlightInQueue,
     addDatasetReview,
-    addNotSubmittedToReview,
+    addToReview,
     removeFromReview,
     isInActiveReview,
-    isDismissedFromReview,
+    getReviewQueue,
+    setReviewQueue,
     getDatasetReviews,
     setDatasetReviews,
     openCommentForAnnotation,

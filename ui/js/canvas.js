@@ -499,10 +499,9 @@ function updateDatasetChip(chipRecord, fields = {}) {
   function _showAnnotationContextMenu(ctxMenu, x, y, rec) {
     const statusUp = String(rec?.status || '').toUpperCase();
     const annId = String(rec?.annotation_id || '');
-    const isNsInReview = statusUp === 'NOT_SUBMITTED' &&
-      typeof Sidebar !== 'undefined' && Sidebar.isInActiveReview && Sidebar.isInActiveReview(annId);
-    const alreadyInQueue = statusUp === 'NEEDS_REVIEW' || statusUp === 'UNMAPPED' || isNsInReview;
-    const isInReview = statusUp === 'NEEDS_REVIEW' || isNsInReview;
+    const inReviewSet = typeof Sidebar !== 'undefined' && Sidebar.isInActiveReview && Sidebar.isInActiveReview(annId);
+    const alreadyInQueue = statusUp === 'NEEDS_REVIEW' || statusUp === 'UNMAPPED' || inReviewSet;
+    const isInReview = statusUp === 'NEEDS_REVIEW' || inReviewSet;
 
     document.getElementById('ctx-add-annotation').style.display = '';
     document.getElementById('ctx-edit-annotation').style.display = '';
@@ -704,38 +703,11 @@ function updateDatasetChip(chipRecord, fields = {}) {
       if (!pendingAnnotationCtxRec) return;
       const rec = pendingAnnotationCtxRec;
       const id = rec.annotation_id;
-      const isUserCreated = String(id).startsWith('user_') || String(id).startsWith('userdschip_');
-      const statusUpper = String(rec.status || '').toUpperCase();
       pendingAnnotationCtxRec = null;
 
-      // NOT_SUBMITTED: add to review queue without changing status
-      if (statusUpper === 'NOT_SUBMITTED') {
-        if (typeof Sidebar !== 'undefined' && Sidebar.addNotSubmittedToReview) {
-          await Sidebar.addNotSubmittedToReview(id, rec);
-        }
-        return;
+      if (typeof Sidebar !== 'undefined' && Sidebar.addToReview) {
+        await Sidebar.addToReview(id, rec);
       }
-
-      _pushGeometryUndo({
-        type: 'status-change',
-        id,
-        beforeStatus: rec.status || 'RESOLVED',
-        beforeDataset: rec.sdtm_dataset || '',
-        beforeVariable: rec.sdtm_variable || '',
-        beforeLabel: rec.sdtm_label || '',
-        afterStatus: 'NEEDS_REVIEW',
-        afterDataset: rec.sdtm_dataset || '',
-        afterVariable: rec.sdtm_variable || '',
-        afterLabel: rec.sdtm_label || '',
-        isUserCreated,
-      });
-      if (isUserCreated) {
-        updateUserAnnotation(id, { status: 'NEEDS_REVIEW', sdtm_dataset: rec.sdtm_dataset || '', sdtm_variable: rec.sdtm_variable || '', sdtm_label: rec.sdtm_label || '' });
-      } else {
-        await window.pywebview.api.update_annotation(id, 'NEEDS_REVIEW', rec.sdtm_dataset || '', rec.sdtm_variable || '', rec.sdtm_label || '');
-      }
-      if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
-      if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
     });
 
     document.getElementById('ctx-remove-from-review')?.addEventListener('click', async () => {
@@ -744,11 +716,9 @@ function updateDatasetChip(chipRecord, fields = {}) {
       const rec = pendingAnnotationCtxRec;
       const id = rec.annotation_id;
       pendingAnnotationCtxRec = null;
-      // Delegate to Sidebar which manages the review sets
       if (typeof Sidebar !== 'undefined' && Sidebar.removeFromReview) {
         await Sidebar.removeFromReview(id, rec);
       }
-      if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
     });
 
     document.getElementById('ctx-show-in-queue')?.addEventListener('click', () => {
@@ -814,13 +784,8 @@ function updateDatasetChip(chipRecord, fields = {}) {
 
         _pushGeometryUndo(undoAction);
 
-        // Clean up stale entries in sidebar review sets
-        if (typeof Sidebar !== 'undefined') {
-          if (Sidebar.isInActiveReview && Sidebar.isInActiveReview(id)) {
-            await Sidebar.removeFromReview(id, rec);
-          } else if (Sidebar.isDismissedFromReview && Sidebar.isDismissedFromReview(id)) {
-            await Sidebar.removeFromReview(id, rec);
-          }
+        if (typeof Sidebar !== 'undefined' && Sidebar.isInActiveReview && Sidebar.isInActiveReview(id)) {
+          await Sidebar.removeFromReview(id, rec);
         }
 
         if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
@@ -2268,9 +2233,7 @@ function _persistDatasetChipVisualState(rec, box) {
     const bg = formColourRegistry?.[formCode]?.[ds] || PALETTE[0];
 
     box.style.background = bg;
-    box.style.border = status === 'USER_CORRECTED'
-      ? '1.5px solid #00B4D8'
-      : '1.5px solid #0072B2';
+    box.style.border = '1.5px solid #0072B2';
     box.style.color = '#0050A0';
   }
 

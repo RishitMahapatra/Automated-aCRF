@@ -359,10 +359,15 @@ async function _restoreEditorStateIfAny() {
       Store.setDatasetChips(chips);
     }
 
-    // Restore dataset review queue items (in-memory in sidebar, not in annotation_data.json)
     if (saved.datasetReviews && Array.isArray(saved.datasetReviews) && saved.datasetReviews.length) {
       if (typeof Sidebar !== 'undefined' && Sidebar.setDatasetReviews) {
         Sidebar.setDatasetReviews(saved.datasetReviews);
+      }
+    }
+
+    if (saved.reviewQueue && Array.isArray(saved.reviewQueue) && saved.reviewQueue.length) {
+      if (typeof Sidebar !== 'undefined' && Sidebar.setReviewQueue) {
+        Sidebar.setReviewQueue(saved.reviewQueue);
       }
     }
 

@@ -4693,12 +4693,9 @@ body.theme-light .nav-export-btn:hover {
   50%       { opacity: 0.3; }
 }
 
-/* ── Queue row: comment-in-review (blue) and NS-in-review ──── */
+/* ── Queue row: comment badge (blue) ──── */
 .qr-status-comment  { background: rgba(59,130,246,0.12); border-color: rgba(59,130,246,0.30); }
-.qr-status-nsreview { background: rgba(107,114,128,0.12); border-color: rgba(107,114,128,0.28); }
-
 .qr-status-comment:hover  { background: rgba(59,130,246,0.22); border-color: rgba(59,130,246,0.50); }
-.qr-status-nsreview:hover { background: rgba(107,114,128,0.22); border-color: rgba(107,114,128,0.45); }
 
 .qr-comment-badge {
   display: inline-flex; align-items: center; padding: 1px 5px;

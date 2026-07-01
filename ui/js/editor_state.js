@@ -235,9 +235,12 @@ const EditorState = (() => {
       });
     });
 
-    // Persist dataset review items (in-memory in Sidebar, not in annotation_data.json)
     const datasetReviews = (typeof Sidebar !== 'undefined' && Sidebar.getDatasetReviews)
       ? Sidebar.getDatasetReviews()
+      : [];
+
+    const reviewQueue = (typeof Sidebar !== 'undefined' && Sidebar.getReviewQueue)
+      ? Sidebar.getReviewQueue()
       : [];
 
     return {
@@ -246,6 +249,7 @@ const EditorState = (() => {
       pages,
       objects,
       datasetReviews,
+      reviewQueue,
     };
   }
 
