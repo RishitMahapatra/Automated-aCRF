@@ -332,6 +332,10 @@ function _bindGeometryUndoRedo() {
       EditorState.scheduleAutosave();
     }
   }
+  function getAllUserAnnotations() {
+    return userCreatedAnnotations.map(r => ({ ...r }));
+  }
+
   function updateFormColour(formCode, dataset, colourKey) {
     const fc = (formCode || '').toUpperCase();
     const ds = (dataset || '').toUpperCase();
@@ -699,6 +703,17 @@ function updateDatasetChip(chipRecord, fields = {}) {
       const rec = pendingAnnotationCtxRec;
       const id = rec.annotation_id;
       const isUserCreated = String(id).startsWith('user_') || String(id).startsWith('userdschip_');
+      const statusUpper = String(rec.status || '').toUpperCase();
+      pendingAnnotationCtxRec = null;
+
+      // NOT_SUBMITTED: add to review queue without changing status
+      if (statusUpper === 'NOT_SUBMITTED') {
+        if (typeof Sidebar !== 'undefined' && Sidebar.addNotSubmittedToReview) {
+          await Sidebar.addNotSubmittedToReview(id, rec);
+        }
+        return;
+      }
+
       _pushGeometryUndo({
         type: 'status-change',
         id,
@@ -726,28 +741,12 @@ function updateDatasetChip(chipRecord, fields = {}) {
       if (!pendingAnnotationCtxRec) return;
       const rec = pendingAnnotationCtxRec;
       const id = rec.annotation_id;
-      const isUserCreated = String(id).startsWith('user_') || String(id).startsWith('userdschip_');
-      _pushGeometryUndo({
-        type: 'status-change',
-        id,
-        beforeStatus: 'NEEDS_REVIEW',
-        beforeDataset: rec.sdtm_dataset || '',
-        beforeVariable: rec.sdtm_variable || '',
-        beforeLabel: rec.sdtm_label || '',
-        afterStatus: 'UNMAPPED',
-        afterDataset: '',
-        afterVariable: '',
-        afterLabel: '',
-        isUserCreated,
-      });
-      if (isUserCreated) {
-        updateUserAnnotation(id, { status: 'UNMAPPED', sdtm_dataset: '', sdtm_variable: '', sdtm_label: '' });
-      } else {
-        await window.pywebview.api.update_annotation(id, 'UNMAPPED', '', '', '');
-      }
       pendingAnnotationCtxRec = null;
+      // Delegate to Sidebar which manages the review sets
+      if (typeof Sidebar !== 'undefined' && Sidebar.removeFromReview) {
+        await Sidebar.removeFromReview(id, rec);
+      }
       if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
-      if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
     });
 
     document.getElementById('ctx-show-in-queue')?.addEventListener('click', () => {
@@ -2486,15 +2485,16 @@ function _persistDatasetChipVisualState(rec, box) {
 
     highlightSelected();
 
-    const band = document.querySelector(`.component-band[data-id="${CSS.escape(annotationId)}"]`);
-    if (band) {
-      // Shake animation — remove then re-add to restart
-      band.classList.remove('queue-shake');
-      void band.offsetWidth;
-      band.classList.add('queue-shake');
-      band.addEventListener('animationend', () => band.classList.remove('queue-shake'), { once: true });
-
-      band.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    let target = document.querySelector(`.component-band[data-id="${CSS.escape(annotationId)}"]`);
+    if (!target) {
+      target = document.querySelector(`.ann-box[data-id="${CSS.escape(annotationId)}"]`);
+    }
+    if (target) {
+      target.classList.remove('queue-shake');
+      void target.offsetWidth;
+      target.classList.add('queue-shake');
+      target.addEventListener('animationend', () => target.classList.remove('queue-shake'), { once: true });
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }
 
@@ -2688,6 +2688,7 @@ function _persistDatasetChipVisualState(rec, box) {
   pushUndoAction: _pushGeometryUndo,
   isUserCreated,
   updateUserAnnotation,
+  getAllUserAnnotations,
   updateDatasetChip,
   updateFormColour,
   restoreSessionGeometry,
