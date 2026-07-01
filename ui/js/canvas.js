@@ -724,10 +724,23 @@ function updateDatasetChip(chipRecord, fields = {}) {
     document.getElementById('ctx-show-in-queue')?.addEventListener('click', () => {
       ctxMenu.classList.add('hidden');
       if (!pendingAnnotationCtxRec) return;
-      if (typeof Sidebar !== 'undefined' && Sidebar.highlightInQueue) {
-        Sidebar.highlightInQueue(pendingAnnotationCtxRec.annotation_id, pendingAnnotationCtxRec.status);
-      }
+      const rec = pendingAnnotationCtxRec;
+      const annId = String(rec.annotation_id || '');
+      const statusUp = String(rec.status || '').toUpperCase();
+      const inQueue = statusUp === 'UNMAPPED' || statusUp === 'NEEDS_REVIEW' ||
+        (typeof Sidebar !== 'undefined' && Sidebar.isInActiveReview && Sidebar.isInActiveReview(annId));
       pendingAnnotationCtxRec = null;
+
+      if (!inQueue) {
+        const dlg = document.getElementById('queue-not-found-dialog');
+        if (dlg) {
+          dlg.classList.remove('hidden');
+        }
+        return;
+      }
+      if (typeof Sidebar !== 'undefined' && Sidebar.highlightInQueue) {
+        Sidebar.highlightInQueue(annId, statusUp);
+      }
     });
 
     document.getElementById('ctx-add-comment')?.addEventListener('click', () => {
@@ -812,6 +825,13 @@ function updateDatasetChip(chipRecord, fields = {}) {
 
     document.getElementById('ann-remove-close')?.addEventListener('click', () => {
       document.getElementById('ann-remove-confirm')?.classList.add('hidden');
+    });
+
+    document.getElementById('queue-not-found-close')?.addEventListener('click', () => {
+      document.getElementById('queue-not-found-dialog')?.classList.add('hidden');
+    });
+    document.getElementById('queue-not-found-ok')?.addEventListener('click', () => {
+      document.getElementById('queue-not-found-dialog')?.classList.add('hidden');
     });
 
     // ── Dataset chip context menu ──────────────────────────────
@@ -2426,7 +2446,7 @@ function _persistDatasetChipVisualState(rec, box) {
 
     document.querySelectorAll('.component-band').forEach(band => {
       const selected = band.dataset.id === Store.selectedId;
-      // Always use full-width purple band for all selections (queue or direct click)
+      // Full-width highlight for selected annotation
       band.classList.toggle('queue-selected', selected);
       // Clear all inline overrides — CSS class handles the visual state
       band.style.background = '';
@@ -2438,11 +2458,6 @@ function _persistDatasetChipVisualState(rec, box) {
     });
   }
 
-  /**
-   * Called from the queue sidebar when a queue item is clicked.
-   * Selects the annotation and highlights its component band (purple) using
-   * the component's full height/width dimensions rather than the small label box.
-   */
   function highlightQueueAnnotation(annotationId) {
     if (!annotationId) return;
 
@@ -2459,16 +2474,23 @@ function _persistDatasetChipVisualState(rec, box) {
 
     highlightSelected();
 
-    let target = document.querySelector(`.component-band[data-id="${CSS.escape(annotationId)}"]`);
-    if (!target) {
-      target = document.querySelector(`.ann-box[data-id="${CSS.escape(annotationId)}"]`);
+    const band = document.querySelector(`.component-band[data-id="${CSS.escape(annotationId)}"]`);
+    const box = document.querySelector(`.ann-box[data-id="${CSS.escape(annotationId)}"]`);
+
+    const shakeTarget = band || box;
+    if (shakeTarget) {
+      shakeTarget.classList.remove('queue-shake');
+      void shakeTarget.offsetWidth;
+      shakeTarget.classList.add('queue-shake');
+      shakeTarget.addEventListener('animationend', () => shakeTarget.classList.remove('queue-shake'), { once: true });
+      shakeTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
-    if (target) {
-      target.classList.remove('queue-shake');
-      void target.offsetWidth;
-      target.classList.add('queue-shake');
-      target.addEventListener('animationend', () => target.classList.remove('queue-shake'), { once: true });
-      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    if (box && box !== shakeTarget) {
+      box.classList.remove('queue-shake');
+      void box.offsetWidth;
+      box.classList.add('queue-shake');
+      box.addEventListener('animationend', () => box.classList.remove('queue-shake'), { once: true });
     }
   }
 

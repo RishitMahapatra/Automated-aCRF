@@ -4495,7 +4495,12 @@ body.theme-light .theme-toggle-btn .theme-icon-moon {
    COSMETIC POLISH — shake, component highlight, export btn
    ========================================================== */
 
-/* Shake animation for queue-highlight */
+/* Pulse animation for queue-highlight — used on both component-band and ann-box */
+@keyframes queue-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(255,193,7,0.5); }
+  50%  { box-shadow: 0 0 0 6px rgba(255,193,7,0.0); }
+  100% { box-shadow: 0 0 0 0 rgba(255,193,7,0.0); }
+}
 @keyframes queue-shake {
   0%,100% { transform: translateX(0); }
   12%      { transform: translateX(-5px); }
@@ -4506,25 +4511,19 @@ body.theme-light .theme-toggle-btn .theme-icon-moon {
   75%      { transform: translateX(2px); }
 }
 
-.component-band.queue-shake {
-  animation: queue-shake 0.45s cubic-bezier(.36,.07,.19,.97) both;
+.component-band.queue-shake,
+.ann-box.queue-shake {
+  animation: queue-shake 0.45s cubic-bezier(.36,.07,.19,.97) both,
+             queue-pulse 0.6s ease-out 0.45s 2;
 }
 
-/* Full-width component highlight when triggered from queue */
+/* Subtle highlight when queue-selected (no purple bg) */
 .component-band.queue-selected {
   left: 0 !important;
   width: 100% !important;
-  background: rgba(142, 84, 255, 0.22) !important;
-  border-color: rgba(142, 84, 255, 0.55) !important;
-  box-shadow: inset 0 0 0 1px rgba(142, 84, 255, 0.25) !important;
+  border-color: rgba(255,193,7,0.55) !important;
+  box-shadow: inset 0 0 0 1px rgba(255,193,7,0.18) !important;
   border-radius: 0 !important;
-}
-
-/* Suppress the annotation-box scale/glow when queue-selecting the row */
-.component-band.queue-selected ~ .ann-box.selected,
-.annotation-layer-queue-active .ann-box.selected {
-  transform: none;
-  box-shadow: 0 0 0 1.5px rgba(142, 84, 255, 0.6);
 }
 
 /* Export button — prominent violet with app theme */
@@ -4693,9 +4692,9 @@ body.theme-light .nav-export-btn:hover {
   50%       { opacity: 0.3; }
 }
 
-/* ── Queue row: comment badge (blue) ──── */
-.qr-status-comment  { background: rgba(59,130,246,0.12); border-color: rgba(59,130,246,0.30); }
-.qr-status-comment:hover  { background: rgba(59,130,246,0.22); border-color: rgba(59,130,246,0.50); }
+/* ── Queue row: NOT_SUBMITTED in active queue (blue) ──── */
+.qr-status-notsubmitted  { background: rgba(59,130,246,0.12); border-color: rgba(59,130,246,0.30); }
+.qr-status-notsubmitted:hover  { background: rgba(59,130,246,0.22); border-color: rgba(59,130,246,0.50); }
 
 .qr-comment-badge {
   display: inline-flex; align-items: center; padding: 1px 5px;
@@ -4705,9 +4704,3 @@ body.theme-light .nav-export-btn:hover {
   border: 1px solid rgba(59,130,246,0.45);
 }
 
-/* ann-box shake — mirrors component-band.queue-shake for user-created annotations */
-.ann-box.queue-shake {
-  animation: queue-shake 0.55s ease-in-out;
-  background: rgba(142,84,255,0.25) !important;
-  border-color: rgba(142,84,255,0.80) !important;
-}

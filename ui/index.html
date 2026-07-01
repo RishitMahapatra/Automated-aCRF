@@ -1007,6 +1007,23 @@
   <button class="ctx-menu-item ctx-menu-cancel" id="qctx-cancel">Cancel</button>
 </div>
 
+<!-- ── Queue Not Found Dialog ─────────────────────────── -->
+<div id="queue-not-found-dialog" class="comment-dialog-overlay hidden">
+  <div class="comment-dialog" style="max-width:380px;">
+    <div class="comment-dialog-header">
+      <span class="comment-dialog-title">Not in Review Queue</span>
+      <button class="comment-dialog-close" id="queue-not-found-close">&times;</button>
+    </div>
+    <div style="padding:16px 20px; color:var(--text); font-size:13px; line-height:1.5;">
+      This annotation is not in the review queue.<br>
+      To add it, right-click the annotation and select <strong>Add to Review</strong>.
+    </div>
+    <div class="comment-dialog-actions">
+      <button class="btn-cancel" id="queue-not-found-ok">OK</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Comment Dialog ─────────────────────────────────── -->
 <div id="comment-dialog" class="comment-dialog-overlay hidden">
   <div class="comment-dialog">

@@ -1039,13 +1039,11 @@ async function _handleZoomChange(direction) {
     const statusUpper = String(rec.status || '').toUpperCase();
     const annotationId = String(rec.annotation_id || '');
     const hasComment = !!(rec.comment && String(rec.comment).trim());
-    const isCommentRow = isActive && hasComment;
 
     let statusCls = 'unmapped';
-    if (isCommentRow) statusCls = 'comment';
-    else if (statusUpper === 'USER_CORRECTED') statusCls = 'resolved';
+    if (statusUpper === 'USER_CORRECTED') statusCls = 'resolved';
     else if (statusUpper === 'NEEDS_REVIEW') statusCls = 'review';
-    else if (statusUpper === 'NOT_SUBMITTED') statusCls = isActive ? 'review' : 'resolved';
+    else if (statusUpper === 'NOT_SUBMITTED') statusCls = isActive ? 'notsubmitted' : 'resolved';
 
     let statusIcon = '';
     if (statusUpper === 'UNMAPPED') statusIcon = '<span style="color:#DC3545">&#9888;</span>';
@@ -1088,10 +1086,10 @@ async function _handleZoomChange(direction) {
     row.dataset.sdtmLabel = String(sdtmLabel);
     row.dataset.isDataset = rec.is_dataset_review ? 'true' : '';
 
-    const commentBadgeHtml = isCommentRow
+    const commentBadgeHtml = (isActive && hasComment)
       ? `<span class="qr-comment-badge">Comment</span>`
       : '';
-    const commentBtnHtml = (hasComment && !isCommentRow)
+    const commentBtnHtml = (hasComment && !isActive)
       ? `<button class="qr-comment-btn" title="View comment">&#x1F4AC;</button>`
       : '';
 
@@ -1113,7 +1111,7 @@ async function _handleZoomChange(direction) {
       </div>
     `;
 
-    if (hasComment && !isCommentRow) {
+    if (hasComment && !isActive) {
       const commentBtn = row.querySelector('.qr-comment-btn');
       if (commentBtn) {
         commentBtn.addEventListener('click', (e) => {
@@ -1469,8 +1467,8 @@ async function _handleZoomChange(direction) {
     if (convertUnmappedBtn) convertUnmappedBtn.style.display =
       (isUnmapped || isResolved || isDatasetReview) ? 'none' : '';
 
-    if (removeFromReviewBtn) removeFromReviewBtn.style.display =
-      (isInReview && !isUnmapped) ? '' : 'none';
+    const inSetOnly = _reviewQueueSet.has(annotId);
+    if (removeFromReviewBtn) removeFromReviewBtn.style.display = inSetOnly ? '' : 'none';
 
     menu.classList.remove('hidden');
     const menuH = menu.getBoundingClientRect().height || 280;
@@ -1493,12 +1491,20 @@ async function _handleZoomChange(direction) {
       return;
     }
 
+    const statusUpper = String(rec.status || '').toUpperCase();
+
+    // Items added to review via _reviewQueueSet: just remove from set, keep status
+    if (_reviewQueueSet.has(annotationId)) {
+      _reviewQueueSet.delete(annotationId);
+      await _refreshAll();
+      return;
+    }
+
+    // NEEDS_REVIEW or UNMAPPED: change status to USER_CORRECTED
     const isUserCreatedRec = annotationId.startsWith('user_');
     const dataset = rec.sdtm_dataset || rec.best_sdtm_dataset || '';
     const variable = rec.sdtm_variable || rec.best_sdtm_variable || '';
     const label = rec.sdtm_label || '';
-
-    _reviewQueueSet.delete(annotationId);
 
     if (typeof Canvas !== 'undefined' && Canvas.pushUndoAction) {
       Canvas.pushUndoAction({
