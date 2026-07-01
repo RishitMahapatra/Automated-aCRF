@@ -99,6 +99,32 @@ def get_annotation(session_id: str, annotation_id: str) -> dict | None:
 # UPDATE
 # =============================================================================
 
+def update_comment(session_id: str, annotation_id: str, comment: str) -> dict:
+    annotation_id = str(annotation_id or "").strip()
+    comment = str(comment or "").strip()
+
+    if not annotation_id:
+        return {"ok": False, "error": "Missing annotation_id"}
+
+    records = _load_records(session_id)
+
+    found = False
+    for rec in records:
+        if rec.get("annotation_id") == annotation_id:
+            if comment:
+                rec["comment"] = comment
+            else:
+                rec.pop("comment", None)
+            found = True
+            break
+
+    if not found:
+        return {"ok": False, "error": f"Not found: {annotation_id}"}
+
+    _save_records(session_id, records)
+    return {"ok": True, "annotation_id": annotation_id}
+
+
 def update_annotation(
     session_id: str,
     annotation_id: str,
@@ -190,27 +216,31 @@ def get_stats(session_id: str) -> dict:
     user_corrected = sum(1 for r in form_records if r.get("status") == "USER_CORRECTED")
     not_submitted = sum(1 for r in form_records if r.get("status") == "NOT_SUBMITTED")
     removed = sum(1 for r in form_records if r.get("status") == "REMOVED")
+    needs_review = sum(1 for r in form_records if r.get("status") == "NEEDS_REVIEW")
 
     unmapped = sum(
         1 for r in form_records
         if not r.get("sdtm_variable")
-        and r.get("status") not in ("NOT_SUBMITTED", "REMOVED", "USER_CORRECTED")
+        and r.get("status") not in ("NOT_SUBMITTED", "REMOVED", "USER_CORRECTED", "NEEDS_REVIEW")
     )
 
+    # NEEDS_REVIEW has a suggested SDTM variable but requires user confirmation — not counted as resolved
     actually_resolved = sum(
         1 for r in form_records
         if r.get("sdtm_variable")
-        and r.get("status") not in ("NOT_SUBMITTED", "REMOVED", "UNMAPPED")
+        and r.get("status") not in ("NOT_SUBMITTED", "REMOVED", "UNMAPPED", "NEEDS_REVIEW")
     )
 
     active = total - removed
+    auto_resolved = actually_resolved - user_corrected  # pipeline RESOLVED only
     resolution_pct = round((actually_resolved / active) * 100, 1) if active > 0 else 0.0
 
     return {
         "total": total,
         "active": active,
-        "resolved": actually_resolved - user_corrected,
+        "resolved": auto_resolved,
         "user_corrected": user_corrected,
+        "needs_review": needs_review,
         "unmapped": unmapped,
         "not_submitted": not_submitted,
         "removed": removed,

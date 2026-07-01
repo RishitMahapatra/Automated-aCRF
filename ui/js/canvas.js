@@ -59,14 +59,11 @@ const Canvas = (() => {
   let dragState = null;
   let resizeState = null;
 
-  // Pointer-based zoom origin (0-1 fraction of page dimensions)
-  let zoomOriginX = 0;
-  let zoomOriginY = 0;
 
   const annotationGeometryOverrides = {};
   const datasetChipUiOverrides = {};
   // Geometry undo/redo stacks (max 5 actions)
-const GEOMETRY_HISTORY_LIMIT = 5;
+const GEOMETRY_HISTORY_LIMIT = 50;
 const geometryUndoStack = [];
 const geometryRedoStack = [];
 
@@ -78,7 +75,7 @@ function _pushGeometryUndo(action) {
   geometryRedoStack.length = 0;
 }
 
-function undoGeometry() {
+async function undoGeometry() {
   if (!geometryUndoStack.length) return;
   const action = geometryUndoStack.pop();
   geometryRedoStack.push(action);
@@ -117,12 +114,59 @@ function undoGeometry() {
     if (formColourRegistry[action.formCode]) {
       delete formColourRegistry[action.formCode][action.dsShort];
     }
+  } else if (action.type === 'status-change') {
+    const { id, beforeStatus, beforeDataset, beforeVariable, beforeLabel, isUserCreated } = action;
+    if (isUserCreated) {
+      updateUserAnnotation(id, { status: beforeStatus, sdtm_dataset: beforeDataset, sdtm_variable: beforeVariable, sdtm_label: beforeLabel });
+    } else {
+      try {
+        await window.pywebview.api.update_annotation(id, beforeStatus, beforeDataset, beforeVariable, beforeLabel);
+      } catch (e) {
+        console.error('[undo] status-change failed:', e);
+      }
+    }
+    await loadPage(Store.currentPage);
+    if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
+    return;
+  } else if (action.type === 'remove-annotation') {
+    const { id, record, wasUserCreated } = action;
+    if (wasUserCreated) {
+      Store.annotations.push({ ...record });
+      _addUserAnnotation({ ...record });
+      if (action.geometryOverride) {
+        annotationGeometryOverrides[id] = action.geometryOverride;
+      }
+      if (id.startsWith('userdschip_') && action.chipUiOverride) {
+        const fc = (record.form_code || '').toUpperCase();
+        const ds = (record.sdtm_dataset || '').toUpperCase();
+        datasetChipUiOverrides[`${fc}::${ds}`] = action.chipUiOverride;
+        if (action.chipColour && fc) {
+          if (!formColourRegistry[fc]) formColourRegistry[fc] = {};
+          formColourRegistry[fc][ds] = action.chipColour;
+        }
+      }
+    } else {
+      try {
+        await window.pywebview.api.update_annotation(id, action.beforeStatus, action.beforeDataset, action.beforeVariable, action.beforeLabel);
+      } catch (e) {
+        console.error('[undo] remove-annotation failed:', e);
+      }
+    }
+    await loadPage(Store.currentPage);
+    if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
+    return;
+  } else {
+    // EditPanel-owned action types (dataset-colour, dataset-chip-edit, field edits)
+    if (typeof EditPanel !== 'undefined' && EditPanel.undoAction) {
+      await EditPanel.undoAction(action);
+    }
+    return;
   }
 
   _refreshAnnotationLayer();
 }
 
-function redoGeometry() {
+async function redoGeometry() {
   if (!geometryRedoStack.length) return;
   const action = geometryRedoStack.pop();
   geometryUndoStack.push(action);
@@ -159,6 +203,49 @@ function redoGeometry() {
     datasetChipUiOverrides[action.chipKey] = { ...action.uiOverride };
     if (!formColourRegistry[action.formCode]) formColourRegistry[action.formCode] = {};
     formColourRegistry[action.formCode][action.dsShort] = COLOUR_KEY_TO_HEX[action.colourKey] || PALETTE[0];
+  } else if (action.type === 'status-change') {
+    const { id, afterStatus, afterDataset, afterVariable, afterLabel, isUserCreated } = action;
+    if (isUserCreated) {
+      updateUserAnnotation(id, { status: afterStatus, sdtm_dataset: afterDataset, sdtm_variable: afterVariable, sdtm_label: afterLabel });
+    } else {
+      try {
+        await window.pywebview.api.update_annotation(id, afterStatus, afterDataset, afterVariable, afterLabel);
+      } catch (e) {
+        console.error('[redo] status-change failed:', e);
+      }
+    }
+    await loadPage(Store.currentPage);
+    if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
+    return;
+  } else if (action.type === 'remove-annotation') {
+    const { id, wasUserCreated, record } = action;
+    if (wasUserCreated) {
+      const idx = (Store.annotations || []).findIndex(r => r.annotation_id === id);
+      if (idx >= 0) Store.annotations.splice(idx, 1);
+      delete annotationGeometryOverrides[id];
+      _removeUserAnnotation(id);
+      if (id.startsWith('userdschip_')) {
+        const fc = (record?.form_code || '').toUpperCase();
+        const ds = (record?.sdtm_dataset || '').toUpperCase();
+        delete datasetChipUiOverrides[`${fc}::${ds}`];
+        if (formColourRegistry[fc]) delete formColourRegistry[fc][ds];
+      }
+    } else {
+      try {
+        await window.pywebview.api.update_annotation(id, 'REMOVED', '', '', '');
+      } catch (e) {
+        console.error('[redo] remove-annotation failed:', e);
+      }
+    }
+    await loadPage(Store.currentPage);
+    if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
+    return;
+  } else {
+    // EditPanel-owned action types (dataset-colour, dataset-chip-edit, field edits)
+    if (typeof EditPanel !== 'undefined' && EditPanel.redoAction) {
+      await EditPanel.redoAction(action);
+    }
+    return;
   }
 
   _refreshAnnotationLayer();
@@ -188,7 +275,7 @@ function _refreshAnnotationLayer() {
 }
 
 function _bindGeometryUndoRedo() {
-  document.addEventListener('keydown', (e) => {
+  document.addEventListener('keydown', async (e) => {
     const tag = (e.target.tagName || '').toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
 
@@ -197,20 +284,16 @@ function _bindGeometryUndoRedo() {
     if (!ctrl) return;
 
     if (e.key.toLowerCase() === 'z' && !e.shiftKey) {
-      if (geometryUndoStack.length > 0) {
-        e.preventDefault();
-        e.stopPropagation();
-        undoGeometry();
-      }
+      e.preventDefault();
+      e.stopPropagation();
+      await undoGeometry();
     } else if (
       e.key.toLowerCase() === 'y' ||
       (e.key.toLowerCase() === 'z' && e.shiftKey)
     ) {
-      if (geometryRedoStack.length > 0) {
-        e.preventDefault();
-        e.stopPropagation();
-        redoGeometry();
-      }
+      e.preventDefault();
+      e.stopPropagation();
+      await redoGeometry();
     }
   }, true);
 }
@@ -249,6 +332,10 @@ function _bindGeometryUndoRedo() {
       EditorState.scheduleAutosave();
     }
   }
+  function getAllUserAnnotations() {
+    return userCreatedAnnotations.map(r => ({ ...r }));
+  }
+
   function updateFormColour(formCode, dataset, colourKey) {
     const fc = (formCode || '').toUpperCase();
     const ds = (dataset || '').toUpperCase();
@@ -406,6 +493,56 @@ function updateDatasetChip(chipRecord, fields = {}) {
   // ─── RIGHT-CLICK ADD ANNOTATION ───────────────────────────────────────
 
   let pendingClickPts = null;
+  let pendingAnnotationCtxRec = null;
+  let pendingDatasetCtxRec = null;
+
+  function _showAnnotationContextMenu(ctxMenu, x, y, rec) {
+    const statusUp = String(rec?.status || '').toUpperCase();
+    const annId = String(rec?.annotation_id || '');
+    const inReviewSet = typeof Sidebar !== 'undefined' && Sidebar.isInActiveReview && Sidebar.isInActiveReview(annId);
+    const alreadyInQueue = statusUp === 'NEEDS_REVIEW' || statusUp === 'UNMAPPED' || inReviewSet;
+    const isInReview = statusUp === 'NEEDS_REVIEW' || inReviewSet;
+
+    document.getElementById('ctx-add-annotation').style.display = '';
+    document.getElementById('ctx-edit-annotation').style.display = '';
+    document.getElementById('ctx-mark-unmapped').style.display = '';
+    document.getElementById('ctx-mark-not-submitted').style.display = '';
+    document.getElementById('ctx-show-in-queue').style.display = '';
+    document.getElementById('ctx-remove-annotation').style.display = '';
+    document.getElementById('ctx-add-comment').style.display = '';
+
+    const addToReviewBtn = document.getElementById('ctx-add-to-review');
+    if (addToReviewBtn) {
+      addToReviewBtn.style.display = '';
+      addToReviewBtn.disabled = alreadyInQueue;
+      addToReviewBtn.style.opacity = alreadyInQueue ? '0.4' : '';
+      addToReviewBtn.style.cursor = alreadyInQueue ? 'default' : '';
+      addToReviewBtn.title = alreadyInQueue ? 'Already in review queue' : '';
+    }
+
+    const removeFromReviewBtn = document.getElementById('ctx-remove-from-review');
+    if (removeFromReviewBtn) removeFromReviewBtn.style.display = isInReview ? '' : 'none';
+
+    ctxMenu.classList.remove('hidden');
+    const menuH = ctxMenu.getBoundingClientRect().height || 310;
+    ctxMenu.style.left = `${Math.min(x, window.innerWidth - 200)}px`;
+    ctxMenu.style.top = `${Math.min(y, window.innerHeight - menuH - 8)}px`;
+  }
+
+  function _showBlankContextMenu(ctxMenu, x, y) {
+    document.getElementById('ctx-add-annotation').style.display = '';
+    document.getElementById('ctx-edit-annotation').style.display = 'none';
+    document.getElementById('ctx-mark-unmapped').style.display = 'none';
+    document.getElementById('ctx-mark-not-submitted').style.display = 'none';
+    document.getElementById('ctx-add-to-review').style.display = 'none';
+    document.getElementById('ctx-remove-from-review').style.display = 'none';
+    document.getElementById('ctx-show-in-queue').style.display = 'none';
+    document.getElementById('ctx-add-comment').style.display = 'none';
+    document.getElementById('ctx-remove-annotation').style.display = 'none';
+    ctxMenu.style.left = `${x}px`;
+    ctxMenu.style.top = `${y}px`;
+    ctxMenu.classList.remove('hidden');
+  }
 
   function _bindContextMenu() {
     const canvasArea = document.getElementById('canvas-area');
@@ -424,30 +561,50 @@ function updateDatasetChip(chipRecord, fields = {}) {
       const first = records[0] || {};
       if ((first.page_type || 'FORM') === 'TABLE') return;
 
+      // Always compute click position in pts so "Add Annotation" always has a target
       const pageWrap = document.getElementById('pdf-page-wrap');
       if (!pageWrap) return;
-
       const pageRect = pageWrap.getBoundingClientRect();
-      const zoom = Number(Store.zoomPct || 100) / 100;
-
-      const clickXPx = (e.clientX - pageRect.left) / zoom;
-      const clickYPx = (e.clientY - pageRect.top) / zoom;
-
-      const naturalWidth = pageWrap.offsetWidth || 1;
-      const naturalHeight = pageWrap.offsetHeight || 1;
-
-      const x_pts = (clickXPx / naturalWidth) * Store.pageWidthPts;
-      const y_pts = (clickYPx / naturalHeight) * Store.pageHeightPts;
-
+      const clickXPx = e.clientX - pageRect.left;
+      const clickYPx = e.clientY - pageRect.top;
+      const scaledW = pageRect.width || 1;
+      const scaledH = pageRect.height || 1;
+      const x_pts = (clickXPx / scaledW) * Store.pageWidthPts;
+      const y_pts = (clickYPx / scaledH) * Store.pageHeightPts;
       pendingClickPts = {
         x_pts: _clamp(x_pts, 4, Store.pageWidthPts - 4),
         y_pts: _clamp(y_pts, 4, Store.pageHeightPts - 4),
         page: Store.currentPage,
       };
 
-      ctxMenu.style.left = `${e.clientX}px`;
-      ctxMenu.style.top = `${e.clientY}px`;
-      ctxMenu.classList.remove('hidden');
+      // Dataset chip takes priority
+      const chipEl = e.target.closest('.ann-chip');
+      if (chipEl) {
+        const ds = chipEl.dataset.datasetCode || '';
+        const formCode = chipEl.dataset.formCode || '';
+        pendingDatasetCtxRec = _buildDatasetChipCtxRec(ds, formCode);
+        const dsMenu = document.getElementById('ctx-menu-dataset');
+        if (dsMenu) {
+          dsMenu.style.left = `${Math.min(e.clientX, window.innerWidth - 200)}px`;
+          dsMenu.style.top = `${Math.min(e.clientY, window.innerHeight - 220)}px`;
+          dsMenu.classList.remove('hidden');
+        }
+        return;
+      }
+
+      // Check if right-clicked on an annotation box (not a dataset chip)
+      const annBox = e.target.closest('.ann-box:not(.ann-chip)');
+
+      if (annBox) {
+        // Clicked on annotation box — show annotation-specific menu (Add Annotation also available)
+        const annotationId = annBox.dataset.id;
+        pendingAnnotationCtxRec = (Store.annotations || []).find(r => r.annotation_id === annotationId) || null;
+        _showAnnotationContextMenu(ctxMenu, e.clientX, e.clientY, pendingAnnotationCtxRec);
+      } else {
+        // Clicked on blank canvas or component band — show "Add Annotation" menu
+        pendingAnnotationCtxRec = null;
+        _showBlankContextMenu(ctxMenu, e.clientX, e.clientY);
+      }
     });
 
     document.addEventListener('click', (e) => {
@@ -476,6 +633,314 @@ function updateDatasetChip(chipRecord, fields = {}) {
         ctxMenu.classList.add('hidden');
       });
     }
+
+    // Annotation-specific menu item actions
+    document.getElementById('ctx-edit-annotation')?.addEventListener('click', async () => {
+      ctxMenu.classList.add('hidden');
+      if (pendingAnnotationCtxRec && typeof EditPanel !== 'undefined' && EditPanel.open) {
+        await EditPanel.open(pendingAnnotationCtxRec.annotation_id);
+      }
+    });
+
+    document.getElementById('ctx-mark-unmapped')?.addEventListener('click', async () => {
+      ctxMenu.classList.add('hidden');
+      if (!pendingAnnotationCtxRec) return;
+      const rec = pendingAnnotationCtxRec;
+      const id = rec.annotation_id;
+      const isUserCreated = String(id).startsWith('user_') || String(id).startsWith('userdschip_');
+      _pushGeometryUndo({
+        type: 'status-change',
+        id,
+        beforeStatus: rec.status || 'RESOLVED',
+        beforeDataset: rec.sdtm_dataset || '',
+        beforeVariable: rec.sdtm_variable || '',
+        beforeLabel: rec.sdtm_label || '',
+        afterStatus: 'UNMAPPED',
+        afterDataset: '',
+        afterVariable: '',
+        afterLabel: '',
+        isUserCreated,
+      });
+      if (isUserCreated) {
+        updateUserAnnotation(id, { status: 'UNMAPPED', sdtm_dataset: '', sdtm_variable: '', sdtm_label: '' });
+      } else {
+        await window.pywebview.api.update_annotation(id, 'UNMAPPED', '', '', '');
+      }
+      if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
+      if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
+    });
+
+    document.getElementById('ctx-mark-not-submitted')?.addEventListener('click', async () => {
+      ctxMenu.classList.add('hidden');
+      if (!pendingAnnotationCtxRec) return;
+      const rec = pendingAnnotationCtxRec;
+      const id = rec.annotation_id;
+      const isUserCreated = String(id).startsWith('user_') || String(id).startsWith('userdschip_');
+      _pushGeometryUndo({
+        type: 'status-change',
+        id,
+        beforeStatus: rec.status || 'RESOLVED',
+        beforeDataset: rec.sdtm_dataset || '',
+        beforeVariable: rec.sdtm_variable || '',
+        beforeLabel: rec.sdtm_label || '',
+        afterStatus: 'NOT_SUBMITTED',
+        afterDataset: '',
+        afterVariable: '',
+        afterLabel: 'Not Submitted',
+        isUserCreated,
+      });
+      if (isUserCreated) {
+        updateUserAnnotation(id, { status: 'NOT_SUBMITTED', sdtm_dataset: '', sdtm_variable: '', sdtm_label: 'Not Submitted' });
+      } else {
+        await window.pywebview.api.update_annotation(id, 'NOT_SUBMITTED', '', '', 'Not Submitted');
+      }
+      if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
+      if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
+    });
+
+    document.getElementById('ctx-add-to-review')?.addEventListener('click', async () => {
+      ctxMenu.classList.add('hidden');
+      if (!pendingAnnotationCtxRec) return;
+      const rec = pendingAnnotationCtxRec;
+      const id = rec.annotation_id;
+      pendingAnnotationCtxRec = null;
+
+      if (typeof Sidebar !== 'undefined' && Sidebar.addToReview) {
+        await Sidebar.addToReview(id, rec);
+      }
+    });
+
+    document.getElementById('ctx-remove-from-review')?.addEventListener('click', async () => {
+      ctxMenu.classList.add('hidden');
+      if (!pendingAnnotationCtxRec) return;
+      const rec = pendingAnnotationCtxRec;
+      const id = rec.annotation_id;
+      pendingAnnotationCtxRec = null;
+      if (typeof Sidebar !== 'undefined' && Sidebar.removeFromReview) {
+        await Sidebar.removeFromReview(id, rec);
+      }
+    });
+
+    document.getElementById('ctx-show-in-queue')?.addEventListener('click', () => {
+      ctxMenu.classList.add('hidden');
+      if (!pendingAnnotationCtxRec) return;
+      const rec = pendingAnnotationCtxRec;
+      const annId = String(rec.annotation_id || '');
+      const statusUp = String(rec.status || '').toUpperCase();
+      const inQueue = statusUp === 'UNMAPPED' || statusUp === 'NEEDS_REVIEW' ||
+        (typeof Sidebar !== 'undefined' && Sidebar.isInActiveReview && Sidebar.isInActiveReview(annId));
+      pendingAnnotationCtxRec = null;
+
+      if (!inQueue) {
+        const dlg = document.getElementById('queue-not-found-dialog');
+        if (dlg) {
+          dlg.classList.remove('hidden');
+        }
+        return;
+      }
+      if (typeof Sidebar !== 'undefined' && Sidebar.highlightInQueue) {
+        Sidebar.highlightInQueue(annId, statusUp);
+      }
+    });
+
+    document.getElementById('ctx-add-comment')?.addEventListener('click', () => {
+      ctxMenu.classList.add('hidden');
+      if (!pendingAnnotationCtxRec) return;
+      const rec = pendingAnnotationCtxRec;
+      pendingAnnotationCtxRec = null;
+      // Open the shared comment dialog (owned by Sidebar)
+      if (typeof Sidebar !== 'undefined' && Sidebar.openCommentForAnnotation) {
+        Sidebar.openCommentForAnnotation(rec);
+      }
+    });
+
+    document.getElementById('ctx-remove-annotation')?.addEventListener('click', () => {
+      ctxMenu.classList.add('hidden');
+      if (!pendingAnnotationCtxRec) return;
+      const rec = pendingAnnotationCtxRec;
+      window._removeConfirmCallback = async () => {
+        const id = rec.annotation_id;
+        const isUserAnn = String(id).startsWith('user_');
+        const isUserChip = String(id).startsWith('userdschip_');
+        const wasUserCreated = isUserAnn || isUserChip;
+
+        // Capture undo state before removing
+        const fc = (rec.form_code || '').toUpperCase();
+        const ds = (rec.sdtm_dataset || '').toUpperCase();
+        const undoAction = {
+          type: 'remove-annotation',
+          id,
+          wasUserCreated,
+          record: { ...rec },
+          beforeStatus: rec.status || 'RESOLVED',
+          beforeDataset: ds,
+          beforeVariable: rec.sdtm_variable || '',
+          beforeLabel: rec.sdtm_label || '',
+          geometryOverride: annotationGeometryOverrides[id] ? { ...annotationGeometryOverrides[id] } : null,
+          chipUiOverride: isUserChip ? (datasetChipUiOverrides[`${fc}::${ds}`] ? { ...datasetChipUiOverrides[`${fc}::${ds}`] } : null) : null,
+          chipColour: isUserChip ? (formColourRegistry[fc]?.[ds] || null) : null,
+        };
+
+        if (wasUserCreated) {
+          // Remove locally — backend doesn't know about user-created records
+          const idx = (Store.annotations || []).findIndex(r => r.annotation_id === id);
+          if (idx >= 0) Store.annotations.splice(idx, 1);
+          delete annotationGeometryOverrides[id];
+          _removeUserAnnotation(id);
+          if (isUserChip) {
+            delete datasetChipUiOverrides[`${fc}::${ds}`];
+            if (formColourRegistry[fc]) delete formColourRegistry[fc][ds];
+          }
+        } else {
+          await window.pywebview.api.update_annotation(id, 'REMOVED', '', '', '');
+        }
+
+        _pushGeometryUndo(undoAction);
+
+        if (typeof Sidebar !== 'undefined' && Sidebar.isInActiveReview && Sidebar.isInActiveReview(id)) {
+          await Sidebar.removeFromReview(id, rec);
+        }
+
+        if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
+        if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
+        if (typeof EditPanel !== 'undefined' && EditPanel.close) EditPanel.close();
+        pendingAnnotationCtxRec = null;
+      };
+      const dlg = document.getElementById('ann-remove-confirm');
+      if (dlg) dlg.classList.remove('hidden');
+    });
+
+    // Remove confirm dialog bindings
+    document.getElementById('ann-remove-confirm-btn')?.addEventListener('click', async () => {
+      document.getElementById('ann-remove-confirm')?.classList.add('hidden');
+      if (window._removeConfirmCallback) {
+        await window._removeConfirmCallback();
+        window._removeConfirmCallback = null;
+      }
+    });
+
+    document.getElementById('ann-remove-cancel-btn')?.addEventListener('click', () => {
+      document.getElementById('ann-remove-confirm')?.classList.add('hidden');
+    });
+
+    document.getElementById('ann-remove-close')?.addEventListener('click', () => {
+      document.getElementById('ann-remove-confirm')?.classList.add('hidden');
+    });
+
+    document.getElementById('queue-not-found-close')?.addEventListener('click', () => {
+      document.getElementById('queue-not-found-dialog')?.classList.add('hidden');
+    });
+    document.getElementById('queue-not-found-ok')?.addEventListener('click', () => {
+      document.getElementById('queue-not-found-dialog')?.classList.add('hidden');
+    });
+
+    // ── Dataset chip context menu ──────────────────────────────
+    const dsMenu = document.getElementById('ctx-menu-dataset');
+
+    if (dsMenu) {
+      document.addEventListener('click', (e) => {
+        if (!dsMenu.contains(e.target)) dsMenu.classList.add('hidden');
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') dsMenu.classList.add('hidden');
+      });
+    }
+
+    document.getElementById('ctx-ds-cancel')?.addEventListener('click', () => {
+      dsMenu?.classList.add('hidden');
+      pendingDatasetCtxRec = null;
+    });
+
+    document.getElementById('ctx-ds-edit')?.addEventListener('click', async () => {
+      dsMenu?.classList.add('hidden');
+      if (!pendingDatasetCtxRec) return;
+      if (typeof EditPanel !== 'undefined' && EditPanel.openDatasetChip) {
+        await EditPanel.openDatasetChip(pendingDatasetCtxRec.datasetRecord);
+      }
+      pendingDatasetCtxRec = null;
+    });
+
+    document.getElementById('ctx-ds-add-review')?.addEventListener('click', async () => {
+      dsMenu?.classList.add('hidden');
+      if (!pendingDatasetCtxRec) return;
+      if (typeof Sidebar !== 'undefined' && Sidebar.addDatasetReview) {
+        await Sidebar.addDatasetReview(
+          pendingDatasetCtxRec.form_code,
+          pendingDatasetCtxRec.sdtm_dataset,
+          pendingDatasetCtxRec.sdtm_label,
+          pendingDatasetCtxRec.page
+        );
+      }
+      pendingDatasetCtxRec = null;
+    });
+
+    document.getElementById('ctx-ds-show-queue')?.addEventListener('click', () => {
+      dsMenu?.classList.add('hidden');
+      if (!pendingDatasetCtxRec) return;
+      const reviewId = `dsreview_${pendingDatasetCtxRec.form_code}_${pendingDatasetCtxRec.sdtm_dataset}`;
+      if (typeof Sidebar !== 'undefined' && Sidebar.highlightInQueue) {
+        Sidebar.highlightInQueue(reviewId, 'NEEDS_REVIEW');
+      }
+      pendingDatasetCtxRec = null;
+    });
+
+    document.getElementById('ctx-ds-remove')?.addEventListener('click', () => {
+      dsMenu?.classList.add('hidden');
+      if (!pendingDatasetCtxRec) return;
+      const rec = pendingDatasetCtxRec;
+
+      if (!rec._isUserCreated) {
+        alert('Pipeline-detected dataset chips cannot be removed directly.\nUse "Mark as Removed" on individual annotations instead.');
+        pendingDatasetCtxRec = null;
+        return;
+      }
+
+      window._removeConfirmCallback = async () => {
+        const id = rec._userCreatedId;
+        const idx = (Store.annotations || []).findIndex(r => r.annotation_id === id);
+        if (idx >= 0) Store.annotations.splice(idx, 1);
+        const chipKey = `${rec.form_code}::${rec.sdtm_dataset}`;
+        delete datasetChipUiOverrides[chipKey];
+        _removeUserAnnotation(id);
+        if (formColourRegistry[rec.form_code]) {
+          delete formColourRegistry[rec.form_code][rec.sdtm_dataset];
+        }
+        if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
+        if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }
+        pendingDatasetCtxRec = null;
+      };
+
+      const dlg = document.getElementById('ann-remove-confirm');
+      if (dlg) dlg.classList.remove('hidden');
+    });
+  }
+
+  function _buildDatasetChipCtxRec(ds, formCode) {
+    const dsUpper = (ds || '').toUpperCase();
+    const formUpper = (formCode || '').toUpperCase();
+    const records = Store.annotations || [];
+
+    const userChip = userCreatedAnnotations.find(r =>
+      String(r.annotation_id || '').startsWith('userdschip_') &&
+      (r.sdtm_dataset || '').toUpperCase() === dsUpper &&
+      (r.form_code || '').toUpperCase() === formUpper
+    );
+
+    const label = (typeof DATASET_LABELS !== 'undefined' && DATASET_LABELS[dsUpper])
+      ? DATASET_LABELS[dsUpper]
+      : `${dsUpper} (${dsUpper})`;
+
+    return {
+      annotation_id: `datasetchip::${formUpper}::${dsUpper}`,
+      sdtm_dataset: dsUpper,
+      form_code: formUpper,
+      page: Store.currentPage,
+      sdtm_label: label,
+      _isDatasetChip: true,
+      _isUserCreated: !!userChip,
+      _userCreatedId: userChip ? userChip.annotation_id : null,
+      datasetRecord: buildDatasetSelectionRecord(dsUpper, formUpper, records),
+    };
   }
 
   function _openAddAnnotationDialog() {
@@ -512,14 +977,13 @@ function updateDatasetChip(chipRecord, fields = {}) {
   function _toggleAddAnnFields(type) {
     const varFields = document.getElementById('add-ann-variable-fields');
     const dsFields = document.getElementById('add-ann-dataset-fields');
+    const unmappedFields = document.getElementById('add-ann-unmapped-fields');
+    const nsFields = document.getElementById('add-ann-ns-fields');
 
-    if (type === 'variable') {
-      if (varFields) varFields.classList.remove('hidden');
-      if (dsFields) dsFields.classList.add('hidden');
-    } else {
-      if (varFields) varFields.classList.add('hidden');
-      if (dsFields) dsFields.classList.remove('hidden');
-    }
+    if (varFields) varFields.classList.toggle('hidden', type !== 'variable');
+    if (dsFields) dsFields.classList.toggle('hidden', type !== 'dataset');
+    if (unmappedFields) unmappedFields.classList.toggle('hidden', type !== 'unmapped');
+    if (nsFields) nsFields.classList.toggle('hidden', type !== 'not_submitted');
   }
 
   function _getSelectedAddType() {
@@ -549,8 +1013,12 @@ function updateDatasetChip(chipRecord, fields = {}) {
     const type = _getSelectedAddType();
     if (type === 'variable') {
       _createVariableAnnotation();
-    } else {
+    } else if (type === 'dataset') {
       _createDatasetAnnotation();
+    } else if (type === 'unmapped') {
+      _createStatusAnnotation('unmapped');
+    } else if (type === 'not_submitted') {
+      _createStatusAnnotation('not_submitted');
     }
   }
 
@@ -570,7 +1038,7 @@ function updateDatasetChip(chipRecord, fields = {}) {
     const annotationId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
 
     const label = `${datasetRaw}.${variableRaw}`;
-    const fontSizePts = 7.0;
+    const fontSizePts = 12.0;
     const padX = 6.0;
     const padY = 5.0;
     const textWidthPts = Math.max(20, 0.60 * fontSizePts * label.length + 3.0);
@@ -740,6 +1208,73 @@ function updateDatasetChip(chipRecord, fields = {}) {
 
     if (typeof EditorState !== 'undefined' && EditorState.scheduleAutosave) {
       EditorState.scheduleAutosave();
+    }
+  }
+
+  function _createStatusAnnotation(type) {
+    const status = type === 'unmapped' ? 'UNMAPPED' : 'NOT_SUBMITTED';
+    const displayLabel = status === 'NOT_SUBMITTED' ? 'NOT SUBMITTED' : 'UNMAPPED';
+
+    const records = Store.annotations || [];
+    const first = records[0] || {};
+    const formCode = (first.form_code || 'UNKNOWN').toUpperCase();
+
+    const annotationId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const fontSizePts = 12.0;
+    const padX = 6.0;
+    const padY = 5.0;
+    const textWidthPts = Math.max(20, 0.60 * fontSizePts * displayLabel.length + 3.0);
+    const boxW = textWidthPts + padX * 6.0;
+    const boxH = fontSizePts + padY * 2;
+
+    const x0 = _clamp(pendingClickPts.x_pts - boxW / 2, 0, Store.pageWidthPts - boxW);
+    const y0 = _clamp(pendingClickPts.y_pts - boxH / 2, 0, Store.pageHeightPts - boxH);
+    const x1 = x0 + boxW;
+    const y1 = y0 + boxH;
+
+    const newRec = {
+      annotation_id: annotationId,
+      page: Store.currentPage,
+      page_type: 'FORM',
+      form_code: formCode,
+      component: '',
+      raw_variable: '',
+      sdtm_dataset: '',
+      sdtm_variable: '',
+      sdtm_label: status === 'NOT_SUBMITTED' ? 'Not Submitted' : '',
+      status,
+      x0_pts: x0,
+      y0_pts: y0,
+      x1_pts: x1,
+      y1_pts: y1,
+      confidence: 0.0,
+      _isUserCreated: true,
+      _hasGeometryOverride: true,
+    };
+
+    annotationGeometryOverrides[annotationId] = { x0_pts: x0, y0_pts: y0, x1_pts: x1, y1_pts: y1 };
+    Store.annotations.push(newRec);
+    _addUserAnnotation(newRec);
+
+    _pushGeometryUndo({
+      type: 'add-annotation',
+      id: annotationId,
+      record: { ...newRec },
+    });
+
+    _refreshAnnotationLayer();
+
+    Store.selectedId = annotationId;
+    Store.setSelectedAnnotation(newRec);
+    highlightSelected();
+    _closeAddAnnotationDialog();
+
+    if (typeof EditorState !== 'undefined' && EditorState.scheduleAutosave) {
+      EditorState.scheduleAutosave();
+    }
+
+    if (typeof Sidebar !== 'undefined' && Sidebar.refreshUnmappedQueue) {
+      Sidebar.refreshUnmappedQueue();
     }
   }
 
@@ -979,50 +1514,50 @@ Store.setAnnotations([...backendRecords, ...uniqueUserRecs]);
     };
 
     pdfPageWrap.style.position = 'relative';
-    pdfPageWrap.style.display = 'inline-block';
+    pdfPageWrap.style.display = 'block';
 
     annotationLayer.innerHTML = '';
   }
 
-  function applyZoom(usePointerOrigin = false) {
-  const pageWrap = document.getElementById('pdf-page-wrap');
-  const pdfImg = document.getElementById('pdf-img');
-  const annotationLayer = document.getElementById('annotation-layer');
-  const toolbarZoom = document.getElementById('toolbar-zoom');
+  function applyZoom() {
+    const pageWrap = document.getElementById('pdf-page-wrap');
+    const pdfImg = document.getElementById('pdf-img');
+    const toolbarZoom = document.getElementById('toolbar-zoom');
 
-  if (!pageWrap || !pdfImg || !annotationLayer) return;
+    if (!pageWrap || !pdfImg) return;
 
-  const zoom = Number(Store.zoomPct || 100);
-  const scale = zoom / 100;
+    const zoom = Number(Store.zoomPct || 100);
+    const scale = zoom / 100;
+    const naturalWidth = Store.imgWidth || 0;
+    const naturalHeight = Store.imgHeight || 0;
 
-  const naturalWidth = pdfImg.offsetWidth || pdfImg.clientWidth || 0;
-  const naturalHeight = pdfImg.offsetHeight || pdfImg.clientHeight || 0;
+    if (naturalWidth > 0 && naturalHeight > 0) {
+      pageWrap.style.width = `${Math.round(naturalWidth * scale)}px`;
+      pageWrap.style.height = `${Math.round(naturalHeight * scale)}px`;
+    }
 
-  // Only use pointer-based origin during active Ctrl+Scroll
-  // Otherwise reset to top-left for consistent rendering after reloads
-  let originX = '0';
-  let originY = '0';
-  if (usePointerOrigin) {
-    originX = (zoomOriginX * 100).toFixed(2);
-    originY = (zoomOriginY * 100).toFixed(2);
+    pageWrap.style.transform = '';
+    pageWrap.style.transformOrigin = '';
+    pageWrap.style.setProperty('--zoom-scale', String(scale));
+    pdfImg.style.width = '100%';
+    pdfImg.style.height = '100%';
+
+    if (toolbarZoom) {
+      toolbarZoom.textContent = `${zoom}%`;
+    }
   }
 
-  pageWrap.style.position = 'relative';
-  pageWrap.style.transformOrigin = `${originX}% ${originY}%`;
-  pageWrap.style.transform = `scale(${scale})`;
-
-  if (naturalWidth > 0) pageWrap.style.width = `${naturalWidth}px`;
-  if (naturalHeight > 0) pageWrap.style.height = `${naturalHeight}px`;
-
-  const pdfContainer = document.getElementById('pdf-container');
-  if (pdfContainer && naturalWidth > 0 && naturalHeight > 0) {
-    pdfContainer.style.height = `${naturalHeight * scale}px`;
+  function zoomIn() {
+    const oldZoom = Number(Store.zoomPct || 100);
+    Store.setZoom(oldZoom + (Store.zoomStep || 10));
+    applyZoom();
   }
 
-  if (toolbarZoom) {
-    toolbarZoom.textContent = `${zoom}%`;
+  function zoomOut() {
+    const oldZoom = Number(Store.zoomPct || 100);
+    Store.setZoom(oldZoom - (Store.zoomStep || 10));
+    applyZoom();
   }
-}
 
   function _clamp(val, min, max) {
     return Math.max(min, Math.min(max, val));
@@ -1054,30 +1589,31 @@ Store.setAnnotations([...backendRecords, ...uniqueUserRecs]);
       const pageWrap = document.getElementById('pdf-page-wrap');
       if (!pageWrap) return;
 
-      const pageRect = pageWrap.getBoundingClientRect();
-      const currentZoom = Number(Store.zoomPct || 100) / 100;
-
-      // Get pointer position relative to the unscaled page content
-      const pointerXInPage = (e.clientX - pageRect.left) / currentZoom;
-      const pointerYInPage = (e.clientY - pageRect.top) / currentZoom;
-
-      const naturalWidth = pageWrap.offsetWidth || 1;
-      const naturalHeight = pageWrap.offsetHeight || 1;
-
-      // Set zoom origin as fraction (0-1) of the page dimensions
-      zoomOriginX = _clamp(pointerXInPage / naturalWidth, 0, 1);
-      zoomOriginY = _clamp(pointerYInPage / naturalHeight, 0, 1);
-
-      // Determine zoom direction
+      const oldZoom = Number(Store.zoomPct || 100);
       const delta = e.deltaY > 0 ? -Store.zoomStep : Store.zoomStep;
-      const newZoom = _clamp(
-        (Store.zoomPct || 100) + delta,
-        Store.zoomMin,
-        Store.zoomMax
-      );
+      const newZoom = _clamp(oldZoom + delta, Store.zoomMin, Store.zoomMax);
+      if (newZoom === oldZoom) return;
 
+      // Capture pointer position in page-natural coords before zoom
+      const pageRect = pageWrap.getBoundingClientRect();
+      const oldScale = oldZoom / 100;
+      const pointerXInPage = (e.clientX - pageRect.left) / oldScale;
+      const pointerYInPage = (e.clientY - pageRect.top) / oldScale;
+
+      // Apply physical zoom
       Store.setZoom(newZoom);
-      applyZoom(true);
+      applyZoom();
+
+      // Adjust scroll so the same page point stays under the cursor.
+      // Formula: scrollLeft += (newPageRect.left - canvasRect.left) + pointerXInPage * newScale - pointerXInViewport
+      const newPageRect = pageWrap.getBoundingClientRect();
+      const canvasRect = canvasArea.getBoundingClientRect();
+      const newScale = newZoom / 100;
+      const pointerXInViewport = e.clientX - canvasRect.left;
+      const pointerYInViewport = e.clientY - canvasRect.top;
+
+      canvasArea.scrollLeft += (newPageRect.left - canvasRect.left) + pointerXInPage * newScale - pointerXInViewport;
+      canvasArea.scrollTop  += (newPageRect.top  - canvasRect.top)  + pointerYInPage * newScale - pointerYInViewport;
     }, { passive: false });
   }
 
@@ -1485,6 +2021,7 @@ function _persistDatasetChipVisualState(rec, box) {
 
       band.addEventListener('click', async (e) => {
         e.stopPropagation();
+        _queueHighlightId = null;  // direct click clears queue highlight mode
         Store.setSelectedAnnotation(rec);
         highlightSelected();
 
@@ -1658,7 +2195,7 @@ function _persistDatasetChipVisualState(rec, box) {
     const y0 = parseFloat(rec.y0_pts) || 0;
     const y1 = parseFloat(rec.y1_pts) || 0;
 
-    const fontSizePts = 7.0;
+    const fontSizePts = 12.0;
     const padX = 6.0;
     const padY = 5.0;
     const textWidthPts = Math.max(20, 0.60 * fontSizePts * (label || '').length + 3.0);
@@ -1687,8 +2224,8 @@ function _persistDatasetChipVisualState(rec, box) {
       return 'Not Submitted';
     }
 
-    if (rec.sdtm_dataset && rec.sdtm_variable) {
-      return `${rec.sdtm_dataset}.${rec.sdtm_variable}`;
+    if (rec.sdtm_variable) {
+      return rec.sdtm_variable;
     }
 
     return 'UNMAPPED';
@@ -1716,9 +2253,7 @@ function _persistDatasetChipVisualState(rec, box) {
     const bg = formColourRegistry?.[formCode]?.[ds] || PALETTE[0];
 
     box.style.background = bg;
-    box.style.border = status === 'USER_CORRECTED'
-      ? '1.5px solid #00B4D8'
-      : '1.5px solid #0072B2';
+    box.style.border = '1.5px solid #0072B2';
     box.style.color = '#0050A0';
   }
 
@@ -1819,6 +2354,40 @@ function _persistDatasetChipVisualState(rec, box) {
         _startAnnotationDrag(e, chip, datasetRecord);
       });
 
+      // Resize handle — same behaviour as variable annotation boxes
+      const dsResizeHandle = document.createElement('div');
+      dsResizeHandle.className = 'ann-resize-handle';
+      dsResizeHandle.innerHTML = '↘';
+      dsResizeHandle.style.cssText = `
+        position:absolute;right:2px;bottom:0px;width:12px;height:12px;
+        display:flex;align-items:center;justify-content:center;
+        font-size:10px;line-height:10px;font-weight:700;
+        color:#B388FF;background:rgba(101,43,218,0.12);
+        border:1px solid rgba(179,136,255,0.45);border-radius:3px;
+        cursor:nwse-resize;z-index:3;box-sizing:border-box;
+        opacity:0;pointer-events:auto;
+        transition:opacity 0.12s ease,background 0.12s ease,border-color 0.12s ease,transform 0.12s ease;
+      `;
+      dsResizeHandle.addEventListener('mouseenter', () => {
+        dsResizeHandle.style.background = 'rgba(101,43,218,0.22)';
+        dsResizeHandle.style.borderColor = 'rgba(179,136,255,0.75)';
+        dsResizeHandle.style.transform = 'scale(1.04)';
+      });
+      dsResizeHandle.addEventListener('mouseleave', () => {
+        dsResizeHandle.style.background = 'rgba(101,43,218,0.12)';
+        dsResizeHandle.style.borderColor = 'rgba(179,136,255,0.45)';
+        dsResizeHandle.style.transform = 'scale(1)';
+      });
+      dsResizeHandle.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        e.stopPropagation();
+        e.preventDefault();
+        _startAnnotationResize(e, chip, datasetRecord);
+      });
+      chip.addEventListener('mouseenter', () => { dsResizeHandle.style.opacity = '1'; });
+      chip.addEventListener('mouseleave', () => { dsResizeHandle.style.opacity = '0'; });
+      chip.appendChild(dsResizeHandle);
+
       annotationLayer.appendChild(chip);
       topPct += 3.8;
     }
@@ -1861,6 +2430,8 @@ function _persistDatasetChipVisualState(rec, box) {
     return (status || 'UNMAPPED').toLowerCase().replace(/_/g, '-');
   }
 
+  let _queueHighlightId = null;
+
   function highlightSelected() {
     document.querySelectorAll('.ann-box').forEach(box => {
       const selected = box.dataset.id === Store.selectedId;
@@ -1875,16 +2446,65 @@ function _persistDatasetChipVisualState(rec, box) {
 
     document.querySelectorAll('.component-band').forEach(band => {
       const selected = band.dataset.id === Store.selectedId;
-      if (selected) {
-        band.style.background = 'rgba(142, 84, 255, 0.20)';
-        band.style.border = '1px solid rgba(74, 0, 130, 0.95)';
-        band.style.boxShadow = 'inset 0 0 0 1px rgba(74, 0, 130, 0.30)';
-      } else {
-        band.style.background = 'transparent';
-        band.style.border = '1px solid transparent';
-        band.style.boxShadow = 'none';
-      }
+      // Full-width highlight for selected annotation
+      band.classList.toggle('queue-selected', selected);
+      // Clear all inline overrides — CSS class handles the visual state
+      band.style.background = '';
+      band.style.border = '';
+      band.style.boxShadow = '';
+      band.style.left = '';
+      band.style.width = '';
+      band.style.borderRadius = '';
     });
+  }
+
+  function highlightQueueAnnotation(annotationId) {
+    if (!annotationId) return;
+
+    _queueHighlightId = annotationId;
+
+    const annotations = Store.annotations || [];
+    const rec = annotations.find(r => r.annotation_id === annotationId);
+
+    if (rec) {
+      Store.setSelectedAnnotation(rec);
+    } else {
+      Store.selectedId = annotationId;
+    }
+
+    highlightSelected();
+
+    const band = document.querySelector(`.component-band[data-id="${CSS.escape(annotationId)}"]`);
+    const box = document.querySelector(`.ann-box[data-id="${CSS.escape(annotationId)}"]`);
+
+    const shakeTarget = band || box;
+    if (shakeTarget) {
+      shakeTarget.classList.remove('queue-shake');
+      void shakeTarget.offsetWidth;
+      shakeTarget.classList.add('queue-shake');
+      shakeTarget.addEventListener('animationend', () => shakeTarget.classList.remove('queue-shake'), { once: true });
+      shakeTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    if (box && box !== shakeTarget) {
+      box.classList.remove('queue-shake');
+      void box.offsetWidth;
+      box.classList.add('queue-shake');
+      box.addEventListener('animationend', () => box.classList.remove('queue-shake'), { once: true });
+    }
+  }
+
+  function highlightDatasetChip(formCode, dsCode) {
+    if (!formCode || !dsCode) return;
+    const chip = document.querySelector(
+      `.ann-chip[data-form-code="${CSS.escape(formCode.toUpperCase())}"][data-dataset-code="${CSS.escape(dsCode.toUpperCase())}"]`
+    );
+    if (!chip) return;
+    chip.classList.remove('queue-shake');
+    void chip.offsetWidth;
+    chip.classList.add('queue-shake');
+    chip.addEventListener('animationend', () => chip.classList.remove('queue-shake'), { once: true });
+    chip.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
   function updatePageMeta() {
@@ -1966,6 +2586,83 @@ function _persistDatasetChipVisualState(rec, box) {
         }
       });
     }
+
+    // Sync toolbar zoom text and --zoom-scale variable to initial Store value
+    applyZoom();
+  }
+
+  /**
+   * Restore geometry overrides and user-created annotations from a saved
+   * editor-state objects array. Call this before loadPage() on session open
+   * so that dragged/resized positions and user-drawn boxes are correct.
+   */
+  function restoreSessionGeometry(objects) {
+    if (!Array.isArray(objects)) return;
+
+    // Clear stale state
+    for (const k in annotationGeometryOverrides) delete annotationGeometryOverrides[k];
+    for (const k in datasetChipUiOverrides) delete datasetChipUiOverrides[k];
+    userCreatedAnnotations.length = 0;
+
+    for (const obj of objects) {
+      if (!obj || !obj.object_id) continue;
+
+      if (obj.object_type === 'annotation') {
+        // Restore pixel-accurate position override from saved rect_pts
+        if (obj.rect_pts &&
+            obj.rect_pts.x0 != null && obj.rect_pts.y0 != null &&
+            obj.rect_pts.x1 != null && obj.rect_pts.y1 != null) {
+          annotationGeometryOverrides[obj.object_id] = {
+            x0_pts: Number(obj.rect_pts.x0),
+            y0_pts: Number(obj.rect_pts.y0),
+            x1_pts: Number(obj.rect_pts.x1),
+            y1_pts: Number(obj.rect_pts.y1),
+          };
+        }
+
+        // Re-add user-created annotations to the local array
+        if (obj.source === 'USER' || String(obj.object_id).startsWith('user_')) {
+          const data = obj.data || {};
+          const r = annotationGeometryOverrides[obj.object_id] || {};
+          _addUserAnnotation({
+            annotation_id: obj.object_id,
+            page: Number(obj.page || 1),
+            status: data.status || 'UNMAPPED',
+            form_code: data.form_code || '',
+            raw_variable: data.raw_variable || '',
+            raw_label: data.raw_label || '',
+            sdtm_dataset: data.sdtm_dataset || '',
+            sdtm_variable: data.sdtm_variable || '',
+            sdtm_label: data.sdtm_label || '',
+            component: data.raw_label || '',
+            x0_pts: r.x0_pts,
+            y0_pts: r.y0_pts,
+            x1_pts: r.x1_pts,
+            y1_pts: r.y1_pts,
+            source: 'USER',
+            _hasGeometryOverride: !!annotationGeometryOverrides[obj.object_id],
+          });
+        }
+
+      } else if (obj.object_type === 'dataset_chip') {
+        // Restore CSS position for dragged/resized dataset chips
+        if (obj._ui_left || obj._ui_top) {
+          // chip_id format: "datasetchip::FORMCODE::DSCODE"
+          const raw = String(obj.object_id).replace(/^datasetchip::/, '');
+          const sep = raw.indexOf('::');
+          if (sep > 0) {
+            const fc = raw.slice(0, sep).toUpperCase();
+            const ds = raw.slice(sep + 2).toUpperCase();
+            datasetChipUiOverrides[`${fc}::${ds}`] = {
+              _ui_left: obj._ui_left || '50%',
+              _ui_top: obj._ui_top || '1%',
+              _ui_width: obj._ui_width || '',
+              _ui_height: obj._ui_height || '',
+            };
+          }
+        }
+      }
+    }
   }
 
   return {
@@ -1975,14 +2672,21 @@ function _persistDatasetChipVisualState(rec, box) {
   renderAnnotations,
   showEmpty,
   highlightSelected,
+  highlightQueueAnnotation,
+  highlightDatasetChip,
   applyZoom,
+  zoomIn,
+  zoomOut,
   applyOverridesToRecord,
   applyLocalOverrides,
   undoGeometry,
   redoGeometry,
+  pushUndoAction: _pushGeometryUndo,
   isUserCreated,
   updateUserAnnotation,
+  getAllUserAnnotations,
   updateDatasetChip,
   updateFormColour,
+  restoreSessionGeometry,
 };
 })();

@@ -219,8 +219,12 @@ def load_mapping(excel_path=None) -> dict:
         raise RuntimeError(f"No recognised sheets in Excel. Found: {sheet_names}")
 
     if not mapping:
-        raise RuntimeError("Mapping loaded but is empty.")
+        raise RuntimeError(
+            f"Mapping loaded from '{path.name}' but is empty. "
+            f"Check that the file has the expected column headers and data rows."
+        )
 
+    print(f"[mapping] Loaded {len(mapping)} entries from '{path.name}'")
     return mapping
 
 
@@ -242,14 +246,31 @@ def resolve_sdtm(domain: str, raw_var: str, mapping: dict):
     if not raw_var:
         return None
 
+    # Exact domain + variable match — always preferred
     result = mapping.get((domain, raw_var))
     if result:
         return result
 
-    for (d, v), val in mapping.items():
-        if v == raw_var:
+    # Collect all cross-domain matches
+    fallbacks = [
+        (d, val) for (d, v), val in mapping.items() if v == raw_var
+    ]
+
+    if not fallbacks:
+        return None
+
+    # Prefer SUPP<domain> (supplemental of same domain)
+    for d, val in fallbacks:
+        if d == f"SUPP{domain}":
             return val
 
+    # Only resolve when there is exactly one match — unambiguous
+    if len(fallbacks) == 1:
+        return fallbacks[0][1]
+
+    # Multiple domains claim the same variable name — do not guess
+    print(f"[mapping] Ambiguous cross-domain match for '{raw_var}' "
+          f"in domains {[d for d, _ in fallbacks]} — leaving unresolved")
     return None
 
 
@@ -286,15 +307,29 @@ def get_horizontal_lines(page: fitz.Page) -> list:
 # FOOTER DETECTION
 # =============================================================================
 
+_FOOTER_PATTERNS = [
+    re.compile(r'D\d+C\d+_\w+_V[\d.]+'),           # AZ study ID format
+    re.compile(r'(?i)\bpage\s+\d+\s+of\s+\d+\b'),  # "Page X of Y"
+    re.compile(r'(?i)\bconfidential\b'),             # common footer word
+    re.compile(r'(?i)\bversion\s*[\d.]+\b'),         # "Version 1.0"
+    re.compile(r'(?i)\bproprietary\b'),              # proprietary notice
+]
+
+
 def get_footer_y(page: fitz.Page):
     page_h = page.rect.height
-    study_id_re = re.compile(r'D\d+C\d+_\w+_V[\d.]+')
+    # Only search in the bottom 25% of the page to avoid false positives
+    search_threshold = page_h * 0.75
     footer_y = None
 
     for w in page.get_text("words"):
-        if study_id_re.search(w[4]) and w[1] > page_h * 0.5:
-            if footer_y is None or w[1] < footer_y:
-                footer_y = w[1]
+        if w[1] < search_threshold:
+            continue
+        for pat in _FOOTER_PATTERNS:
+            if pat.search(w[4]):
+                if footer_y is None or w[1] < footer_y:
+                    footer_y = w[1]
+                break
 
     return footer_y
 
@@ -346,15 +381,36 @@ def classify_page(page: fitz.Page) -> str:
 # FORM CODE EXTRACTION
 # =============================================================================
 
+_FORM_CODE_STOP = {
+    # Generic English words that would match [A-Z]{2,4}
+    "CRF", "PDF", "THE", "FOR", "AND", "NOT", "ARE", "WAS",
+    "HAS", "HAD", "BUT", "ALL", "ANY", "CAN", "HER", "HIS",
+    "HOW", "ITS", "MAY", "NEW", "NOW", "OLD", "OUR", "OUT",
+    "OWN", "SAY", "SHE", "TOO", "USE", "WAY", "WHO", "DID",
+    "GET", "LET", "PUT", "RUN", "TOP", "DAY",
+    # CRF-specific words that are not domain codes
+    "FORM", "PAGE", "DATE", "NAME", "TYPE", "NOTE", "ITEM",
+    "SITE", "DRUG", "DOSE", "UNIT", "CODE", "SIGN", "TERM",
+    "TEXT", "BODY", "WEEK", "YEAR", "TIME", "TEST", "FIELD",
+    "DATA", "NONE", "NULL", "TRUE", "YES", "NO",
+}
+
+
 def extract_form_code(page: fitz.Page):
     text = page.get_text()
 
+    # Primary: explicit form label e.g. "Form: Adverse Events (AE)"
     m = re.search(r'Form:\s+.+?\(([A-Z]{1,6}\d*)\)', text, re.IGNORECASE)
     if m:
         return m.group(1).upper()
 
-    m = re.search(r'\b([A-Z]{2,4}\d?)\b', text[:300])
-    return m.group(1).upper() if m else None
+    # Fallback: first 2-4 uppercase token in first 300 chars not in stoplist
+    for m in re.finditer(r'\b([A-Z]{2,4}\d?)\b', text[:300]):
+        candidate = m.group(1).upper()
+        if candidate not in _FORM_CODE_STOP:
+            return candidate
+
+    return None
 
 
 # =============================================================================
@@ -591,6 +647,78 @@ def link_form_to_table(master_records, mapping):
 
 
 # =============================================================================
+# CONFIDENCE THRESHOLDS
+# =============================================================================
+
+def apply_confidence_thresholds(records, mapping):
+    """
+    Score unresolved FORM records with TF-IDF and assign status:
+      >= 0.80  → RESOLVED   (auto-annotated)
+      0.60-0.79 → NEEDS_REVIEW (candidate shown, user must confirm)
+      < 0.60   → UNMAPPED   (no confident suggestion)
+    Records already resolved from the Excel exact-match keep confidence=1.0.
+    """
+    try:
+        from editor.confidence_engine import ConfidenceEngine
+        engine = ConfidenceEngine()
+        engine.build_from_mapping(mapping)
+    except Exception as exc:
+        print(f"[pipeline] confidence engine unavailable: {exc}")
+        engine = None
+
+    for rec in records:
+        if rec.get("page_type") != "FORM":
+            continue
+
+        if rec.get("sdtm_variable"):
+            rec["confidence"] = 1.0
+            rec["status"] = "RESOLVED"
+            continue
+
+        raw_var = rec.get("raw_variable")
+        if not raw_var or engine is None or not engine._is_built:
+            rec["confidence"] = 0.0
+            rec["status"] = "UNMAPPED"
+            continue
+
+        domain = rec.get("domain", "")
+        candidates = engine.get_candidates(
+            raw_variable=raw_var,
+            top_n=1,
+            min_score=0.0,
+            domain_hint=domain,
+        )
+
+        if candidates:
+            best = candidates[0]
+            score = best.score
+
+            if score >= 0.95:
+                # Near-exact character match only — safe to auto-resolve
+                rec["confidence"] = round(score, 4)
+                rec["status"] = "RESOLVED"
+                rec["sdtm_dataset"] = best.sdtm_dataset
+                rec["sdtm_variable"] = best.sdtm_variable
+                rec["sdtm_label"] = best.sdtm_label
+            elif score >= 0.50:
+                # Reasonable match — surface for human review
+                rec["confidence"] = round(score, 4)
+                rec["status"] = "NEEDS_REVIEW"
+                rec["sdtm_dataset"] = best.sdtm_dataset
+                rec["sdtm_variable"] = best.sdtm_variable
+                rec["sdtm_label"] = best.sdtm_label
+            else:
+                rec["confidence"] = round(score, 4)
+                rec["status"] = "UNMAPPED"
+                # Keep best low-confidence suggestion so the queue can show it
+                rec["best_sdtm_dataset"] = best.sdtm_dataset
+                rec["best_sdtm_variable"] = best.sdtm_variable
+        else:
+            rec["confidence"] = 0.0
+            rec["status"] = "UNMAPPED"
+
+
+# =============================================================================
 # APPLY USER CORRECTIONS
 # =============================================================================
 
@@ -650,6 +778,9 @@ def run_pipeline(pdf_path, session_id, corrections=None, progress_callback=None)
 
     linked, unlinked = link_form_to_table(master_records, mapping)
 
+    # Score unresolved records and set confidence-based status
+    apply_confidence_thresholds(master_records, mapping)
+
     if corrections:
         apply_corrections(master_records, corrections, mapping)
 
@@ -657,8 +788,9 @@ def run_pipeline(pdf_path, session_id, corrections=None, progress_callback=None)
         json.dump(master_records, f, indent=2, ensure_ascii=False)
 
     form_records = [r for r in master_records if r["page_type"] == "FORM"]
-    resolved = sum(1 for r in form_records if r.get("sdtm_variable"))
-    unresolved = sum(1 for r in form_records if not r.get("sdtm_variable"))
+    resolved = sum(1 for r in form_records if r.get("status") == "RESOLVED")
+    needs_review = sum(1 for r in form_records if r.get("status") == "NEEDS_REVIEW")
+    unresolved = sum(1 for r in form_records if r.get("status") == "UNMAPPED")
 
     summary_lines = [
         "CRF FULL PIPELINE SUMMARY",
@@ -668,7 +800,8 @@ def run_pipeline(pdf_path, session_id, corrections=None, progress_callback=None)
         f"Records: {len(master_records)}",
         f"FORM records : {len(form_records)}",
         f"Resolved     : {resolved}",
-        f"Unresolved   : {unresolved}",
+        f"Needs Review : {needs_review}",
+        f"Unmapped     : {unresolved}",
         f"Linked       : {linked}",
         f"Unlinked     : {unlinked}",
     ]
@@ -677,6 +810,7 @@ def run_pipeline(pdf_path, session_id, corrections=None, progress_callback=None)
     return {
         "records": master_records,
         "resolved": resolved,
+        "needs_review": needs_review,
         "unresolved": unresolved,
         "total": len(form_records),
         "linked": linked,

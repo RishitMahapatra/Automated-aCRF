@@ -120,11 +120,9 @@ const EditPanel = (() => {
 
     const panelEmpty = document.getElementById('panel-empty');
     const panelActive = document.getElementById('panel-active');
-    const removeConfirm = document.getElementById('remove-confirm');
 
     if (panelActive) panelActive.classList.add('hidden');
     if (panelEmpty) panelEmpty.classList.remove('hidden');
-    if (removeConfirm) removeConfirm.classList.add('hidden');
 
     _clearSuggestions();
     _clearManualFields();
@@ -177,6 +175,7 @@ const EditPanel = (() => {
     if (statusDot) {
       statusDot.style.background = _statusColour(rec.status);
     }
+
   }
 
   function _populateDatasetRecord(rec) {
@@ -271,21 +270,10 @@ const EditPanel = (() => {
   }
 
   function _setSuggestionsVisible(show) {
-    const list = document.getElementById('suggestions-list');
-    if (!list) return;
-
-    const suggestionsLabel = list.previousElementSibling;
-    const dividerBelow = list.nextElementSibling;
-
-    if (suggestionsLabel && suggestionsLabel.classList.contains('section-label')) {
-      suggestionsLabel.classList.toggle('hidden', !show);
-    }
-
-    list.classList.toggle('hidden', !show);
-
-    if (dividerBelow && dividerBelow.classList.contains('divider')) {
-      dividerBelow.classList.toggle('hidden', !show);
-    }
+    const expander = document.getElementById('expander-suggestions');
+    const divider = document.getElementById('suggestions-divider');
+    if (expander) expander.classList.toggle('hidden', !show);
+    if (divider) divider.classList.toggle('hidden', !show);
   }
 
   function _setManualLabelsForDatasetMode(datasetRecord = null) {
@@ -343,15 +331,43 @@ const EditPanel = (() => {
     if (label) label.value = '';
   }
 
+  function _normalizeDatasetName(raw) {
+    const trimmed = raw.trim();
+    const openIdx = trimmed.indexOf('(');
+    const closeIdx = trimmed.lastIndexOf(')');
+    if (openIdx === -1 && closeIdx === -1) {
+      return { ok: true, value: trimmed.toUpperCase() };
+    }
+    const openCount = (trimmed.match(/\(/g) || []).length;
+    const closeCount = (trimmed.match(/\)/g) || []).length;
+    if (openCount !== 1 || closeCount !== 1) {
+      return { ok: false, error: 'Only one set of parentheses () is allowed.' };
+    }
+    if (openIdx > closeIdx) {
+      return { ok: false, error: 'Parentheses must be in the form (...).' };
+    }
+    const codePart = trimmed.slice(0, openIdx).trim().toUpperCase();
+    const fullPart = trimmed.slice(openIdx);
+    return { ok: true, value: codePart ? `${codePart} ${fullPart}`.trim() : fullPart };
+  }
+
   async function _loadSuggestions(annotationId) {
     const list = document.getElementById('suggestions-list');
     if (!list) return;
 
+    const sugHdr = document.getElementById('expander-suggestions-hdr');
+    const sugLbl = sugHdr?.querySelector('.expander-label');
+
     // Skip suggestions for user-created annotations (backend doesn't know them)
     if (typeof Canvas !== 'undefined' && Canvas.isUserCreated && Canvas.isUserCreated(annotationId)) {
-      list.innerHTML = '<div class="suggestions-loading muted small">No suggestions (user-created)</div>';
+      list.innerHTML = '<div class="suggestions-loading muted small">No suggestions available</div>';
+      if (sugHdr) sugHdr.classList.add('user-generated');
+      if (sugLbl) sugLbl.textContent = 'Suggestions (User Generated)';
       return;
     }
+
+    if (sugHdr) sugHdr.classList.remove('user-generated');
+    if (sugLbl) sugLbl.textContent = 'Suggestions';
 
     list.innerHTML = '<div class="suggestions-loading muted small">Loading suggestions...</div>';
 
@@ -381,14 +397,35 @@ const EditPanel = (() => {
           <div class="suggestion-label">${escapeHtml(s.sdtm_label || '—')}</div>
         `;
 
-        card.addEventListener('click', () => {
-          const ds = document.getElementById('manual-dataset');
-          const variable = document.getElementById('manual-variable');
-          const label = document.getElementById('manual-label');
+        card.addEventListener('click', async () => {
+          // Show confirm dialog
+          const overlay = document.getElementById('suggest-confirm-overlay');
+          const body = document.getElementById('suggest-confirm-body');
+          const yesBtn = document.getElementById('suggest-confirm-yes');
+          const cancelBtn = document.getElementById('suggest-confirm-cancel');
+          if (!overlay) return;
+          if (body) body.innerHTML = `<strong>${escapeHtml(`${s.sdtm_dataset}.${s.sdtm_variable}`)}</strong><br>${escapeHtml(s.sdtm_label || '—')}<br><span style="font-size:11px;opacity:0.65;margin-top:4px;display:block">This will be applied and can be undone with Ctrl+Z</span>`;
+          overlay.classList.remove('hidden');
 
-          if (ds) ds.value = s.sdtm_dataset || '';
-          if (variable) variable.value = s.sdtm_variable || '';
-          if (label) label.value = s.sdtm_label || '';
+          const confirmed = await new Promise(resolve => {
+            const closeOverlay = (val) => { overlay.classList.add('hidden'); resolve(val); };
+            yesBtn.addEventListener('click', () => closeOverlay(true), { once: true });
+            cancelBtn.addEventListener('click', () => closeOverlay(false), { once: true });
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) closeOverlay(false); }, { once: true });
+          });
+
+          if (!confirmed || !Store.selectedRecord) return;
+
+          await _applyAndTrack({
+            before: _snapshotFromRecord(Store.selectedRecord),
+            after: {
+              annotation_id: Store.selectedId,
+              status: 'USER_CORRECTED',
+              sdtm_dataset: s.sdtm_dataset || '',
+              sdtm_variable: s.sdtm_variable || '',
+              sdtm_label: s.sdtm_label || '',
+            },
+          });
         });
 
         list.appendChild(card);
@@ -413,8 +450,6 @@ const EditPanel = (() => {
     const btnNotSubmitted = document.getElementById('btn-not-submitted');
     const btnClear = document.getElementById('btn-clear');
     const btnRemove = document.getElementById('btn-remove');
-    const btnRemoveConfirm = document.getElementById('btn-remove-confirm');
-    const btnRemoveCancel = document.getElementById('btn-remove-cancel');
     const btnManualConfirm = document.getElementById('btn-manual-confirm');
 
     if (btnPanelClose) btnPanelClose.addEventListener('click', () => close());
@@ -459,38 +494,24 @@ const EditPanel = (() => {
     if (btnRemove) {
       btnRemove.addEventListener('click', () => {
         if (currentMode !== 'annotation') return;
-        const removeConfirm = document.getElementById('remove-confirm');
-        if (removeConfirm) removeConfirm.classList.remove('hidden');
-      });
-    }
-
-    if (btnRemoveConfirm) {
-      btnRemoveConfirm.addEventListener('click', async () => {
-        if (currentMode !== 'annotation') return;
         if (!Store.selectedRecord) return;
-
-        const removeConfirm = document.getElementById('remove-confirm');
-        if (removeConfirm) removeConfirm.classList.add('hidden');
-
-        await _applyAndTrack({
-          before: _snapshotFromRecord(Store.selectedRecord),
-          after: {
-            annotation_id: Store.selectedId,
-            status: 'REMOVED',
-            sdtm_dataset: '',
-            sdtm_variable: '',
-            sdtm_label: '',
-          },
-        }, false);
-
-        close();
-      });
-    }
-
-    if (btnRemoveCancel) {
-      btnRemoveCancel.addEventListener('click', () => {
-        const removeConfirm = document.getElementById('remove-confirm');
-        if (removeConfirm) removeConfirm.classList.add('hidden');
+        const rec = Store.selectedRecord;
+        const annotationId = Store.selectedId;
+        window._removeConfirmCallback = async () => {
+          await _applyAndTrack({
+            before: _snapshotFromRecord(rec),
+            after: {
+              annotation_id: annotationId,
+              status: 'REMOVED',
+              sdtm_dataset: '',
+              sdtm_variable: '',
+              sdtm_label: '',
+            },
+          }, false);
+          close();
+        };
+        const dlg = document.getElementById('ann-remove-confirm');
+        if (dlg) dlg.classList.remove('hidden');
       });
     }
 
@@ -499,7 +520,9 @@ const EditPanel = (() => {
         if (!Store.selectedRecord) return;
 
         if (currentMode === 'dataset-chip') {
-          const ds = (document.getElementById('manual-dataset')?.value || '').trim().toUpperCase();
+          const _dsNorm = _normalizeDatasetName(document.getElementById('manual-dataset')?.value || '');
+          if (!_dsNorm.ok) { alert(_dsNorm.error); return; }
+          const ds = _dsNorm.value;
           const fullForm = (document.getElementById('manual-label')?.value || '').trim();
 
           if (!ds) {
@@ -535,7 +558,7 @@ const EditPanel = (() => {
             mode: 'dataset-chip-edit',
           };
 
-          Store.pushHistory({
+          _pushToUnifiedStack({
             type: 'dataset-chip-edit',
             before,
             after,
@@ -552,7 +575,9 @@ const EditPanel = (() => {
           return;
         }
 
-        const ds = (document.getElementById('manual-dataset')?.value || '').trim().toUpperCase();
+        const _dsNorm2 = _normalizeDatasetName(document.getElementById('manual-dataset')?.value || '');
+        if (!_dsNorm2.ok) { alert(_dsNorm2.error); return; }
+        const ds = _dsNorm2.value;
         const variable = (document.getElementById('manual-variable')?.value || '').trim().toUpperCase();
         const label = (document.getElementById('manual-label')?.value || '').trim();
 
@@ -576,9 +601,24 @@ const EditPanel = (() => {
   }
 
   function _bindExpanders() {
+    const suggestionsHdr = document.getElementById('expander-suggestions-hdr');
+    const suggestionsBody = document.getElementById('expander-suggestions-body');
+    const suggestionsChevron = suggestionsHdr?.querySelector('.expander-chevron');
+
+    if (suggestionsHdr) suggestionsHdr.title = 'AI-suggested SDTM variable mappings — click a suggestion to apply it';
+
+    if (suggestionsHdr && suggestionsBody) {
+      suggestionsHdr.addEventListener('click', () => {
+        suggestionsBody.classList.toggle('hidden');
+        if (suggestionsChevron) suggestionsChevron.classList.toggle('open');
+      });
+    }
+
     const manualHdr = document.getElementById('expander-manual-hdr');
     const manualBody = document.getElementById('expander-manual-body');
     const manualChevron = manualHdr?.querySelector('.expander-chevron');
+
+    if (manualHdr) manualHdr.title = 'Manually enter or override the SDTM dataset, variable, and label';
 
     if (manualHdr && manualBody) {
       manualHdr.addEventListener('click', () => {
@@ -591,10 +631,23 @@ const EditPanel = (() => {
     const colourBody = document.getElementById('expander-colour-body');
     const colourChevron = colourHdr?.querySelector('.expander-chevron');
 
+    if (colourHdr) colourHdr.title = 'Change the annotation box fill colour for this dataset';
+
     if (colourHdr && colourBody) {
       colourHdr.addEventListener('click', () => {
         colourBody.classList.toggle('hidden');
         if (colourChevron) colourChevron.classList.toggle('open');
+      });
+    }
+
+    const actionsHdr = document.getElementById('expander-actions-hdr');
+    const actionsBody = document.getElementById('expander-actions-body');
+    const actionsChevron = actionsHdr?.querySelector('.expander-chevron');
+
+    if (actionsHdr && actionsBody) {
+      actionsHdr.addEventListener('click', () => {
+        actionsBody.classList.toggle('hidden');
+        if (actionsChevron) actionsChevron.classList.toggle('open');
       });
     }
 
@@ -630,7 +683,7 @@ const EditPanel = (() => {
     );
   }
 
-  Store.pushHistory({
+  _pushToUnifiedStack({
     type: 'dataset-colour',
     before: {
       form_code: Store.selectedRecord._formCode,
@@ -684,7 +737,7 @@ if (typeof Canvas !== 'undefined' && Canvas.updateFormColour) {
   Canvas.updateFormColour(formCode, dataset, colourKey);
 }
 
-Store.pushHistory({
+_pushToUnifiedStack({
   type: 'dataset-colour',
   before: {
     form_code: formCode,
@@ -714,23 +767,15 @@ await _refreshAfterUpdate({
   }
 
   function _bindUndoRedo() {
-    document.addEventListener('keydown', async (e) => {
-      const isMac = navigator.platform.toUpperCase().includes('MAC');
-      const ctrl = isMac ? e.metaKey : e.ctrlKey;
+    // Canvas handles all Ctrl+Z/Y via capture-phase listener; no-op here.
+  }
 
-      if (!ctrl) return;
-
-      if (e.key.toLowerCase() === 'z' && !e.shiftKey) {
-        e.preventDefault();
-        await undo();
-      } else if (
-        e.key.toLowerCase() === 'y' ||
-        (e.key.toLowerCase() === 'z' && e.shiftKey)
-      ) {
-        e.preventDefault();
-        await redo();
-      }
-    });
+  function _pushToUnifiedStack(action) {
+    if (typeof Canvas !== 'undefined' && Canvas.pushUndoAction) {
+      Canvas.pushUndoAction(action);
+    } else {
+      Store.pushHistory(action);
+    }
   }
 
   async function _applyAndTrack(action, reopenPanel = true) {
@@ -745,7 +790,7 @@ await _refreshAfterUpdate({
         sdtm_label: action.after.sdtm_label || '',
       };
       Canvas.updateUserAnnotation(annotationId, updatedFields);
-      Store.pushHistory(action);
+      _pushToUnifiedStack(action);
 
       await _refreshAfterUpdate({
         reopenPanel,
@@ -760,7 +805,7 @@ await _refreshAfterUpdate({
     const ok = await _applySnapshot(action.after);
     if (!ok) return;
 
-    Store.pushHistory(action);
+    _pushToUnifiedStack(action);
 
     await _refreshAfterUpdate({
       reopenPanel,
@@ -809,20 +854,28 @@ await _refreshAfterUpdate({
   }
 
   async function undo() {
-    const action = Store.popUndo();
-    if (!action) return;
+    if (typeof Canvas !== 'undefined' && Canvas.undoGeometry) {
+      await Canvas.undoGeometry();
+    }
+  }
 
+  async function redo() {
+    if (typeof Canvas !== 'undefined' && Canvas.redoGeometry) {
+      await Canvas.redoGeometry();
+    }
+  }
+
+  // Called by Canvas.undoGeometry() for EditPanel-owned action types.
+  // Stack management is already done by canvas before this is called.
+  async function undoAction(action) {
     if (action.type === 'dataset-chip-edit') {
       const chipId = action.before.annotation_id;
       const chipRecord = (Store.annotations || []).find(r => r.annotation_id === chipId);
-
       if (chipRecord && typeof Canvas !== 'undefined' && Canvas.updateDatasetChip) {
         const restored = Canvas.updateDatasetChip(chipRecord, {
           sdtm_dataset: action.before.sdtm_dataset || '',
           full_name: action.before.full_name || _extractFullForm(action.before.sdtm_label || ''),
         });
-
-        Store.pushRedo(action);
         if (restored) {
           Store.selectedId = restored.annotation_id;
           await openDatasetChip(restored);
@@ -835,7 +888,13 @@ await _refreshAfterUpdate({
       const ok = await _applyDatasetColourSnapshot(action.before);
       if (!ok) return;
 
-      Store.pushRedo(action);
+      if (typeof Canvas !== 'undefined' && Canvas.updateFormColour) {
+        Canvas.updateFormColour(
+          String(action.before.form_code || '').toUpperCase(),
+          String(action.before.dataset || '').toUpperCase(),
+          action.before.colour || ''
+        );
+      }
 
       if (action.before.mode === 'dataset-chip') {
         Store.selectedId = `datasetchip::${String(action.before.form_code).toUpperCase()}::${String(action.before.dataset).toUpperCase()}`;
@@ -853,19 +912,16 @@ await _refreshAfterUpdate({
       return;
     }
 
-    // For user-created annotations, update locally
-    const annotationId = action.before.annotation_id;
+    // Generic field edit (no type or unrecognised type)
+    const annotationId = action.before?.annotation_id;
     if (typeof Canvas !== 'undefined' && Canvas.isUserCreated && Canvas.isUserCreated(annotationId)) {
-      const updatedFields = {
+      Canvas.updateUserAnnotation(annotationId, {
         status: action.before.status,
         sdtm_dataset: action.before.sdtm_dataset || '',
         sdtm_variable: action.before.sdtm_variable || '',
         sdtm_label: action.before.sdtm_label || '',
-      };
-      Canvas.updateUserAnnotation(annotationId, updatedFields);
-      Store.pushRedo(action);
+      });
       Store.selectedId = annotationId;
-
       await _refreshAfterUpdate({
         reopenPanel: true,
         reloadSuggestions: false,
@@ -878,10 +934,7 @@ await _refreshAfterUpdate({
 
     const ok = await _applySnapshot(action.before);
     if (!ok) return;
-
-    Store.pushRedo(action);
-    Store.selectedId = action.before.annotation_id;
-
+    Store.selectedId = annotationId;
     await _refreshAfterUpdate({
       reopenPanel: true,
       reloadSuggestions: false,
@@ -891,20 +944,16 @@ await _refreshAfterUpdate({
     });
   }
 
-  async function redo() {
-    const action = Store.popRedo();
-    if (!action) return;
+  // Called by Canvas.redoGeometry() for EditPanel-owned action types.
+  async function redoAction(action) {
     if (action.type === 'dataset-chip-edit') {
       const chipId = action.after.annotation_id;
       const chipRecord = (Store.annotations || []).find(r => r.annotation_id === chipId);
-
       if (chipRecord && typeof Canvas !== 'undefined' && Canvas.updateDatasetChip) {
         const restored = Canvas.updateDatasetChip(chipRecord, {
           sdtm_dataset: action.after.sdtm_dataset || '',
           full_name: action.after.full_name || _extractFullForm(action.after.sdtm_label || ''),
         });
-
-        Store.pushHistory(action);
         if (restored) {
           Store.selectedId = restored.annotation_id;
           await openDatasetChip(restored);
@@ -917,7 +966,13 @@ await _refreshAfterUpdate({
       const ok = await _applyDatasetColourSnapshot(action.after);
       if (!ok) return;
 
-      Store.pushHistory(action);
+      if (typeof Canvas !== 'undefined' && Canvas.updateFormColour) {
+        Canvas.updateFormColour(
+          String(action.after.form_code || '').toUpperCase(),
+          String(action.after.dataset || '').toUpperCase(),
+          action.after.colour || ''
+        );
+      }
 
       if (action.after.mode === 'dataset-chip') {
         Store.selectedId = `datasetchip::${String(action.after.form_code).toUpperCase()}::${String(action.after.dataset).toUpperCase()}`;
@@ -935,19 +990,16 @@ await _refreshAfterUpdate({
       return;
     }
 
-    // For user-created annotations, update locally
-    const annotationId = action.after.annotation_id;
+    // Generic field edit
+    const annotationId = action.after?.annotation_id;
     if (typeof Canvas !== 'undefined' && Canvas.isUserCreated && Canvas.isUserCreated(annotationId)) {
-      const updatedFields = {
+      Canvas.updateUserAnnotation(annotationId, {
         status: action.after.status,
         sdtm_dataset: action.after.sdtm_dataset || '',
         sdtm_variable: action.after.sdtm_variable || '',
         sdtm_label: action.after.sdtm_label || '',
-      };
-      Canvas.updateUserAnnotation(annotationId, updatedFields);
-      Store.pushHistory(action);
+      });
       Store.selectedId = annotationId;
-
       await _refreshAfterUpdate({
         reopenPanel: true,
         reloadSuggestions: false,
@@ -960,10 +1012,7 @@ await _refreshAfterUpdate({
 
     const ok = await _applySnapshot(action.after);
     if (!ok) return;
-
-    Store.pushHistory(action);
-    Store.selectedId = action.after.annotation_id;
-
+    Store.selectedId = annotationId;
     await _refreshAfterUpdate({
       reopenPanel: true,
       reloadSuggestions: false,
@@ -994,6 +1043,10 @@ await _refreshAfterUpdate({
 
     if (typeof Sidebar !== 'undefined' && Sidebar.refreshStats) {
       await Sidebar.refreshStats();
+    }
+
+    if (typeof Sidebar !== 'undefined' && Sidebar.refreshUnmappedQueue) {
+      await Sidebar.refreshUnmappedQueue();
     }
 
     const selectedId = Store.selectedId;
@@ -1091,5 +1144,7 @@ await _refreshAfterUpdate({
     close,
     undo,
     redo,
+    undoAction,
+    redoAction,
   };
 })();

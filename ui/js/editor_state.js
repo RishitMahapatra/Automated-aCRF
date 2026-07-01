@@ -203,7 +203,9 @@ const EditorState = (() => {
     (Store.datasetChips || []).forEach(chip => {
       if (!chip) return;
       if (chip.visible === false || chip.removed === true) return;
-      if (!chip.rect_pts) return;
+      // Save chip if it has PDF coords OR if it has a user-dragged CSS position
+      const hasCssPos = chip._ui_left || chip._ui_top;
+      if (!chip.rect_pts && !hasCssPos) return;
 
       objects.push({
         object_id: chip.chip_id,
@@ -213,12 +215,17 @@ const EditorState = (() => {
         removed: false,
         source: chip.source || 'AUTO',
         display_text: chip.display_text || '',
-        rect_pts: {
+        rect_pts: chip.rect_pts ? {
           x0: Number(chip.rect_pts.x0),
           y0: Number(chip.rect_pts.y0),
           x1: Number(chip.rect_pts.x1),
           y1: Number(chip.rect_pts.y1),
-        },
+        } : null,
+        // Persist CSS positions so dragged chips restore at the right location
+        _ui_left: chip._ui_left || '',
+        _ui_top: chip._ui_top || '',
+        _ui_width: chip._ui_width || '',
+        _ui_height: chip._ui_height || '',
         style: _chipStyle(chip),
         data: {
           dataset: chip.dataset || '',
@@ -228,11 +235,21 @@ const EditorState = (() => {
       });
     });
 
+    const datasetReviews = (typeof Sidebar !== 'undefined' && Sidebar.getDatasetReviews)
+      ? Sidebar.getDatasetReviews()
+      : [];
+
+    const reviewQueue = (typeof Sidebar !== 'undefined' && Sidebar.getReviewQueue)
+      ? Sidebar.getReviewQueue()
+      : [];
+
     return {
       session_id: Store.sessionId,
       pdf_name: Store.pdfName,
       pages,
       objects,
+      datasetReviews,
+      reviewQueue,
     };
   }
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 import shutil
 import traceback
 import uuid
+import webbrowser
 from pathlib import Path
 
 import webview
@@ -18,6 +19,7 @@ from config import ROOT_DIR, OUTPUTS_DIR, EXCEL_PATH, get_session_output_dir
 from bridge.pipeline_bridge import PipelineBridge, run_full_pipeline
 from bridge import annotation_bridge
 from bridge import editor_state_bridge
+from bridge import session_bridge
 from bridge.export_bridge import ExportBridge
 
 
@@ -28,8 +30,10 @@ class Api:
         self._window = None
         self._pdf_path: Path | None = None
         self._session_id: str = ""
+        self._acrf_path: Path | None = None
         self._pipeline = PipelineBridge()
         self._export = ExportBridge()
+        self._is_dirty: bool = False  # mirrored from JS; read by on_closing without evaluate_js
 
     # ==========================================================================
     # FILE UPLOAD
@@ -99,6 +103,8 @@ class Api:
         try:
             self._pdf_path = None
             self._session_id = ""
+            self._acrf_path = None
+            self._is_dirty = False
             self._export = ExportBridge()
             return {"ok": True}
         except Exception as e:
@@ -267,6 +273,25 @@ class Api:
                 sdtm_dataset="",
                 sdtm_variable="",
                 sdtm_label="",
+            )
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def get_annotation(self, annotation_id):
+        try:
+            rec = annotation_bridge.get_annotation(self._session_id, str(annotation_id or "").strip())
+            if rec is None:
+                return {"ok": False, "error": "Not found"}
+            return {"ok": True, "record": rec}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def update_comment(self, annotation_id, comment=""):
+        try:
+            return annotation_bridge.update_comment(
+                self._session_id,
+                annotation_id,
+                comment=str(comment or "").strip(),
             )
         except Exception as e:
             return {"ok": False, "error": str(e)}
@@ -449,3 +474,212 @@ class Api:
 
         except Exception as e:
             return {"ok": False, "error": str(e)}
+
+    # ==========================================================================
+    # SESSION FILE (.acrf) — Save / Open / Save As
+    # ==========================================================================
+
+    def save_session_file(self, editor_state=None, frontend_annotations=None):
+        """
+        Save to the current .acrf path (or prompt Save As if no path yet).
+        frontend_annotations: list of annotation records from the JS Store,
+        including user-created ones that only exist in the frontend.
+        """
+        try:
+            if not self._pdf_path:
+                return {"ok": False, "error": "No PDF loaded"}
+            if not self._session_id:
+                return {"ok": False, "error": "No session ID"}
+
+            self._merge_frontend_annotations(frontend_annotations)
+
+            if not self._acrf_path:
+                return self.save_session_file_as(editor_state, frontend_annotations)
+
+            result = session_bridge.save_session(
+                save_path=self._acrf_path,
+                session_id=self._session_id,
+                pdf_path=self._pdf_path,
+                editor_state=editor_state,
+            )
+            return result
+
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def save_session_file_as(self, editor_state=None, frontend_annotations=None):
+        """
+        Prompt for location and save the .acrf session file.
+        """
+        try:
+            if not self._pdf_path:
+                return {"ok": False, "error": "No PDF loaded"}
+            if not self._session_id:
+                return {"ok": False, "error": "No session ID"}
+
+            self._merge_frontend_annotations(frontend_annotations)
+
+            suggested_name = f"{self._session_id}.acrf"
+
+            save_result = self._window.create_file_dialog(
+                webview.SAVE_DIALOG,
+                save_filename=suggested_name,
+                file_types=("aCRF Session (*.acrf)",),
+            )
+
+            if not save_result:
+                return {"ok": False, "error": "Save cancelled"}
+
+            if isinstance(save_result, (list, tuple)):
+                out_path = Path(save_result[0])
+            else:
+                out_path = Path(save_result)
+
+            if out_path.suffix.lower() != ".acrf":
+                out_path = out_path.with_suffix(".acrf")
+
+            result = session_bridge.save_session(
+                save_path=out_path,
+                session_id=self._session_id,
+                pdf_path=self._pdf_path,
+                editor_state=editor_state,
+            )
+
+            if result.get("ok"):
+                self._acrf_path = out_path
+
+            return result
+
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def _merge_frontend_annotations(self, frontend_annotations):
+        """
+        Merge frontend-only annotations (user-drawn, with user_ or
+        userdschip_ prefixed IDs) into the backend annotation_data.json
+        so they survive save/restore.
+        """
+        if not frontend_annotations or not isinstance(frontend_annotations, list):
+            return
+        if not self._session_id:
+            return
+
+        from config import get_annotation_json_path
+        import json
+
+        json_path = get_annotation_json_path(self._session_id)
+
+        existing = []
+        if json_path.exists():
+            try:
+                existing = json.loads(json_path.read_text(encoding="utf-8"))
+                if not isinstance(existing, list):
+                    existing = []
+            except Exception:
+                existing = []
+
+        existing_ids = {
+            str(r.get("annotation_id", "")) for r in existing if r
+        }
+
+        added = 0
+        for rec in frontend_annotations:
+            if not rec or not isinstance(rec, dict):
+                continue
+            ann_id = str(rec.get("annotation_id", ""))
+            if not ann_id:
+                continue
+
+            if ann_id in existing_ids:
+                for i, ex in enumerate(existing):
+                    if str(ex.get("annotation_id", "")) == ann_id:
+                        # Never overwrite comment — it's always authoritative in
+                        # annotation_data.json (saved directly via update_comment)
+                        rec_for_merge = {k: v for k, v in rec.items() if k != "comment"}
+                        existing[i] = {**ex, **rec_for_merge}
+                        break
+            else:
+                existing.append(rec)
+                existing_ids.add(ann_id)
+                added += 1
+
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        json_path.write_text(
+            json.dumps(existing, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+    def open_session_file(self):
+        """
+        Open file picker for .acrf files and load the session.
+        """
+        try:
+            result = self._window.create_file_dialog(
+                webview.OPEN_DIALOG,
+                allow_multiple=False,
+                file_types=("aCRF Session (*.acrf)",),
+            )
+
+            if not result or len(result) == 0:
+                return {"ok": False, "error": "No file selected"}
+
+            acrf_path = Path(result[0])
+            load_result = session_bridge.open_session(acrf_path)
+
+            if not load_result.get("ok"):
+                return load_result
+
+            self._session_id = load_result["session_id"]
+            self._pdf_path = Path(load_result["pdf_path"])
+            self._acrf_path = acrf_path
+            self._export.set_pdf(self._pdf_path)
+
+            return load_result
+
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def get_recent_sessions(self):
+        """
+        Return the 10 most recently opened .acrf sessions.
+        """
+        try:
+            sessions = session_bridge.get_recent_sessions(limit=10)
+            return {"ok": True, "sessions": sessions}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    # ==========================================================================
+    # WINDOW LIFECYCLE
+    # ==========================================================================
+
+    def set_dirty(self, dirty):
+        """
+        JS calls this whenever the dirty state changes so Python knows it
+        without having to call evaluate_js inside the closing event handler
+        (which would deadlock on the UI thread).
+        """
+        self._is_dirty = bool(dirty)
+
+    def confirm_close(self):
+        """
+        Called from JS after the user confirms they want to close the window
+        (via the unsaved-changes dialog).  Destroys the window unconditionally.
+
+        _is_dirty must be cleared BEFORE destroy(), because destroy() re-fires
+        the closing event — if _is_dirty is still True, on_closing will cancel
+        the destroy and re-show the dialog, causing an infinite loop.
+        """
+        try:
+            self._is_dirty = False
+            if self._window:
+                self._window.destroy()
+        except Exception as e:
+            print(f"[api] confirm_close error: {e}")
+
+    def open_url(self, url):
+        """Open an external URL in the user's default browser."""
+        try:
+            webbrowser.open(url)
+        except Exception as e:
+            print(f"[api] open_url error: {e}")

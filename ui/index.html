@@ -165,6 +165,13 @@
   color          : #FF6B6B;
   font-weight    : 500;
 }
+
+.add-ann-hint {
+  margin         : 4px 0 0;
+  font-size      : 12px;
+  color          : #8A80AD;
+  line-height    : 1.5;
+}
   /* ── Canvas area scrollbar — must be inline for pywebview ── */
   #canvas-area {
     overflow-x : hidden;
@@ -275,25 +282,103 @@
         </div>
         <span class="nav-title">CRF Annotator</span>
         <div class="nav-divider"></div>
+
+        <!-- File menu -->
+        <div class="file-menu-wrap" id="file-menu-wrap">
+          <button class="file-menu-trigger" id="file-menu-trigger" title="File menu">
+            File
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" style="margin-left:3px;opacity:0.6"><path d="M2 3.5L5 7l3-3.5H2z"/></svg>
+          </button>
+          <div class="file-menu-dropdown hidden" id="file-menu-dropdown">
+            <button class="file-menu-item" id="fm-new-session">
+              <span class="file-menu-icon">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 1.5H4a1.5 1.5 0 0 0-1.5 1.5v11A1.5 1.5 0 0 0 4 15.5h8A1.5 1.5 0 0 0 13.5 14V6L9 1.5z"/><path d="M9 1.5V6h4.5"/><path d="M8 10V13"/><path d="M6.5 11.5H9.5"/></svg>
+              </span>
+              <span class="file-menu-label">New Session</span>
+            </button>
+            <button class="file-menu-item" id="fm-open">
+              <span class="file-menu-icon">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12.5v-9A1.5 1.5 0 0 1 4 2h3l2 2h3.5A1.5 1.5 0 0 1 14 5.5v7a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5z"/></svg>
+              </span>
+              <span class="file-menu-label">Open Session…</span>
+              <span class="file-menu-shortcut">Ctrl+O</span>
+            </button>
+            <div class="file-menu-divider"></div>
+            <button class="file-menu-item" id="fm-save">
+              <span class="file-menu-icon">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 14.5h-9A1.5 1.5 0 0 1 2 13V3a1.5 1.5 0 0 1 1.5-1.5h7l4 4V13a1.5 1.5 0 0 1-1.5 1.5z"/><path d="M11.5 14.5v-4h-7v4"/><path d="M4.5 1.5V5h5"/></svg>
+              </span>
+              <span class="file-menu-label">Save</span>
+              <span class="file-menu-shortcut">Ctrl+S</span>
+            </button>
+            <button class="file-menu-item" id="fm-save-as">
+              <span class="file-menu-icon">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 14.5h-9A1.5 1.5 0 0 1 2 13V3a1.5 1.5 0 0 1 1.5-1.5h7l4 4V13a1.5 1.5 0 0 1-1.5 1.5z"/><path d="M11.5 14.5v-4h-7v4"/><path d="M4.5 1.5V5h5"/></svg>
+              </span>
+              <span class="file-menu-label">Save As…</span>
+              <span class="file-menu-shortcut">Ctrl+Shift+S</span>
+            </button>
+            <div class="file-menu-divider"></div>
+            <button class="file-menu-item" id="fm-export">
+              <span class="file-menu-icon">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 10v3a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13v-3"/><polyline points="5 6 8 3 11 6"/><line x1="8" y1="3" x2="8" y2="11"/></svg>
+              </span>
+              <span class="file-menu-label">Export PDF…</span>
+              <span class="file-menu-shortcut">Ctrl+E</span>
+            </button>
+            <div class="file-menu-divider"></div>
+            <button class="file-menu-item" id="fm-restart">
+              <span class="file-menu-icon">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 8 5 8"/><path d="M3.51 11A6 6 0 1 0 2 7"/></svg>
+              </span>
+              <span class="file-menu-label">Restart Session</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Help menu -->
+        <div class="file-menu-wrap" id="help-menu-wrap">
+          <button class="file-menu-trigger" id="help-menu-trigger" title="Help">
+            Help
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" style="margin-left:3px;opacity:0.6"><path d="M2 3.5L5 7l3-3.5H2z"/></svg>
+          </button>
+          <div class="file-menu-dropdown hidden" id="help-menu-dropdown">
+            <button class="file-menu-item" id="hm-docs">
+              <span class="file-menu-icon">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h4.5a2 2 0 0 1 2 2v9.5a1.5 1.5 0 0 0-1.5-1.5H2z"/><path d="M14 3H9.5a2 2 0 0 0-2 2v9.5A1.5 1.5 0 0 1 9 13h5z"/></svg>
+              </span>
+              <span class="file-menu-label">Documentation</span>
+            </button>
+            <button class="file-menu-item" id="hm-user-manual">
+              <span class="file-menu-icon">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 1.5H4a1.5 1.5 0 0 0-1.5 1.5v11A1.5 1.5 0 0 0 4 15.5h8A1.5 1.5 0 0 0 13.5 14V6L9 1.5z"/><path d="M9 1.5V6h4.5"/><path d="M5 9h6"/><path d="M5 12h4"/></svg>
+              </span>
+              <span class="file-menu-label">User Manual</span>
+            </button>
+            <button class="file-menu-item" id="hm-install-guide">
+              <span class="file-menu-icon">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 10v3a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13v-3"/><polyline points="8 10 8 2"/><polyline points="5 7 8 10 11 7"/></svg>
+              </span>
+              <span class="file-menu-label">Installation Guide</span>
+            </button>
+            <div class="file-menu-divider"></div>
+            <button class="file-menu-item" id="hm-codebase">
+              <span class="file-menu-icon">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="5.5 4.5 2 8 5.5 11.5"/><polyline points="10.5 4.5 14 8 10.5 11.5"/></svg>
+              </span>
+              <span class="file-menu-label">Source Code (GitHub)</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="nav-divider"></div>
         <span class="nav-session mono" id="nav-session">
           No session
         </span>
+        <span class="dirty-dot hidden" id="dirty-dot" title="Unsaved changes">●</span>
       </div>
       <div class="nav-right">
-        <button class="theme-toggle-btn" id="btn-theme-toggle" title="Toggle theme">
-          <span class="theme-icon theme-icon-moon">☾</span>
-          <span class="theme-icon theme-icon-sun">☀</span>
-        </button>
-        <div class="nav-divider"></div>
-        <span class="badge badge-form" id="nav-page-type">
-          FORM
-        </span>
-        <div class="nav-divider"></div>
-        <span class="nav-page-count" id="nav-page-count">
-          — / —
-        </span>
-        <div class="nav-divider"></div>
-        <button class="nav-export-btn" id="btn-export-pdf">
+        <button class="nav-export-btn" id="btn-export-pdf" title="Export annotated PDF">
           Export ↗
         </button>
       </div>
@@ -308,17 +393,17 @@
         <!-- Tabs -->
 <div class="sidebar-tabs-wrap">
   <div class="sidebar-tabs chrome-tabs" id="sidebar-tabs">
-    <button class="sidebar-tab active" data-tab="workspace" id="tab-workspace">
+    <button class="sidebar-tab active" data-tab="workspace" id="tab-workspace" title="Upload &amp; configure CRF PDF">
       <span class="material-symbols-outlined tab-icon">upload_file</span>
-      <span class="tab-label">Workspace</span>
+      <span class="tab-label">Upload</span>
     </button>
-    <button class="sidebar-tab" data-tab="stats" id="tab-stats">
+    <button class="sidebar-tab" data-tab="stats" id="tab-stats" title="View annotation statistics and progress">
       <span class="material-symbols-outlined tab-icon">monitoring</span>
-      <span class="tab-label">Stats</span>
+      <span class="tab-label">Analytics</span>
     </button>
-    <button class="sidebar-tab" data-tab="analysis" id="tab-analysis">
-      <span class="material-symbols-outlined tab-icon">analytics</span>
-      <span class="tab-label">Analysis</span>
+    <button class="sidebar-tab" data-tab="analysis" id="tab-analysis" title="Review and resolve annotation queue">
+      <span class="material-symbols-outlined tab-icon">rate_review</span>
+      <span class="tab-label">Review</span>
     </button>
   </div>
 </div>
@@ -327,7 +412,7 @@
 <div class="sidebar-tab-panel active" id="sidebar-panel-workspace">
 
   <div class="section-label">Upload</div>
-  <div id="drop-zone" class="drop-zone">
+  <div id="drop-zone" class="drop-zone" title="Drag &amp; drop a PDF, or click to browse">
     <div class="drop-icon">↑</div>
     <div class="drop-text">Drop PDF here</div>
     <div class="drop-sub">or click to browse</div>
@@ -350,35 +435,23 @@
   />
 
   <div class="section-label">Pipeline</div>
-  <button class="btn btn-primary btn-full" id="btn-run">
+  <button class="btn btn-primary btn-full" id="btn-run" title="Run AI annotation pipeline on the loaded PDF">
     <span class="btn-icon">▶</span>
     Run Pipeline
   </button>
 
-  <button class="btn btn-full" id="btn-restart-session" style="margin-top:8px;">
+  <!-- Progress bar -->
+  <div id="pipeline-progress-wrap" class="pipeline-progress-wrap hidden">
+    <div class="pipeline-progress-track">
+      <div id="pipeline-progress-bar" class="pipeline-progress-bar"></div>
+    </div>
+    <span class="pipeline-progress-label" id="pipeline-progress-label">Running...</span>
+  </div>
+
+  <button class="btn btn-full" id="btn-restart-session" style="margin-top:8px;" title="Clear all annotations and start a new session">
     Restart Session
   </button>
 
-  <div id="pipeline-steps" class="pipeline-steps">
-    <div class="pipeline-step" data-step="0">
-      <div class="step-dot" id="step-dot-0"></div>
-      <div class="step-line" id="step-line-0"></div>
-      <span class="step-name">Extract components</span>
-      <span class="step-status" id="step-status-0">Waiting</span>
-    </div>
-    <div class="pipeline-step" data-step="1">
-      <div class="step-dot" id="step-dot-1"></div>
-      <div class="step-line" id="step-line-1"></div>
-      <span class="step-name">Match SDTM</span>
-      <span class="step-status" id="step-status-1">Waiting</span>
-    </div>
-    <div class="pipeline-step" data-step="2">
-      <div class="step-dot" id="step-dot-2"></div>
-      <div class="step-line" id="step-line-2"></div>
-      <span class="step-name">Draw annotations</span>
-      <span class="step-status" id="step-status-2">Waiting</span>
-    </div>
-  </div>
 
 </div>
 
@@ -387,26 +460,65 @@
 
   <div class="section-label">Progress</div>
   <div class="progress-ring-wrap">
-    <svg class="progress-ring" viewBox="0 0 68 68">
-      <circle
-        class="ring-track"
-        cx="34" cy="34" r="28"
+    <svg class="progress-ring" viewBox="0 0 150 150" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="ring-glow-lg" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="5" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="ring-glow-sm" x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="3" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      <!-- Dark background fill -->
+      <circle cx="75" cy="75" r="74" fill="#07091C"/>
+
+      <!-- Glass tube body (layered for depth) -->
+      <circle cx="75" cy="75" r="59" fill="none" stroke="#0E1130" stroke-width="18"/>
+      <circle cx="75" cy="75" r="59" fill="none" stroke="rgba(80,70,140,0.30)" stroke-width="16"/>
+      <!-- Top-half highlight of glass -->
+      <circle cx="75" cy="75" r="59" fill="none"
+        stroke="rgba(255,255,255,0.06)" stroke-width="3"
+        stroke-dasharray="185 186" stroke-dashoffset="0"
+        transform="rotate(-90 75 75)" stroke-linecap="round"/>
+      <!-- Bottom-half shadow of glass -->
+      <circle cx="75" cy="75" r="59" fill="none"
+        stroke="rgba(0,0,0,0.45)" stroke-width="2"
+        stroke-dasharray="185 186" stroke-dashoffset="185"
+        transform="rotate(-90 75 75)"/>
+
+      <!-- Dark center fill (inner circle) -->
+      <circle cx="75" cy="75" r="50" fill="#07091C"/>
+
+      <!-- Ambient static glow rings (always visible, very faint) -->
+      <circle cx="75" cy="75" r="68" fill="none" stroke="rgba(142,84,255,0.10)" stroke-width="1.5"/>
+      <circle cx="75" cy="75" r="51" fill="none" stroke="rgba(142,84,255,0.08)" stroke-width="1"/>
+
+      <!-- OUTER progress neon arc (main indicator) -->
+      <circle id="ring-fill"
+        cx="75" cy="75" r="68"
         fill="none"
-        stroke="#1C1F3A"
-        stroke-width="5"
-      />
-      <circle
-        class="ring-fill"
-        id="ring-fill"
-        cx="34" cy="34" r="28"
-        fill="none"
-        stroke="#8E54FF"
-        stroke-width="5"
+        stroke="#A374FF"
+        stroke-width="3"
         stroke-linecap="round"
-        stroke-dasharray="175.9"
-        stroke-dashoffset="175.9"
-        transform="rotate(-90 34 34)"
-      />
+        stroke-dasharray="427.3"
+        stroke-dashoffset="427.3"
+        transform="rotate(-90 75 75)"
+        filter="url(#ring-glow-lg)"/>
+
+      <!-- INNER progress neon arc (inner edge echo) -->
+      <circle id="ring-fill-inner"
+        cx="75" cy="75" r="51"
+        fill="none"
+        stroke="rgba(142,84,255,0.80)"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-dasharray="320.4"
+        stroke-dashoffset="320.4"
+        transform="rotate(-90 75 75)"
+        filter="url(#ring-glow-sm)"/>
     </svg>
     <div class="ring-center">
       <span class="ring-pct" id="ring-pct">0%</span>
@@ -453,51 +565,66 @@
       </div>
       <div class="analysis-summary-item">
         <span class="analysis-summary-num" id="analysis-ignored">0</span>
-        <span class="analysis-summary-label">Ignored</span>
+        <span class="analysis-summary-label">Resolved</span>
       </div>
     </div>
 
     <div class="analysis-legend">
       <div class="analysis-legend-row">
-        <span class="legend-pill legend-pill-review"></span>
-        <span class="muted small">Yellow / orange background = needs review</span>
+        <span class="legend-pill" style="background:rgba(0,180,90,0.55)"></span>
+        <span class="muted small">≥ 80% confidence → auto-annotated (RESOLVED)</span>
       </div>
       <div class="analysis-legend-row">
-        <span class="legend-pill legend-pill-ignore"></span>
-        <span class="muted small">Green background = ignored / resolved</span>
+        <span class="legend-pill legend-pill-review"></span>
+        <span class="muted small">60–79% confidence → NEEDS REVIEW (in Queue)</span>
+      </div>
+      <div class="analysis-legend-row">
+        <span class="legend-pill" style="background:rgba(220,53,69,0.55)"></span>
+        <span class="muted small">&lt; 60% confidence → UNMAPPED (in Queue)</span>
       </div>
     </div>
   </div>
 
-  <div class="section-label">Comments</div>
-  <textarea
-    id="analysis-comments"
-    class="analysis-comments"
-    placeholder="Add review comments, notes, or summary observations..."
-  ></textarea>
-
-  <div class="section-label">Unmapped Review Queue</div>
+  <div class="section-label">Review Section</div>
   <div class="unmapped-queue">
     <div class="unmapped-queue-header">
-      <span class="unmapped-queue-title">Queue</span>
-      <span class="unmapped-queue-summary" id="unmapped-queue-summary">0 unmapped</span>
+      <span class="unmapped-queue-title">Queries</span>
+      <span class="unmapped-queue-summary" id="unmapped-queue-summary">0 pending</span>
     </div>
 
-    <input
-      type="text"
-      id="unmapped-queue-search"
-      class="unmapped-queue-search"
-      placeholder="Search variable or page"
-    />
-
-    <div class="unmapped-queue-filters">
-      <button class="unmapped-filter-chip active" data-filter="all">All</button>
-      <button class="unmapped-filter-chip" data-filter="unreviewed">Unreviewed</button>
-      <button class="unmapped-filter-chip" data-filter="review">Review</button>
-      <button class="unmapped-filter-chip" data-filter="ignored">Ignored</button>
+    <!-- Inner tabs: Active / Resolved -->
+    <div class="queue-inner-tabs" id="queue-inner-tabs">
+      <button class="queue-inner-tab active" data-queue-tab="active">Active</button>
+      <button class="queue-inner-tab" data-queue-tab="resolved">Resolved</button>
     </div>
 
-    <div class="unmapped-queue-list" id="unmapped-queue-list"></div>
+    <!-- Active pane: search + filter chips + list -->
+    <div id="queue-pane-active" class="queue-pane">
+      <input
+        type="text"
+        id="unmapped-queue-search"
+        class="unmapped-queue-search"
+        placeholder="Search SDTM variable or page"
+      />
+      <div class="unmapped-queue-filters">
+        <button class="unmapped-filter-chip active" data-filter="all">All</button>
+        <button class="unmapped-filter-chip" data-filter="unreviewed">Unmapped</button>
+        <button class="unmapped-filter-chip" data-filter="review">Needs Review</button>
+        <button class="unmapped-filter-chip" data-filter="dataset">Dataset</button>
+      </div>
+      <div class="unmapped-queue-list" id="unmapped-queue-list-active"></div>
+    </div>
+
+    <!-- Resolved pane -->
+    <div id="queue-pane-resolved" class="queue-pane hidden">
+      <input
+        type="text"
+        id="resolved-queue-search"
+        class="unmapped-queue-search"
+        placeholder="Search variable or page"
+      />
+      <div class="unmapped-queue-list" id="unmapped-queue-list-resolved"></div>
+    </div>
   </div>
 
 </div>
@@ -521,7 +648,7 @@
           </div>
           <div class="toolbar-right">
             <span class="muted small" id="toolbar-zoom">
-              100%
+              50%
             </span>
           </div>
         </div>
@@ -537,15 +664,14 @@
 
         <!-- Empty state -->
         <div id="empty-state" class="empty-state">
-          <div class="empty-lines">
-            <div class="empty-line" style="width:120px"></div>
-            <div class="empty-line" style="width:80px"></div>
-            <div class="empty-line" style="width:48px"></div>
-          </div>
+          <svg class="empty-pdf-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="10" y="4" width="36" height="48" rx="4" fill="rgba(163,116,255,0.12)" stroke="rgba(163,116,255,0.5)" stroke-width="2"/>
+            <path d="M38 4v12h12" stroke="rgba(163,116,255,0.5)" stroke-width="2" stroke-linecap="round"/>
+            <rect x="6" y="38" width="36" height="20" rx="3" fill="rgba(163,116,255,0.22)" stroke="rgba(163,116,255,0.6)" stroke-width="1.5"/>
+            <text x="24" y="53" font-family="sans-serif" font-size="9" font-weight="700" fill="#A374FF" text-anchor="middle">PDF</text>
+          </svg>
           <div class="empty-title">No PDF loaded</div>
-          <div class="empty-sub">
-            Upload a CRF PDF and run the pipeline
-          </div>
+          <div class="empty-sub">Upload a PDF</div>
         </div>
 
         <!-- PDF page container -->
@@ -568,9 +694,9 @@
       <!-- ── STICKY BOTTOM NAVIGATION ─────────────────────── -->
       <div id="sticky-nav" class="sticky-nav">
         <button class="btn nav-btn sticky-nav-btn" id="btn-prev-sticky">‹</button>
-        <button class="btn nav-btn sticky-nav-btn" id="btn-zoom-out-sticky" title="Zoom out">−</button>
+        <button class="btn nav-btn sticky-nav-btn" id="btn-zoom-out-sticky" title="Zoom out (Ctrl + scroll)">−</button>
         <span class="page-display sticky-page-display" id="page-display-sticky">— / —</span>
-        <button class="btn nav-btn sticky-nav-btn" id="btn-zoom-in-sticky" title="Zoom in">+</button>
+        <button class="btn nav-btn sticky-nav-btn" id="btn-zoom-in-sticky" title="Zoom in (Ctrl + scroll)">+</button>
         <button class="btn nav-btn sticky-nav-btn" id="btn-next-sticky">›</button>
       </div>
 
@@ -578,19 +704,17 @@
 
       <!-- ── EDIT PANEL ────────────────────────────────────── -->
       <aside id="edit-panel" class="edit-panel">
+        <div id="edit-panel-scroll">
 
         <!-- Empty state -->
         <div id="panel-empty" class="panel-empty">
-          <div class="panel-empty-lines">
-            <div class="panel-empty-line" style="width:100px">
-            </div>
-            <div class="panel-empty-line" style="width:68px">
-            </div>
-            <div class="panel-empty-line" style="width:40px">
-            </div>
-          </div>
+          <svg class="panel-empty-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M34 6l8 8-22 22-9 1 1-9 22-22z" fill="rgba(163,116,255,0.15)" stroke="rgba(163,116,255,0.7)" stroke-width="2" stroke-linejoin="round"/>
+            <path d="M34 6l8 8" stroke="rgba(163,116,255,0.9)" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M11 37l2 2" stroke="rgba(163,116,255,0.6)" stroke-width="2" stroke-linecap="round"/>
+          </svg>
           <div class="panel-empty-title">
-            Select an annotation
+            Select an Annotation or Review Query
           </div>
           <div class="panel-empty-sub">
             Click any box on the PDF
@@ -636,17 +760,22 @@
 
           <div class="divider"></div>
 
-          <!-- Suggestions -->
-          <div class="section-label" style="padding:0;margin-top:12px">
-            Suggestions
-          </div>
-          <div id="suggestions-list" class="suggestions-list">
-            <div class="suggestions-loading muted small">
-              Loading suggestions...
+          <!-- Suggestions (collapsible) -->
+          <div class="expander" id="expander-suggestions">
+            <div class="expander-header" id="expander-suggestions-hdr">
+              <span class="expander-chevron">›</span>
+              <span class="expander-label">Suggestions</span>
+            </div>
+            <div class="expander-body hidden" id="expander-suggestions-body">
+              <div id="suggestions-list" class="suggestions-list">
+                <div class="suggestions-loading muted small">
+                  Loading suggestions...
+                </div>
+              </div>
             </div>
           </div>
 
-          <div class="divider"></div>
+          <div class="divider" id="suggestions-divider"></div>
 
           <!-- Manual override -->
 <!-- Manual override -->
@@ -746,47 +875,69 @@
           </div>
           <div class="divider"></div>
 
-          <!-- Action buttons -->
-          <div class="action-grid">
-            <button class="btn" id="btn-not-submitted">
-              Not Submitted
-            </button>
-            <button class="btn" id="btn-clear">
-              Clear Mapping
-            </button>
-            <button class="btn btn-danger" id="btn-remove">
-              Remove
-            </button>
-            <button class="btn" id="btn-close-panel">
-              Close
-            </button>
-          </div>
-
-          <!-- Remove confirm -->
-          <div id="remove-confirm" class="remove-confirm hidden">
-            <span class="orange small">
-              Remove permanently?
-            </span>
-            <div class="remove-confirm-btns">
-              <button class="btn btn-danger-solid"
-                id="btn-remove-confirm">
-                Confirm
-              </button>
-              <button class="btn" id="btn-remove-cancel">
-                Cancel
-              </button>
+          <!-- Actions (collapsible) -->
+          <div class="expander" id="expander-actions">
+            <div class="expander-header" id="expander-actions-hdr">
+              <span class="expander-chevron">›</span>
+              <span class="expander-label">Actions</span>
+            </div>
+            <div class="expander-body hidden" id="expander-actions-body">
+              <div class="action-grid">
+                <button class="btn" id="btn-not-submitted">
+                  Not Submitted
+                </button>
+                <button class="btn" id="btn-clear">
+                  Clear Mapping
+                </button>
+                <button class="btn btn-danger" id="btn-remove">
+                  Remove
+                </button>
+                <button class="btn" id="btn-close-panel">
+                  Close
+                </button>
+              </div>
             </div>
           </div>
 
         </div>
+
+        </div><!-- /edit-panel-scroll -->
+
+        <!-- ── Comment Viewer Panel ─────────────────────────── -->
+        <div id="comment-viewer" class="comment-viewer hidden">
+          <div class="comment-viewer-header">
+            <span class="comment-viewer-title">Comments</span>
+            <button class="comment-viewer-close" id="comment-viewer-close">×</button>
+          </div>
+          <div class="comment-viewer-body" id="comment-viewer-body"></div>
+        </div>
+
       </aside>
 
     </div>
   </div>
   <!-- ── Right-click Context Menu ────────────────────────── -->
 <div id="ctx-menu" class="ctx-menu hidden">
+  <!-- Blank canvas items -->
   <button class="ctx-menu-item" id="ctx-add-annotation">Add Annotation</button>
+  <!-- Annotation-specific items (hidden for blank canvas) -->
+  <button class="ctx-menu-item" id="ctx-edit-annotation" style="display:none">Edit Annotation</button>
+  <button class="ctx-menu-item" id="ctx-mark-unmapped" style="display:none">Mark as Unmapped</button>
+  <button class="ctx-menu-item" id="ctx-mark-not-submitted" style="display:none">Mark as Not Submitted</button>
+  <button class="ctx-menu-item" id="ctx-add-to-review" style="display:none">Add to Review</button>
+  <button class="ctx-menu-item" id="ctx-remove-from-review" style="display:none">Remove from Review</button>
+  <button class="ctx-menu-item" id="ctx-show-in-queue" style="display:none">Show in Review Query</button>
+  <button class="ctx-menu-item" id="ctx-add-comment" style="display:none">Add Comment</button>
+  <button class="ctx-menu-item ctx-menu-cancel" id="ctx-remove-annotation" style="display:none">Remove Annotation</button>
   <button class="ctx-menu-item ctx-menu-cancel" id="ctx-cancel">Cancel</button>
+</div>
+
+<!-- ── Dataset Chip Context Menu ──────────────────────── -->
+<div id="ctx-menu-dataset" class="ctx-menu hidden">
+  <button class="ctx-menu-item" id="ctx-ds-edit">Edit Annotation</button>
+  <button class="ctx-menu-item" id="ctx-ds-add-review">Add to Review</button>
+  <button class="ctx-menu-item" id="ctx-ds-show-queue">Show in Review Query</button>
+  <button class="ctx-menu-item ctx-menu-cancel" id="ctx-ds-cancel">Cancel</button>
 </div>
 
 <!-- ── Add Annotation Dialog ──────────────────────────── -->
@@ -800,7 +951,7 @@
     <!-- Type selection -->
     <div class="add-ann-section">
       <label class="add-ann-label">Type</label>
-      <div class="add-ann-radio-row">
+      <div class="add-ann-radio-row" style="flex-wrap:wrap;gap:10px 16px;">
         <label class="add-ann-radio">
           <input type="radio" name="add-ann-type" value="variable" checked />
           <span>Variable</span>
@@ -808,6 +959,14 @@
         <label class="add-ann-radio">
           <input type="radio" name="add-ann-type" value="dataset" />
           <span>Dataset</span>
+        </label>
+        <label class="add-ann-radio">
+          <input type="radio" name="add-ann-type" value="unmapped" />
+          <span>Unmapped</span>
+        </label>
+        <label class="add-ann-radio">
+          <input type="radio" name="add-ann-type" value="not_submitted" />
+          <span>Not Submitted</span>
         </label>
       </div>
     </div>
@@ -846,6 +1005,22 @@
       </div>
     </div>
 
+    <!-- Unmapped fields -->
+    <div id="add-ann-unmapped-fields" class="add-ann-fields hidden">
+      <div class="add-ann-section">
+        <label class="add-ann-label">Variable Name</label>
+        <p class="add-ann-hint">Annotation will be created at the clicked position and marked as Unmapped.</p>
+      </div>
+    </div>
+
+    <!-- Not Submitted fields -->
+    <div id="add-ann-ns-fields" class="add-ann-fields hidden">
+      <div class="add-ann-section">
+        <label class="add-ann-label">Variable Name</label>
+        <p class="add-ann-hint">Annotation will be created at the clicked position and marked as Not Submitted.</p>
+      </div>
+    </div>
+
     <!-- Actions -->
     <div class="add-ann-actions">
       <button class="btn btn-primary" id="add-ann-confirm">Create</button>
@@ -857,7 +1032,184 @@
   </div>
 </div>
 
-<script src="js/vendor/html2canvas.js"></script>  
+<!-- ── Queue Row Context Menu ──────────────────────────── -->
+<div id="queue-ctx-menu" class="ctx-menu hidden">
+  <button class="ctx-menu-item" id="qctx-resolve">Resolve</button>
+  <button class="ctx-menu-item" id="qctx-mark-review">Add to Review</button>
+  <button class="ctx-menu-item" id="qctx-remove-from-review">Remove from Review</button>
+  <button class="ctx-menu-item" id="qctx-convert-unmapped">Convert to Unmapped</button>
+  <button class="ctx-menu-item" id="qctx-add-comment">Add Comment</button>
+  <button class="ctx-menu-item ctx-menu-cancel" id="qctx-cancel">Cancel</button>
+</div>
+
+<!-- ── Queue Not Found Dialog ─────────────────────────── -->
+<!-- ── Export Options Dialog ───────────────────────────── -->
+<div id="export-options-dialog" class="comment-dialog-overlay hidden">
+  <div class="comment-dialog" style="max-width:380px;">
+    <div class="comment-dialog-header">
+      <span class="comment-dialog-title">Export Options</span>
+      <button class="comment-dialog-close" id="export-options-close">&times;</button>
+    </div>
+    <div style="padding:16px 20px; color:var(--text); font-size:13px; line-height:1.8;">
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+        <input type="checkbox" id="export-include-tables" style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
+        <span>Include Table pages</span>
+      </label>
+    </div>
+    <div class="comment-dialog-actions">
+      <button class="btn btn-primary" id="export-options-confirm">Export</button>
+      <button class="btn-cancel" id="export-options-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="queue-not-found-dialog" class="comment-dialog-overlay hidden">
+  <div class="comment-dialog" style="max-width:380px;">
+    <div class="comment-dialog-header">
+      <span class="comment-dialog-title">Not in Review Queue</span>
+      <button class="comment-dialog-close" id="queue-not-found-close">&times;</button>
+    </div>
+    <div style="padding:16px 20px; color:var(--text); font-size:13px; line-height:1.5;">
+      This annotation is not in the review queue.<br>
+      To add it, right-click the annotation and select <strong>Add to Review</strong>.
+    </div>
+    <div class="comment-dialog-actions">
+      <button class="btn-cancel" id="queue-not-found-ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Comment Dialog ─────────────────────────────────── -->
+<div id="comment-dialog" class="comment-dialog-overlay hidden">
+  <div class="comment-dialog">
+    <div class="comment-dialog-header">
+      <span class="comment-dialog-title" id="comment-dialog-title">Add Comment</span>
+      <button class="comment-dialog-close" id="comment-dialog-close">×</button>
+    </div>
+    <div class="comment-textarea-wrap">
+      <textarea id="comment-dialog-input" class="input comment-dialog-textarea"></textarea>
+      <div class="comment-textarea-placeholder" id="comment-dialog-placeholder">Type your comment...</div>
+    </div>
+    <div class="comment-dialog-actions">
+      <button class="btn btn-primary" id="comment-dialog-save">Save</button>
+      <button class="btn" id="comment-dialog-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Restart — No PDF Dialog ─────────────────────────── -->
+<div id="restart-nopdf-overlay" class="add-ann-overlay hidden">
+  <div class="add-ann-dialog" style="min-width:260px;max-width:340px">
+    <div class="add-ann-header">
+      <span class="add-ann-title">No PDF Selected</span>
+    </div>
+    <div style="font-size:13px;color:#C8CCEC;margin-bottom:16px">
+      Select a CRF PDF first before restarting the session.
+    </div>
+    <div class="add-ann-actions">
+      <button class="btn btn-primary" id="restart-nopdf-ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Restart Confirm Dialog ──────────────────────────── -->
+<div id="restart-confirm-overlay" class="add-ann-overlay hidden">
+  <div class="add-ann-dialog" style="min-width:280px;max-width:360px">
+    <div class="add-ann-header">
+      <span class="add-ann-title">Restart Session?</span>
+    </div>
+    <div style="font-size:13px;color:#C8CCEC;margin-bottom:16px">
+      This will clear all annotations and reset the current session.
+    </div>
+    <div class="add-ann-actions">
+      <button class="btn btn-primary" id="restart-confirm-yes">Restart</button>
+      <button class="btn" id="restart-confirm-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Restart Save Dialog ─────────────────────────────── -->
+<div id="restart-save-overlay" class="add-ann-overlay hidden">
+  <div class="add-ann-dialog" style="min-width:280px;max-width:360px">
+    <div class="add-ann-header">
+      <span class="add-ann-title">Save Before Restarting?</span>
+    </div>
+    <div style="font-size:13px;color:#C8CCEC;margin-bottom:16px">
+      Would you like to save your session (.acrf) before restarting?
+    </div>
+    <div class="add-ann-actions">
+      <button class="btn btn-primary" id="restart-save-yes">Save .acrf</button>
+      <button class="btn" id="restart-save-skip">Skip</button>
+      <button class="btn" id="restart-save-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Close Confirm Dialog (unsaved changes on window close) ── -->
+<div id="close-confirm-overlay" class="add-ann-overlay hidden">
+  <div class="add-ann-dialog" style="min-width:280px;max-width:380px">
+    <div class="add-ann-header">
+      <span class="add-ann-title">Unsaved Changes</span>
+    </div>
+    <div style="font-size:13px;color:#C8CCEC;margin-bottom:16px">
+      You have unsaved changes. Save your session before closing?
+    </div>
+    <div class="add-ann-actions">
+      <button class="btn btn-primary" id="close-save-yes">Save &amp; Close</button>
+      <button class="btn" id="close-save-skip">Discard &amp; Close</button>
+      <button class="btn" id="close-save-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Annotation Remove Confirm Dialog ───────────────── -->
+<div id="ann-remove-confirm" class="add-ann-overlay hidden">
+  <div class="add-ann-dialog" style="min-width:280px;max-width:340px">
+    <div class="add-ann-header">
+      <span class="add-ann-title">Remove Annotation?</span>
+      <button class="add-ann-close" id="ann-remove-close">×</button>
+    </div>
+    <div style="font-size:13px;color:#C8CCEC;margin-bottom:16px">
+      This will permanently remove the annotation from this session.
+    </div>
+    <div class="add-ann-actions">
+      <button class="btn btn-danger-solid" id="ann-remove-confirm-btn">Remove</button>
+      <button class="btn" id="ann-remove-cancel-btn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast Notification Container ──────────────────────── -->
+<div id="toast-container" aria-live="polite"></div>
+
+<!-- ── Suggestion Apply Confirm Dialog ────────────────────── -->
+<div id="suggest-confirm-overlay" class="add-ann-overlay hidden">
+  <div class="add-ann-dialog" style="min-width:300px;max-width:400px">
+    <div class="add-ann-header">
+      <span class="add-ann-title">Apply Suggestion?</span>
+    </div>
+    <div id="suggest-confirm-body" style="font-size:13px;color:#C8CCEC;margin-bottom:16px;line-height:1.5"></div>
+    <div class="add-ann-actions">
+      <button class="btn btn-primary" id="suggest-confirm-yes">Apply</button>
+      <button class="btn" id="suggest-confirm-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Generic Info/Alert Dialog ──────────────────────────── -->
+<div id="info-dialog-overlay" class="add-ann-overlay hidden">
+  <div class="add-ann-dialog" style="min-width:260px;max-width:380px">
+    <div class="add-ann-header">
+      <span class="add-ann-title" id="info-dialog-title">Notice</span>
+    </div>
+    <div id="info-dialog-body" style="font-size:13px;color:#C8CCEC;margin-bottom:16px;line-height:1.5"></div>
+    <div class="add-ann-actions">
+      <button class="btn btn-primary" id="info-dialog-ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/vendor/html2canvas.js"></script>
 <script src="js/store.js"></script>
 <script src="js/editor_state.js"></script>
 <script src="js/sidebar.js"></script>

@@ -3,12 +3,64 @@
  * ------------
  * Main frontend bootstrap for the PyWebView CRF Annotation Editor.
  */
-const SIDEBAR_MIN_WIDTH = 220;
+const SIDEBAR_MIN_WIDTH = 84;
 const SIDEBAR_MAX_WIDTH = 520;
 
-const EDIT_PANEL_MIN_WIDTH = 260;
+// ── Dirty / unsaved-changes indicator ──────────────────────────
+let _dirty = false;
+
+function _markDirty() {
+  _dirty = true;
+  document.getElementById('dirty-dot')?.classList.remove('hidden');
+  // Mirror to Python so the closing event handler can read it without evaluate_js
+  window.pywebview?.api?.set_dirty?.(true);
+}
+
+function _clearDirty() {
+  _dirty = false;
+  document.getElementById('dirty-dot')?.classList.add('hidden');
+  window.pywebview?.api?.set_dirty?.(false);
+}
+
+window._markSessionDirty  = _markDirty;
+window._clearSessionDirty = _clearDirty;
+window._isSessionDirty    = () => _dirty;
+
+const EDIT_PANEL_MIN_WIDTH = 200;
 const EDIT_PANEL_MAX_WIDTH = 560;
 
+function showToast(message, type = 'info', duration = 4500) {
+  const container = document.getElementById('toast-container');
+  if (!container) { console.warn('[toast]', message); return; }
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  const safeMsg = String(message).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  toast.innerHTML = `<span class="toast-msg">${safeMsg}</span><button class="toast-close" title="Dismiss">×</button>`;
+  toast.querySelector('.toast-close').addEventListener('click', () => {
+    toast.classList.remove('toast-visible');
+    setTimeout(() => toast.remove(), 300);
+  });
+  container.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('toast-visible'));
+  setTimeout(() => {
+    toast.classList.remove('toast-visible');
+    setTimeout(() => toast.remove(), 300);
+  }, duration);
+}
+
+function showInfoDialog(title, body) {
+  const overlay = document.getElementById('info-dialog-overlay');
+  const titleEl = document.getElementById('info-dialog-title');
+  const bodyEl = document.getElementById('info-dialog-body');
+  const okBtn = document.getElementById('info-dialog-ok');
+  if (!overlay) { alert(body); return; }
+  if (titleEl) titleEl.textContent = title;
+  if (bodyEl) bodyEl.textContent = body;
+  overlay.classList.remove('hidden');
+  const close = () => overlay.classList.add('hidden');
+  okBtn?.addEventListener('click', close, { once: true });
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); }, { once: true });
+}
 
 async function initApp() {
   console.log('[app] Initializing CRF Annotation Editor...');
@@ -33,6 +85,24 @@ async function initApp() {
     _bindZoomControls();
     _bindCtrlWheelZoom();
     _bindExportButton();
+    _bindFileMenu();
+    _bindHelpMenu();
+    _bindFileShortcuts();
+
+    // Intercept EditorState.scheduleAutosave so any drag/resize marks the session dirty
+    if (typeof EditorState !== 'undefined' && EditorState.scheduleAutosave) {
+      const _origSchedule = EditorState.scheduleAutosave;
+      EditorState.scheduleAutosave = function(...args) {
+        _markDirty();
+        return _origSchedule.apply(this, args);
+      };
+    }
+
+    // Expose save entry-point for sidebar (restart save dialog)
+    window._doAcrfSave = _doSaveSession;
+
+    _bindCloseConfirmDialog();
+
     await _restoreStateIfAny();
     await _restoreEditorStateIfAny();
 
@@ -88,7 +158,7 @@ async function _captureCurrentRenderedPage() {
   const canvas = await html2canvas(target, {
     backgroundColor: '#ffffff',
     useCORS: true,
-    scale: 4,
+    scale: 2,   // 300 DPI — professional print quality, 4× smaller than scale:4
     logging: false,
     removeContainer: true,
   });
@@ -96,21 +166,21 @@ async function _captureCurrentRenderedPage() {
   return canvas.toDataURL('image/png');
 }
 
-async function _captureAllPagesForExport() {
+async function _captureAllPagesForExport(includeTables) {
   if (!Store.pageCount || Store.pageCount < 1) {
     throw new Error('No pages available for export');
   }
 
   const originalPage = Store.currentPage;
   const originalZoom = Number(Store.zoomPct || 100);
-  const images = [];
+  const pageData = [];
 
   try {
-    // Export at stable zoom for consistent capture
+    // Render at 100% zoom so CSS font-size = 25px = 12pt at 150 DPI
     if (Store.setZoom && typeof Canvas !== 'undefined' && Canvas.applyZoom) {
       Store.setZoom(100);
       Canvas.applyZoom();
-      await _sleep(120);
+      await _sleep(150);
     }
 
     for (let page = 1; page <= Store.pageCount; page++) {
@@ -120,14 +190,24 @@ async function _captureAllPagesForExport() {
         throw new Error('Canvas.loadPage is unavailable');
       }
 
-      // Let image + annotations + chips fully render
-      await _sleep(250);
+      await _sleep(300);
+
+      if (!includeTables) {
+        const records = Store.annotations || [];
+        const firstRec = records[0] || {};
+        if ((firstRec.page_type || 'FORM').toUpperCase() === 'TABLE') continue;
+      }
 
       const img = await _captureCurrentRenderedPage();
-      images.push(img);
+
+      pageData.push({
+        image: img,
+        widthPts: Store.pageWidthPts || 0,
+        heightPts: Store.pageHeightPts || 0,
+      });
     }
 
-    return images;
+    return pageData;
   } finally {
     if (typeof Canvas !== 'undefined' && Canvas.loadPage && originalPage) {
       await Canvas.loadPage(originalPage);
@@ -145,39 +225,56 @@ function _bindExportButton() {
   const btn = document.getElementById('btn-export-pdf');
   if (!btn) return;
 
-  btn.addEventListener('click', async () => {
-    try {
-      if (!Store.pipelineRan) {
-        alert('Run the pipeline first.');
-        return;
-      }
+  const dialog   = document.getElementById('export-options-dialog');
+  const chk      = document.getElementById('export-include-tables');
+  const btnOk    = document.getElementById('export-options-confirm');
+  const btnCancel = document.getElementById('export-options-cancel');
+  const btnClose = document.getElementById('export-options-close');
 
+  function openDialog() {
+    if (!Store.pipelineRan) {
+      showToast('Run the pipeline first.', 'warning'); return;
+    }
+    if (chk) chk.checked = false;
+    dialog?.classList.remove('hidden');
+  }
+
+  function closeDialog() {
+    dialog?.classList.add('hidden');
+  }
+
+  async function doExport(includeTables) {
+    closeDialog();
+    try {
       btn.disabled = true;
-      const oldText = btn.textContent;
       btn.textContent = 'Exporting...';
 
-      const pageImages = await _captureAllPagesForExport();
-      if (!pageImages || !pageImages.length) {
-        alert('No page images captured for export.');
-        return;
+      const pageData = await _captureAllPagesForExport(includeTables);
+      if (!pageData || !pageData.length) {
+        showToast('No page images captured for export.', 'error'); return;
       }
 
-      const res = await window.pywebview.api.export_pdf_from_images(pageImages);
+      const res = await window.pywebview.api.export_pdf_from_images(pageData);
 
       if (res && res.ok) {
-        alert('PDF exported successfully:\n' + res.path);
+        showToast('PDF exported to: ' + res.path, 'success', 7000);
       } else {
-        alert('Export failed: ' + (res?.error || 'Unknown error'));
+        showToast('Export failed: ' + (res?.error || 'Unknown error'), 'error');
       }
 
     } catch (e) {
       console.error('[app] screenshot export error:', e);
-      alert('Export failed: ' + e);
+      showToast('Export failed: ' + e, 'error');
     } finally {
       btn.disabled = false;
       btn.textContent = 'Export ↗';
     }
-  });
+  }
+
+  btn.addEventListener('click', openDialog);
+  btnOk?.addEventListener('click', () => doExport(chk?.checked || false));
+  btnCancel?.addEventListener('click', closeDialog);
+  btnClose?.addEventListener('click', closeDialog);
 }
 
 
@@ -256,6 +353,12 @@ async function _restoreEditorStateIfAny() {
 
     Store.setEditorObjects(saved.objects);
 
+    // Repopulate canvas geometry overrides and user-created annotations
+    // so that dragged/resized boxes appear at the correct positions
+    if (typeof Canvas !== 'undefined' && Canvas.restoreSessionGeometry) {
+      Canvas.restoreSessionGeometry(saved.objects);
+    }
+
     const chips = saved.objects
       .filter(o => o && o.object_type === 'dataset_chip' && o.visible !== false && o.removed !== true)
       .map(o => ({
@@ -265,6 +368,10 @@ async function _restoreEditorStateIfAny() {
         full_name: o?.data?.full_name || '',
         display_text: o.display_text || '',
         rect_pts: o.rect_pts || null,
+        _ui_left: o._ui_left || '',
+        _ui_top: o._ui_top || '',
+        _ui_width: o._ui_width || '',
+        _ui_height: o._ui_height || '',
         fill_rgb: o?.style?.fill_rgb || [191, 224, 255],
         visible: true,
         removed: false,
@@ -273,6 +380,18 @@ async function _restoreEditorStateIfAny() {
 
     if (chips.length) {
       Store.setDatasetChips(chips);
+    }
+
+    if (saved.datasetReviews && Array.isArray(saved.datasetReviews) && saved.datasetReviews.length) {
+      if (typeof Sidebar !== 'undefined' && Sidebar.setDatasetReviews) {
+        Sidebar.setDatasetReviews(saved.datasetReviews);
+      }
+    }
+
+    if (saved.reviewQueue && Array.isArray(saved.reviewQueue) && saved.reviewQueue.length) {
+      if (typeof Sidebar !== 'undefined' && Sidebar.setReviewQueue) {
+        Sidebar.setReviewQueue(saved.reviewQueue);
+      }
     }
 
   } catch (e) {
@@ -304,6 +423,12 @@ function _bindThemeToggle() {
   _syncThemeToggleTooltip();
 }
 
+function _updateSidebarTabMode(sidebar) {
+  if (!sidebar) return;
+  const w = parseFloat(sidebar.style.width) || sidebar.getBoundingClientRect().width;
+  sidebar.classList.toggle('sidebar-icon-only', w < 145);
+}
+
 function _bindSidebarResizer() {
   const resizer = document.getElementById('sidebar-resizer');
   const sidebar = document.getElementById('sidebar');
@@ -325,6 +450,7 @@ function _bindSidebarResizer() {
 
     sidebar.style.width = `${nextWidth}px`;
     sidebar.style.flex = `0 0 ${nextWidth}px`;
+    _updateSidebarTabMode(sidebar);
   };
 
   const stopDragging = () => {
@@ -348,6 +474,9 @@ function _bindSidebarResizer() {
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', stopDragging);
   });
+
+  // Set initial icon-only state based on current sidebar width
+  _updateSidebarTabMode(sidebar);
 }
 
 
@@ -476,4 +605,443 @@ function _syncThemeToggleTooltip() {
   const isLight = document.body.classList.contains('theme-light');
   btn.title = isLight ? 'Switch to dark mode' : 'Switch to light mode';
   btn.setAttribute('aria-label', btn.title);
+}
+
+// ==========================================================================
+// FILE MENU
+// ==========================================================================
+
+function _bindFileMenu() {
+  const trigger = document.getElementById('file-menu-trigger');
+  const dropdown = document.getElementById('file-menu-dropdown');
+  if (!trigger || !dropdown) return;
+
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    _closeHelpMenu();
+    const isOpen = !dropdown.classList.contains('hidden');
+    if (isOpen) {
+      _closeFileMenu();
+    } else {
+      dropdown.classList.remove('hidden');
+      trigger.classList.add('open');
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!dropdown.classList.contains('hidden')) {
+      const wrap = document.getElementById('file-menu-wrap');
+      if (wrap && !wrap.contains(e.target)) {
+        _closeFileMenu();
+      }
+    }
+  });
+
+  document.getElementById('fm-new-session')?.addEventListener('click', () => {
+    _closeFileMenu();
+    document.getElementById('btn-restart-session')?.click();
+  });
+
+  document.getElementById('fm-open')?.addEventListener('click', () => {
+    _closeFileMenu();
+    _doOpenSession();
+  });
+
+  document.getElementById('fm-save')?.addEventListener('click', () => {
+    _closeFileMenu();
+    _doSaveSession();
+  });
+
+  document.getElementById('fm-save-as')?.addEventListener('click', () => {
+    _closeFileMenu();
+    _doSaveSessionAs();
+  });
+
+  document.getElementById('fm-export')?.addEventListener('click', () => {
+    _closeFileMenu();
+    document.getElementById('btn-export-pdf')?.click();
+  });
+
+  document.getElementById('fm-restart')?.addEventListener('click', () => {
+    _closeFileMenu();
+    document.getElementById('btn-restart-session')?.click();
+  });
+}
+
+function _closeFileMenu() {
+  const dropdown = document.getElementById('file-menu-dropdown');
+  const trigger = document.getElementById('file-menu-trigger');
+  if (dropdown) dropdown.classList.add('hidden');
+  if (trigger) trigger.classList.remove('open');
+}
+
+// ==========================================================================
+// HELP MENU
+// ==========================================================================
+
+function _bindHelpMenu() {
+  const trigger = document.getElementById('help-menu-trigger');
+  const dropdown = document.getElementById('help-menu-dropdown');
+  if (!trigger || !dropdown) return;
+
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    _closeFileMenu();
+    const isOpen = !dropdown.classList.contains('hidden');
+    if (isOpen) {
+      _closeHelpMenu();
+    } else {
+      dropdown.classList.remove('hidden');
+      trigger.classList.add('open');
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!dropdown.classList.contains('hidden')) {
+      const wrap = document.getElementById('help-menu-wrap');
+      if (wrap && !wrap.contains(e.target)) {
+        _closeHelpMenu();
+      }
+    }
+  });
+
+  const links = {
+    'hm-docs':          'https://rishitmahapatra.github.io/Automated-aCRF/',
+    'hm-user-manual':   'https://github.com/RishitMahapatra/Automated-aCRF/blob/main/USER_MANUAL.md',
+    'hm-install-guide': 'https://github.com/RishitMahapatra/Automated-aCRF/blob/main/INSTALLATION_GUIDE.md',
+    'hm-codebase':      'https://github.com/RishitMahapatra/Automated-aCRF',
+  };
+
+  for (const [id, url] of Object.entries(links)) {
+    document.getElementById(id)?.addEventListener('click', () => {
+      _closeHelpMenu();
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.open_url) {
+        window.pywebview.api.open_url(url);
+      } else {
+        window.open(url, '_blank');
+      }
+    });
+  }
+}
+
+function _closeHelpMenu() {
+  const dropdown = document.getElementById('help-menu-dropdown');
+  const trigger = document.getElementById('help-menu-trigger');
+  if (dropdown) dropdown.classList.add('hidden');
+  if (trigger) trigger.classList.remove('open');
+}
+
+function _bindFileShortcuts() {
+  document.addEventListener('keydown', (e) => {
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (!ctrl) return;
+
+    if (e.key === 's' || e.key === 'S') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        _doSaveSessionAs();
+      } else {
+        _doSaveSession();
+      }
+    }
+
+    if (e.key === 'o' || e.key === 'O') {
+      if (!e.shiftKey) {
+        e.preventDefault();
+        _doOpenSession();
+      }
+    }
+
+    if (e.key === 'e' || e.key === 'E') {
+      if (!e.shiftKey) {
+        e.preventDefault();
+        document.getElementById('btn-export-pdf')?.click();
+      }
+    }
+  });
+}
+
+function _bindCloseConfirmDialog() {
+  const overlay = document.getElementById('close-confirm-overlay');
+  if (!overlay) return;
+
+  document.getElementById('close-save-yes')?.addEventListener('click', async () => {
+    // If there's no session to save, just close (nothing to lose)
+    if (!Store.pdfLoaded || !Store.sessionId) {
+      overlay.classList.add('hidden');
+      _clearDirty();
+      await window.pywebview?.api?.confirm_close?.();
+      return;
+    }
+    overlay.classList.add('hidden');
+    const saved = await _doSaveSession();
+    if (saved === false) {
+      // User cancelled the file picker — re-show so they can choose Discard or try again
+      overlay.classList.remove('hidden');
+      return;
+    }
+    _clearDirty();
+    await window.pywebview?.api?.confirm_close?.();
+  });
+
+  document.getElementById('close-save-skip')?.addEventListener('click', async () => {
+    overlay.classList.add('hidden');
+    _clearDirty();
+    await window.pywebview?.api?.confirm_close?.();
+  });
+
+  document.getElementById('close-save-cancel')?.addEventListener('click', () => {
+    overlay.classList.add('hidden');
+  });
+}
+
+window._showCloseDialog = function() {
+  const overlay = document.getElementById('close-confirm-overlay');
+  if (overlay) {
+    overlay.classList.remove('hidden');
+  } else {
+    // Fallback: no custom dialog — ask natively and close if confirmed
+    if (window.confirm('You have unsaved changes. Close without saving?')) {
+      _clearDirty();
+      window.pywebview?.api?.confirm_close?.();
+    }
+  }
+};
+
+async function _doSaveSession() {
+  if (!Store.pdfLoaded || !Store.sessionId) {
+    showToast('No active session to save.', 'warning');
+    return false;
+  }
+
+  try {
+    // Flush the full editor state snapshot to disk first
+    if (typeof EditorState !== 'undefined' && EditorState.saveNow) {
+      await EditorState.saveNow();
+    }
+
+    const editorState = await _collectEditorState();
+    const frontendAnnotations = _collectAllFrontendAnnotations();
+
+    const res = await window.pywebview.api.save_session_file(editorState, frontendAnnotations);
+
+    if (res && res.ok) {
+      _clearDirty();
+      showToast('Session saved: ' + (res.path || '').split(/[\\/]/).pop(), 'success');
+      return true;
+    } else if (res && res.error === 'Save cancelled') {
+      return false;
+    } else {
+      showToast('Save failed: ' + (res?.error || 'Unknown error'), 'error');
+      return false;
+    }
+  } catch (e) {
+    console.error('[app] save session error:', e);
+    showToast('Save failed: ' + e, 'error');
+    return false;
+  }
+}
+
+async function _doSaveSessionAs() {
+  if (!Store.pdfLoaded || !Store.sessionId) {
+    showToast('No active session to save.', 'warning');
+    return false;
+  }
+
+  try {
+    // Flush the full editor state snapshot to disk first
+    if (typeof EditorState !== 'undefined' && EditorState.saveNow) {
+      await EditorState.saveNow();
+    }
+
+    const editorState = await _collectEditorState();
+    const frontendAnnotations = _collectAllFrontendAnnotations();
+
+    const res = await window.pywebview.api.save_session_file_as(editorState, frontendAnnotations);
+
+    if (res && res.ok) {
+      _clearDirty();
+      showToast('Session saved: ' + (res.path || '').split(/[\\/]/).pop(), 'success');
+      return true;
+    } else if (res && res.error === 'Save cancelled') {
+      return false;
+    } else {
+      showToast('Save failed: ' + (res?.error || 'Unknown error'), 'error');
+      return false;
+    }
+  } catch (e) {
+    console.error('[app] save-as error:', e);
+    showToast('Save failed: ' + e, 'error');
+    return false;
+  }
+}
+
+async function _doOpenSession() {
+  try {
+    const res = await window.pywebview.api.open_session_file();
+
+    if (!res || !res.ok) {
+      if (res && res.error !== 'No file selected') {
+        showToast('Open failed: ' + (res?.error || 'Unknown error'), 'error');
+      }
+      return;
+    }
+
+    Store.resetSession();
+
+    Store.sessionId = res.session_id;
+    Store.pdfLoaded = true;
+    Store.pdfName = res.pdf_name || '';
+    Store.pdfPath = res.pdf_path || '';
+    Store.pageCount = res.page_count || 0;
+    Store.pipelineRan = true;
+
+    // Update navbar
+    const navSession = document.getElementById('nav-session');
+    if (navSession) navSession.textContent = Store.sessionId;
+
+    const sessionInput = document.getElementById('session-input');
+    if (sessionInput) sessionInput.value = Store.sessionId;
+
+    // Update file-loaded area
+    const fileLoaded = document.getElementById('file-loaded');
+    const fileNameLabel = document.getElementById('file-name-label');
+    const filePagesLabel = document.getElementById('file-pages-label');
+    const dropZone = document.getElementById('drop-zone');
+    const emptyState = document.getElementById('empty-state');
+    const pdfContainer = document.getElementById('pdf-container');
+
+    if (fileLoaded) fileLoaded.classList.remove('hidden');
+    if (fileNameLabel) fileNameLabel.textContent = Store.pdfName || '—';
+    if (filePagesLabel) filePagesLabel.textContent = `${Store.pageCount || 0} pages`;
+    if (dropZone) dropZone.classList.add('hidden');
+    if (emptyState) emptyState.classList.add('hidden');
+    if (pdfContainer) pdfContainer.classList.remove('hidden');
+
+    if (typeof Canvas !== 'undefined' && Canvas.showEmpty) {
+      Canvas.showEmpty(false);
+    }
+
+    // Restore editor state (dataset chips, annotation objects)
+    await _restoreEditorStateIfAny();
+
+    // Load the first page with annotations
+    if (Store.pageCount > 0 && typeof Canvas !== 'undefined' && Canvas.loadPage) {
+      await Canvas.loadPage(1);
+    }
+
+    // Refresh all sidebar data
+    if (typeof Sidebar !== 'undefined' && Sidebar.refreshStats) {
+      await Sidebar.refreshStats();
+    }
+
+    if (typeof Sidebar !== 'undefined' && Sidebar.refreshUnmappedQueue) {
+      await Sidebar.refreshUnmappedQueue();
+    }
+
+    _clearDirty();
+    showToast('Session loaded: ' + (res.pdf_name || Store.sessionId), 'success');
+
+  } catch (e) {
+    console.error('[app] open session error:', e);
+    showToast('Open failed: ' + e, 'error');
+  }
+}
+
+async function _collectEditorState() {
+  // Build the full snapshot via EditorState (merges backend + frontend annotations)
+  if (typeof EditorState !== 'undefined' && EditorState.buildSnapshot) {
+    try {
+      return await EditorState.buildSnapshot();
+    } catch (e) {
+      console.warn('[app] buildSnapshot failed, falling back:', e);
+    }
+  }
+
+  return {
+    session_id: Store.sessionId,
+    pdf_name: Store.pdfName,
+    objects: Store.editorObjects || [],
+    datasetChips: Store.datasetChips || [],
+  };
+}
+
+function _collectAllFrontendAnnotations() {
+  // Gather every annotation the frontend knows about — including user-created
+  // ones that only live in Canvas.userCreatedAnnotations and never reached the backend
+  const all = [];
+  const seen = new Set();
+
+  // Current page annotations from Store
+  (Store.annotations || []).forEach(rec => {
+    if (!rec || !rec.annotation_id) return;
+    if (seen.has(rec.annotation_id)) return;
+    seen.add(rec.annotation_id);
+    all.push(rec);
+  });
+
+  // All user-created annotations across every page (Canvas has the authoritative list)
+  if (typeof Canvas !== 'undefined' && Canvas.getAllUserAnnotations) {
+    Canvas.getAllUserAnnotations().forEach(rec => {
+      if (!rec || !rec.annotation_id) return;
+      if (seen.has(rec.annotation_id)) return;
+      seen.add(rec.annotation_id);
+      all.push(rec);
+    });
+  }
+
+  // Also gather from Store.editorObjects (user-drawn annotations stored as objects)
+  (Store.editorObjects || []).forEach(obj => {
+    if (!obj || !obj.object_id) return;
+    if (obj.object_type !== 'annotation') return;
+    if (obj.removed || obj.visible === false) return;
+    if (seen.has(obj.object_id)) return;
+    seen.add(obj.object_id);
+
+    const data = obj.data || {};
+    all.push({
+      annotation_id: obj.object_id,
+      page: obj.page || 1,
+      status: data.status || 'UNMAPPED',
+      form_code: data.form_code || '',
+      raw_variable: data.raw_variable || '',
+      raw_label: data.raw_label || '',
+      sdtm_dataset: data.sdtm_dataset || '',
+      sdtm_variable: data.sdtm_variable || '',
+      sdtm_label: data.sdtm_label || '',
+      component: data.raw_label || '',
+      x0_pts: obj.rect_pts?.x0,
+      y0_pts: obj.rect_pts?.y0,
+      x1_pts: obj.rect_pts?.x1,
+      y1_pts: obj.rect_pts?.y1,
+      source: obj.source || 'USER',
+    });
+  });
+
+  // Dataset chips as pseudo-annotations for persistence
+  (Store.datasetChips || []).forEach(chip => {
+    if (!chip || !chip.chip_id) return;
+    if (chip.removed || chip.visible === false) return;
+    if (seen.has(chip.chip_id)) return;
+    seen.add(chip.chip_id);
+
+    all.push({
+      annotation_id: chip.chip_id,
+      page: chip.page || 1,
+      page_type: 'DATASET_CHIP',
+      status: 'RESOLVED',
+      sdtm_dataset: chip.dataset || '',
+      sdtm_variable: '',
+      sdtm_label: chip.full_name || '',
+      component: chip.display_text || '',
+      x0_pts: chip.rect_pts?.x0,
+      y0_pts: chip.rect_pts?.y0,
+      x1_pts: chip.rect_pts?.x1,
+      y1_pts: chip.rect_pts?.y1,
+      source: chip.source || 'AUTO',
+      fill_rgb: chip.fill_rgb || null,
+    });
+  });
+
+  return all;
 }
