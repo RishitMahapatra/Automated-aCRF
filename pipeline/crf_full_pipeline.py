@@ -135,28 +135,14 @@ def load_mapping_format_a(xl: pd.ExcelFile) -> dict:
 # FORMAT B LOADER
 # =============================================================================
 
-def _find_col_idx(headers: list, target: str):
-    """Find column index in a header list by exact then partial match."""
-    target = target.lower().strip()
-    for i, h in enumerate(headers):
-        if str(h or "").lower().strip() == target:
-            return i
-    for i, h in enumerate(headers):
-        if target in str(h or "").lower().strip():
-            return i
-    return None
-
-
 def load_mapping_format_b(excel_path: str) -> dict:
     mapping = {}
 
     try:
         wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
-    except PermissionError as e:
-        print(f"[mapping] Permission denied opening Excel: {e}")
+    except PermissionError:
         return {}
-    except Exception as e:
-        print(f"[mapping] Error reading Excel (Format B): {e}")
+    except Exception:
         return {}
 
     if RAW_SDTM_SHEET not in wb.sheetnames:
@@ -164,56 +150,25 @@ def load_mapping_format_b(excel_path: str) -> dict:
         return {}
 
     ws = wb[RAW_SDTM_SHEET]
-
-    # Read header row (row 2) to locate columns by name — not by hard-coded index
-    header_row = next(ws.iter_rows(min_row=2, max_row=2, values_only=True), None)
-    if not header_row:
-        print(f"[mapping] Format B: no header row found in '{RAW_SDTM_SHEET}'")
-        wb.close()
-        return {}
-
-    headers = [str(h or "").strip() for h in header_row]
-    idx_src_ds  = _find_col_idx(headers, COL_SRC_DATASET)
-    idx_src_var = _find_col_idx(headers, COL_SRC_VARIABLE)
-    idx_sdtm_ds = _find_col_idx(headers, COL_SDTM_DATASET)
-    idx_sdtm_v  = _find_col_idx(headers, COL_SDTM_VAR)
-    idx_sdtm_l  = _find_col_idx(headers, COL_SDTM_LABEL)
-
-    missing = [name for name, idx in [
-        (COL_SRC_DATASET, idx_src_ds), (COL_SRC_VARIABLE, idx_src_var),
-        (COL_SDTM_DATASET, idx_sdtm_ds), (COL_SDTM_VAR, idx_sdtm_v),
-    ] if idx is None]
-    if missing:
-        print(f"[mapping] Format B: required columns not found: {missing}. "
-              f"Available headers: {headers}")
-        wb.close()
-        return {}
-
     rows = list(ws.iter_rows(min_row=3, values_only=True))
     wb.close()
 
     for row in rows:
-        if not row:
+        if not row or len(row) < 11:
             continue
 
-        def _cell(idx):
-            if idx is None or idx >= len(row):
-                return ""
-            return str(row[idx] or "").strip().split("\n")[0].strip()
-
-        src_dataset  = _cell(idx_src_ds).upper()
-        sdtm_dataset = _cell(idx_sdtm_ds).upper()
-        sdtm_var     = _cell(idx_sdtm_v).upper()
-        sdtm_label   = _cell(idx_sdtm_l)
+        src_dataset = str(row[1] or "").strip().split("\n")[0].strip().upper()
+        sdtm_dataset = str(row[8] or "").strip().split("\n")[0].strip().upper()
+        sdtm_var = str(row[9] or "").strip().split("\n")[0].strip().upper()
+        sdtm_label = str(row[10] or "").strip().split("\n")[0].strip()
 
         if not src_dataset or src_dataset in ("NONE", "NAN", ""):
             continue
 
-        # Fix #4: split on both \n and | (consistent with Format A)
-        raw_var_cell = str(row[idx_src_var] or "").strip() if idx_src_var < len(row) else ""
+        raw_var_cell = str(row[2] or "").strip()
         src_variables = [
             v.strip().upper()
-            for v in re.split(r"[\n|]+", raw_var_cell)
+            for v in raw_var_cell.split("\n")
             if v and str(v).strip()
         ]
 

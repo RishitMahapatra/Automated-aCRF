@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -112,21 +113,134 @@ class ConfidenceEngine:
 
     def build_from_excel(self, excel_path: str | Path) -> int:
         """
-        Build corpus from the mapping Excel.
-        Delegates to the pipeline's load_mapping() so both use identical
-        parsing logic — fixes, column-lookup improvements, and separator
-        handling are applied automatically.
+        Build corpus directly from the mapping Excel.
+        Supports:
+        - Format A: multiple domain sheets
+        - Format B: single 'RAW-SDTM Mappings' sheet
         """
-        import sys
-        from pathlib import Path as _Path
-        sys.path.insert(0, str(_Path(__file__).parent.parent))
-        from pipeline.crf_full_pipeline import load_mapping
+        import openpyxl
 
-        try:
-            mapping = load_mapping(excel_path)
-        except Exception as e:
-            print(f"[confidence_engine] Failed to load Excel mapping: {e}")
-            return 0
+        excel_path = Path(excel_path)
+        mapping = {}
+
+        xl = pd.ExcelFile(str(excel_path), engine="openpyxl")
+        sheet_names = xl.sheet_names
+
+        DOMAIN_SHEETS = {
+            "CM", "AE", "DM", "DS", "EX", "LB",
+            "VS", "MH", "PE", "QS", "SC", "SU",
+            "EG", "FA", "PR"
+        }
+        RAW_SDTM_SHEET = "RAW-SDTM Mappings"
+        JOIN_KEYS = {"STUDY", "SUBJECT", "USUBJID", "SUBJID", "SITEID"}
+
+        # ---------------------------------------------------------------------
+        # Format B — single consolidated sheet
+        # ---------------------------------------------------------------------
+        if RAW_SDTM_SHEET in sheet_names:
+            wb = openpyxl.load_workbook(
+                str(excel_path),
+                read_only=True,
+                data_only=True,
+            )
+            ws = wb[RAW_SDTM_SHEET]
+            rows = list(ws.iter_rows(min_row=3, values_only=True))
+            wb.close()
+
+            for row in rows:
+                if not row or len(row) < 11:
+                    continue
+
+                src_dataset = str(row[1] or "").strip().upper()
+                raw_var_cell = str(row[2] or "").strip()
+                sdtm_dataset = str(row[8] or "").strip().upper()
+                sdtm_var = str(row[9] or "").strip().upper()
+                sdtm_label = str(row[10] or "").strip()
+
+                if not src_dataset or src_dataset in {"NONE", "NAN"}:
+                    continue
+
+                src_vars = [
+                    v.strip().upper()
+                    for v in raw_var_cell.split("\n")
+                    if v and str(v).strip()
+                ]
+
+                for src_var in src_vars:
+                    if not src_var or src_var in {"NONE", "NAN"}:
+                        continue
+                    if src_var in JOIN_KEYS:
+                        continue
+
+                    key = (src_dataset, src_var)
+                    if key not in mapping:
+                        mapping[key] = {
+                            "sdtm_dataset": sdtm_dataset,
+                            "sdtm_variable": sdtm_var,
+                            "sdtm_label": sdtm_label,
+                        }
+
+        # ---------------------------------------------------------------------
+        # Format A — domain sheets
+        # ---------------------------------------------------------------------
+        else:
+            found_sheets = [s for s in sheet_names if s.upper() in DOMAIN_SHEETS]
+
+            def _find_col(columns: list[str], target: str):
+                target_lower = target.lower().strip()
+
+                for c in columns:
+                    if str(c).lower().strip() == target_lower:
+                        return c
+
+                for c in columns:
+                    if target_lower in str(c).lower().strip():
+                        return c
+
+                return None
+
+            for sheet in found_sheets:
+                df = xl.parse(sheet, header=0)
+                df.columns = [str(c).strip() for c in df.columns]
+                cols = list(df.columns)
+
+                col_src_var = _find_col(cols, "source variable")
+                col_sdtm_ds = _find_col(cols, "sdtm dataset")
+                col_sdtm_v = _find_col(cols, "sdtm variable")
+                col_sdtm_l = _find_col(cols, "sdtm label")
+
+                if not col_src_var:
+                    continue
+
+                df.dropna(subset=[col_src_var], inplace=True)
+
+                for _, row in df.iterrows():
+                    raw_src = str(row.get(col_src_var, "") or "").strip()
+                    if not raw_src or raw_src.lower() == "nan":
+                        continue
+
+                    src_tokens = [t.strip().upper() for t in raw_src.split("\n") if t and str(t).strip()]
+                    sdtm_v_raw = str(row.get(col_sdtm_v, "") or "").strip() if col_sdtm_v else ""
+                    sdtm_tokens = [t.strip().upper() for t in sdtm_v_raw.split("\n") if t and str(t).strip()]
+                    sdtm_ds = str(row.get(col_sdtm_ds, "") or "").strip().upper() if col_sdtm_ds else ""
+                    sdtm_label = str(row.get(col_sdtm_l, "") or "").strip() if col_sdtm_l else ""
+
+                    for i, src_var in enumerate(src_tokens):
+                        if not src_var or src_var in JOIN_KEYS:
+                            continue
+
+                        if sdtm_tokens:
+                            sdtm_var = sdtm_tokens[i] if i < len(sdtm_tokens) else sdtm_tokens[0]
+                        else:
+                            sdtm_var = ""
+
+                        key = (sheet.upper(), src_var)
+                        if key not in mapping:
+                            mapping[key] = {
+                                "sdtm_dataset": sdtm_ds,
+                                "sdtm_variable": sdtm_var,
+                                "sdtm_label": sdtm_label,
+                            }
 
         return self.build_from_mapping(mapping)
 
