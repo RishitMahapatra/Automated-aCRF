@@ -5044,27 +5044,6 @@ body.theme-light .nav-export-btn:hover {
 }
 .import-input:focus { border-color: var(--violet); }
 
-.import-section-title {
-  font: 600 11px var(--font-ui);
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.import-preview-wrap {
-  max-height: 180px;
-  overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-}
-
-.import-header-row td {
-  background: rgba(142,84,255,0.12) !important;
-  font-weight: 600;
-  color: var(--bright) !important;
-}
-
 /* ── Merge Dialog ─────────────────────────────────────────── */
 
 .merge-summary {

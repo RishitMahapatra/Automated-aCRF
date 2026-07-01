@@ -699,7 +699,8 @@ class Api:
         try:
             result = self._window.create_file_dialog(
                 webview.OPEN_DIALOG,
-                file_types=('Excel Files (*.xlsx;*.xls)', 'All Files (*.*)'),
+                allow_multiple=False,
+                file_types=('Excel Files (*.xlsx)',),
             )
             if result and len(result) > 0:
                 return {"ok": True, "path": str(result[0])}
@@ -898,7 +899,8 @@ class Api:
         try:
             result = self._window.create_file_dialog(
                 webview.OPEN_DIALOG,
-                file_types=('Mapping Table (*.mtbl)', 'All Files (*.*)'),
+                allow_multiple=False,
+                file_types=('Mapping Table (*.mtbl)',),
             )
             if not result or len(result) == 0:
                 return {"ok": False, "error": "No file selected"}

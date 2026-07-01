@@ -302,30 +302,8 @@ const Settings = (() => {
           const el = document.getElementById(id);
           if (el) el.value = el.dataset.default || '';
         });
-      document.getElementById('import-preview-body').innerHTML = '';
     } catch (e) {
       _showToast('Error selecting file: ' + e, 'error');
-    }
-  }
-
-  async function _previewImport() {
-    const path = document.getElementById('import-file-path')?.dataset.path;
-    if (!path) return;
-    const headerRow = parseInt(document.getElementById('imp-header-row')?.value || '1', 10);
-    try {
-      const res = await window.pywebview.api.read_excel_preview(path, headerRow);
-      if (!res.ok) { _showToast('Preview error: ' + res.error, 'error'); return; }
-      const body = document.getElementById('import-preview-body');
-      body.innerHTML = '';
-      (res.rows || []).forEach(r => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td class="mdb-cell mdb-cell-num">${r.row_num}</td>` +
-          r.cells.map(c => `<td class="mdb-cell">${_esc(c)}</td>`).join('');
-        if (r.row_num === headerRow) tr.classList.add('import-header-row');
-        body.appendChild(tr);
-      });
-    } catch (e) {
-      _showToast('Preview error: ' + e, 'error');
     }
   }
 
@@ -749,7 +727,6 @@ const Settings = (() => {
 
     // Import
     document.getElementById('mdb-import-btn')?.addEventListener('click', _startImport);
-    document.getElementById('import-preview-btn')?.addEventListener('click', _previewImport);
     document.getElementById('import-execute-btn')?.addEventListener('click', _executeImport);
     document.getElementById('import-cancel-btn')?.addEventListener('click', () => {
       document.getElementById('mdb-import-dialog')?.classList.add('hidden');
