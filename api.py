@@ -103,6 +103,7 @@ class Api:
             self._pdf_path = None
             self._session_id = ""
             self._acrf_path = None
+            self._is_dirty = False
             self._export = ExportBridge()
             return {"ok": True}
         except Exception as e:
@@ -663,8 +664,13 @@ class Api:
         """
         Called from JS after the user confirms they want to close the window
         (via the unsaved-changes dialog).  Destroys the window unconditionally.
+
+        _is_dirty must be cleared BEFORE destroy(), because destroy() re-fires
+        the closing event — if _is_dirty is still True, on_closing will cancel
+        the destroy and re-show the dialog, causing an infinite loop.
         """
         try:
+            self._is_dirty = False
             if self._window:
                 self._window.destroy()
         except Exception as e:

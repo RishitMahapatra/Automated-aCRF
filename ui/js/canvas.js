@@ -498,8 +498,11 @@ function updateDatasetChip(chipRecord, fields = {}) {
 
   function _showAnnotationContextMenu(ctxMenu, x, y, rec) {
     const statusUp = String(rec?.status || '').toUpperCase();
-    const alreadyInQueue = statusUp === 'NEEDS_REVIEW' || statusUp === 'UNMAPPED';
-    const isInReview = statusUp === 'NEEDS_REVIEW';
+    const annId = String(rec?.annotation_id || '');
+    const isNsInReview = statusUp === 'NOT_SUBMITTED' &&
+      typeof Sidebar !== 'undefined' && Sidebar.isInActiveReview && Sidebar.isInActiveReview(annId);
+    const alreadyInQueue = statusUp === 'NEEDS_REVIEW' || statusUp === 'UNMAPPED' || isNsInReview;
+    const isInReview = statusUp === 'NEEDS_REVIEW' || isNsInReview;
 
     document.getElementById('ctx-add-annotation').style.display = '';
     document.getElementById('ctx-edit-annotation').style.display = '';
@@ -518,7 +521,6 @@ function updateDatasetChip(chipRecord, fields = {}) {
       addToReviewBtn.title = alreadyInQueue ? 'Already in review queue' : '';
     }
 
-    // Show "Remove from Review" only for annotations that are currently NEEDS_REVIEW
     const removeFromReviewBtn = document.getElementById('ctx-remove-from-review');
     if (removeFromReviewBtn) removeFromReviewBtn.style.display = isInReview ? '' : 'none';
 
@@ -811,6 +813,15 @@ function updateDatasetChip(chipRecord, fields = {}) {
         }
 
         _pushGeometryUndo(undoAction);
+
+        // Clean up stale entries in sidebar review sets
+        if (typeof Sidebar !== 'undefined') {
+          if (Sidebar.isInActiveReview && Sidebar.isInActiveReview(id)) {
+            await Sidebar.removeFromReview(id, rec);
+          } else if (Sidebar.isDismissedFromReview && Sidebar.isDismissedFromReview(id)) {
+            await Sidebar.removeFromReview(id, rec);
+          }
+        }
 
         if (typeof Canvas !== 'undefined') await Canvas.loadPage(Store.currentPage);
         if (typeof Sidebar !== 'undefined') { await Sidebar.refreshStats(); await Sidebar.refreshUnmappedQueue(); }

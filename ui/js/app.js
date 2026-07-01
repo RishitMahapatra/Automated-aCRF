@@ -681,6 +681,13 @@ function _bindCloseConfirmDialog() {
   if (!overlay) return;
 
   document.getElementById('close-save-yes')?.addEventListener('click', async () => {
+    // If there's no session to save, just close (nothing to lose)
+    if (!Store.pdfLoaded || !Store.sessionId) {
+      overlay.classList.add('hidden');
+      _clearDirty();
+      await window.pywebview?.api?.confirm_close?.();
+      return;
+    }
     overlay.classList.add('hidden');
     const saved = await _doSaveSession();
     if (saved === false) {
@@ -688,11 +695,13 @@ function _bindCloseConfirmDialog() {
       overlay.classList.remove('hidden');
       return;
     }
+    _clearDirty();
     await window.pywebview?.api?.confirm_close?.();
   });
 
   document.getElementById('close-save-skip')?.addEventListener('click', async () => {
     overlay.classList.add('hidden');
+    _clearDirty();
     await window.pywebview?.api?.confirm_close?.();
   });
 
@@ -708,6 +717,7 @@ window._showCloseDialog = function() {
   } else {
     // Fallback: no custom dialog — ask natively and close if confirmed
     if (window.confirm('You have unsaved changes. Close without saving?')) {
+      _clearDirty();
       window.pywebview?.api?.confirm_close?.();
     }
   }
@@ -873,16 +883,27 @@ async function _collectEditorState() {
 
 function _collectAllFrontendAnnotations() {
   // Gather every annotation the frontend knows about — including user-created
-  // ones that only live in Store.annotations and never reached the backend
+  // ones that only live in Canvas.userCreatedAnnotations and never reached the backend
   const all = [];
   const seen = new Set();
 
+  // Current page annotations from Store
   (Store.annotations || []).forEach(rec => {
     if (!rec || !rec.annotation_id) return;
     if (seen.has(rec.annotation_id)) return;
     seen.add(rec.annotation_id);
     all.push(rec);
   });
+
+  // All user-created annotations across every page (Canvas has the authoritative list)
+  if (typeof Canvas !== 'undefined' && Canvas.getAllUserAnnotations) {
+    Canvas.getAllUserAnnotations().forEach(rec => {
+      if (!rec || !rec.annotation_id) return;
+      if (seen.has(rec.annotation_id)) return;
+      seen.add(rec.annotation_id);
+      all.push(rec);
+    });
+  }
 
   // Also gather from Store.editorObjects (user-drawn annotations stored as objects)
   (Store.editorObjects || []).forEach(obj => {

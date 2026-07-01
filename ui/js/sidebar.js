@@ -1290,6 +1290,7 @@ async function _handleZoomChange(direction) {
           window._markSessionDirty?.();
           await refreshStats();
           await refreshUnmappedQueue();
+          if (typeof Canvas !== 'undefined' && Canvas.loadPage) await Canvas.loadPage(Store.currentPage);
         } catch (e) {
           console.error('[sidebar] save comment error:', e);
         }
@@ -1588,6 +1589,7 @@ async function _handleZoomChange(direction) {
       }
       await refreshStats();
       await refreshUnmappedQueue();
+      if (typeof Canvas !== 'undefined' && Canvas.loadPage) await Canvas.loadPage(Store.currentPage);
     } else {
       const res = await window.pywebview.api.update_annotation(
         annotationId, 'USER_CORRECTED', dataset, variable, label
@@ -1595,6 +1597,7 @@ async function _handleZoomChange(direction) {
       if (res && res.ok) {
         await refreshStats();
         await refreshUnmappedQueue();
+        if (typeof Canvas !== 'undefined' && Canvas.loadPage) await Canvas.loadPage(Store.currentPage);
       }
     }
   }
@@ -1637,6 +1640,7 @@ async function _handleZoomChange(direction) {
       }
       await refreshStats();
       await refreshUnmappedQueue();
+      if (typeof Canvas !== 'undefined' && Canvas.loadPage) await Canvas.loadPage(Store.currentPage);
     } else {
       const res = await window.pywebview.api.update_annotation(
         annotationId, 'NOT_SUBMITTED', '', '', 'Not Submitted'
@@ -1644,6 +1648,7 @@ async function _handleZoomChange(direction) {
       if (res && res.ok) {
         await refreshStats();
         await refreshUnmappedQueue();
+        if (typeof Canvas !== 'undefined' && Canvas.loadPage) await Canvas.loadPage(Store.currentPage);
       }
     }
   }
@@ -1700,6 +1705,7 @@ async function _handleZoomChange(direction) {
       }
       await refreshStats();
       await refreshUnmappedQueue();
+      if (typeof Canvas !== 'undefined' && Canvas.loadPage) await Canvas.loadPage(Store.currentPage);
     } else {
       const res = await window.pywebview.api.update_annotation(
         annotationId, 'NEEDS_REVIEW', dataset, variable, rec.sdtm_label || ''
@@ -1707,6 +1713,7 @@ async function _handleZoomChange(direction) {
       if (res && res.ok) {
         await refreshStats();
         await refreshUnmappedQueue();
+        if (typeof Canvas !== 'undefined' && Canvas.loadPage) await Canvas.loadPage(Store.currentPage);
       }
     }
   }
@@ -1864,6 +1871,16 @@ async function _handleZoomChange(direction) {
     _openCommentForRecord(rec);
   }
 
+  function isInActiveReview(annotationId) {
+    if (!annotationId) return false;
+    return _reviewNotSubmittedSet.has(String(annotationId));
+  }
+
+  function isDismissedFromReview(annotationId) {
+    if (!annotationId) return false;
+    return _queueDismissedSet.has(String(annotationId));
+  }
+
   return {
     init,
     refreshStats,
@@ -1872,6 +1889,8 @@ async function _handleZoomChange(direction) {
     addDatasetReview,
     addNotSubmittedToReview,
     removeFromReview,
+    isInActiveReview,
+    isDismissedFromReview,
     getDatasetReviews,
     setDatasetReviews,
     openCommentForAnnotation,
