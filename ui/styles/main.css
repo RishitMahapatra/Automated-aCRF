@@ -4763,26 +4763,110 @@ body.theme-light .nav-export-btn:hover {
   gap: 8px;
 }
 
-/* ── Nav settings button ──────────────────────────────────── */
+/* ── Nav Mapping DB button — same style as Export ─────────── */
 
-.nav-settings-btn {
+.nav-mapdb-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  font: 600 12px var(--font-ui);
+  cursor: pointer;
+  margin-right: 8px;
+  white-space: nowrap;
+  background: linear-gradient(135deg, #8E54FF 0%, #6E3FD4 100%);
+  border: 1px solid rgba(142, 84, 255, 0.40);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(142, 84, 255, 0.25);
+  transition: box-shadow 0.18s ease, transform 0.12s ease;
+}
+.nav-mapdb-btn:hover {
+  box-shadow: 0 0 20px rgba(142, 84, 255, 0.42);
+  transform: translateY(-1px);
+}
+.nav-mapdb-btn:active { transform: translateY(0); }
+body.theme-light .nav-mapdb-btn {
+  background: linear-gradient(135deg, #652BDA 0%, #7A48E6 100%);
+  border-color: rgba(101, 43, 218, 0.35);
+  box-shadow: 0 0 12px rgba(101, 43, 218, 0.16);
+}
+
+/* ── btn-secondary (cancel / secondary action) ────────────── */
+
+.btn-secondary {
+  border-color: var(--border);
+  color: var(--body);
+  background: var(--elevated);
+}
+.btn-secondary:hover {
+  border-color: var(--muted);
+  color: var(--bright);
+  background: var(--surface);
+}
+
+/* ── Column filter dropdown ───────────────────────────────── */
+
+.col-filter-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 9px;
+  padding: 2px 3px;
+  border-radius: 3px;
+  margin-left: 4px;
+  transition: color 0.15s, background 0.15s;
+  vertical-align: middle;
+}
+.col-filter-btn:hover { color: var(--bright); background: rgba(255,255,255,0.06); }
+.col-filter-btn.col-filter-active { color: var(--violet); }
+
+.col-filter-dropdown {
+  min-width: 140px;
+  max-width: 240px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  transition: all 0.15s;
-  margin-right: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  padding: 4px 0;
 }
-.nav-settings-btn:hover {
-  background: var(--elevated);
-  color: var(--bright);
-  border-color: var(--violet);
+
+.col-filter-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 12px;
+  border: none;
+  background: none;
+  color: var(--body);
+  font: 12px var(--font-ui);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 0.1s;
+}
+.col-filter-item:hover { background: var(--elevated); color: var(--bright); }
+.col-filter-item.col-filter-active { color: var(--violet); font-weight: 600; }
+
+.col-filter-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.mdb-clear-link {
+  color: var(--violet);
+  cursor: pointer;
+  text-decoration: underline;
+  font-size: 12px;
 }
 
 /* ── Toolbar ──────────────────────────────────────────────── */
@@ -5039,136 +5123,4 @@ body.theme-light .nav-export-btn:hover {
 }
 .import-input:focus { border-color: var(--violet); }
 
-/* ── Merge Dialog ─────────────────────────────────────────── */
-
-.merge-summary {
-  display: flex;
-  gap: 16px;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--border);
-}
-.merge-stat {
-  font: 600 12px var(--font-ui);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.merge-stat span { font: 700 14px var(--font-mono); }
-.merge-stat-unchanged { color: var(--muted); }
-.merge-stat-added { color: var(--green); }
-.merge-stat-conflicts { color: var(--orange); }
-
-.merge-nav {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 8px 20px;
-  background: var(--elevated);
-  border-bottom: 1px solid var(--border);
-}
-.merge-nav.hidden { display: none; }
-.merge-nav-label {
-  font: 500 11px var(--font-ui);
-  color: var(--body);
-}
-
-.merge-conflicts-wrap {
-  padding: 12px 20px;
-}
-
-.merge-conflict-item {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  margin-bottom: 12px;
-  overflow: hidden;
-  transition: border-color 0.2s;
-}
-.merge-conflict-active {
-  border-color: var(--violet);
-  box-shadow: 0 0 0 1px var(--violet);
-}
-
-.merge-conflict-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  background: var(--elevated);
-  border-bottom: 1px solid var(--border);
-}
-.merge-conflict-key {
-  font: 600 12px var(--font-mono);
-  color: var(--bright);
-}
-.merge-conflict-num {
-  font: 10px var(--font-ui);
-  color: var(--muted);
-}
-
-.merge-diff { padding: 0; }
-.merge-diff-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-  transition: opacity 0.2s;
-}
-.merge-diff-old {
-  background: rgba(248,113,113,0.08);
-  border-left: 3px solid #f87171;
-}
-.merge-diff-new {
-  background: rgba(0,230,118,0.08);
-  border-left: 3px solid var(--green);
-}
-.merge-diff-label {
-  font: 600 10px var(--font-ui);
-  text-transform: uppercase;
-  color: var(--muted);
-  min-width: 60px;
-}
-.merge-diff-val {
-  font: 600 12px var(--font-mono);
-  color: var(--bright);
-}
-.merge-diff-sublabel {
-  font: 11px var(--font-ui);
-  color: var(--muted);
-  flex: 1;
-  text-align: right;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.merge-dim { opacity: 0.35; }
-
-.merge-conflict-actions {
-  display: flex;
-  gap: 8px;
-  padding: 8px 12px;
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-}
-
-.merge-btn-keep,
-.merge-btn-use {
-  flex: 1;
-  padding: 5px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--elevated);
-  color: var(--body);
-  font: 500 11px var(--font-ui);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.merge-btn-keep:hover { border-color: #f87171; color: #f87171; }
-.merge-btn-use:hover { border-color: var(--green); color: var(--green); }
-
-.merge-btn-selected {
-  background: var(--violet) !important;
-  border-color: var(--violet) !important;
-  color: var(--bright) !important;
-}
 

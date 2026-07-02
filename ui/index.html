@@ -378,8 +378,9 @@
         <span class="dirty-dot hidden" id="dirty-dot" title="Unsaved changes">●</span>
       </div>
       <div class="nav-right">
-        <button class="nav-settings-btn" id="btn-settings" title="Mapping Manager">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <button class="nav-mapdb-btn" id="btn-settings" title="Mapping Database">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          Mapping DB
         </button>
         <button class="nav-export-btn" id="btn-export-pdf" title="Export annotated PDF">
           Export ↗
@@ -951,7 +952,6 @@
         <button class="sett-btn" id="mdb-load-mtbl" title="Load a previously saved .mtbl snapshot">Load .mtbl</button>
       </div>
       <div class="settings-toolbar-right">
-        <input type="text" class="sett-search" id="mdb-search" placeholder="Search entries…">
         <button class="sett-btn sett-btn-accent" id="mdb-add-btn">+ Add Record</button>
       </div>
     </div>
@@ -962,12 +962,12 @@
         <thead>
           <tr>
             <th class="mdb-th mdb-th-num">#</th>
-            <th class="mdb-th">Source Dataset</th>
-            <th class="mdb-th">Raw Variable</th>
-            <th class="mdb-th">Raw Label</th>
-            <th class="mdb-th">SDTM Dataset</th>
-            <th class="mdb-th">SDTM Variable</th>
-            <th class="mdb-th">SDTM Label</th>
+            <th class="mdb-th">Source Dataset <button class="col-filter-btn" data-field="src_dataset" title="Filter">▼</button></th>
+            <th class="mdb-th">Raw Variable <button class="col-filter-btn" data-field="raw_variable" title="Filter">▼</button></th>
+            <th class="mdb-th">Raw Label <button class="col-filter-btn" data-field="raw_label" title="Filter">▼</button></th>
+            <th class="mdb-th">SDTM Dataset <button class="col-filter-btn" data-field="sdtm_dataset" title="Filter">▼</button></th>
+            <th class="mdb-th">SDTM Variable <button class="col-filter-btn" data-field="sdtm_variable" title="Filter">▼</button></th>
+            <th class="mdb-th">SDTM Label <button class="col-filter-btn" data-field="sdtm_label" title="Filter">▼</button></th>
             <th class="mdb-th mdb-th-actions"></th>
           </tr>
         </thead>
@@ -982,6 +982,7 @@
         <button class="sett-btn sett-btn-sm" id="mdb-page-prev" disabled>&larr; Prev</button>
         <span class="mdb-page-info" id="mdb-page-info">No entries</span>
         <button class="sett-btn sett-btn-sm" id="mdb-page-next" disabled>Next &rarr;</button>
+        <button class="sett-btn sett-btn-sm" id="mdb-show-all-btn" style="display:none">Show All</button>
       </div>
     </div>
   </div>
@@ -1054,7 +1055,7 @@
       </div>
       <div class="comment-dialog-actions">
         <button class="btn btn-primary" id="import-execute-btn">Import</button>
-        <button class="btn-cancel" id="import-cancel-btn2" onclick="document.getElementById('mdb-import-dialog').classList.add('hidden')">Cancel</button>
+        <button class="btn btn-secondary" id="import-cancel-btn2" onclick="document.getElementById('mdb-import-dialog').classList.add('hidden')">Cancel</button>
       </div>
     </div>
   </div>
@@ -1108,32 +1109,7 @@
       </div>
       <div class="comment-dialog-actions">
         <button class="btn btn-primary" id="add-record-save">Add</button>
-        <button class="btn-cancel" id="add-record-cancel">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Merge Dialog ──────────────────────────────────────── -->
-  <div id="mdb-merge-dialog" class="comment-dialog-overlay hidden">
-    <div class="comment-dialog" style="max-width:680px;width:90vw;max-height:85vh;display:flex;flex-direction:column;">
-      <div class="comment-dialog-header">
-        <span class="comment-dialog-title">Merge Preview</span>
-        <button class="comment-dialog-close" id="merge-cancel-btn">&times;</button>
-      </div>
-      <div class="merge-summary">
-        <span class="merge-stat merge-stat-unchanged"><span id="merge-stat-unchanged">0</span> unchanged</span>
-        <span class="merge-stat merge-stat-added"><span id="merge-stat-added">0</span> new</span>
-        <span class="merge-stat merge-stat-conflicts"><span id="merge-stat-conflicts">0</span> conflicts</span>
-      </div>
-      <div class="merge-nav" id="merge-nav">
-        <button class="sett-btn sett-btn-sm" id="merge-prev-btn">&larr; Prev</button>
-        <span id="merge-nav-label" class="merge-nav-label">Conflict 1 of 1</span>
-        <button class="sett-btn sett-btn-sm" id="merge-next-btn">Next &rarr;</button>
-      </div>
-      <div class="merge-conflicts-wrap" id="merge-conflicts-list" style="flex:1;overflow-y:auto;"></div>
-      <div class="comment-dialog-actions">
-        <button class="btn btn-primary" id="merge-apply-btn">Apply Merge</button>
-        <button class="btn-cancel" id="merge-cancel-btn2" onclick="document.getElementById('mdb-merge-dialog').classList.add('hidden')">Cancel</button>
+        <button class="btn btn-secondary" id="add-record-cancel">Cancel</button>
       </div>
     </div>
   </div>
@@ -1143,11 +1119,12 @@
     <div class="comment-dialog" style="max-width:380px;">
       <div class="comment-dialog-header">
         <span class="comment-dialog-title" id="mdb-confirm-title">Confirm</span>
+        <button class="comment-dialog-close" onclick="document.getElementById('mdb-confirm-dialog').classList.add('hidden')">&times;</button>
       </div>
-      <div style="padding:16px 20px;color:var(--body);font-size:13px;line-height:1.6;" id="mdb-confirm-message"></div>
+      <div style="padding:16px 20px;color:var(--body);font-size:13px;line-height:1.6;white-space:pre-wrap;" id="mdb-confirm-message"></div>
       <div class="comment-dialog-actions">
         <button class="btn btn-primary" id="mdb-confirm-yes">Yes</button>
-        <button class="btn-cancel" id="mdb-confirm-no">No</button>
+        <button class="btn btn-secondary" id="mdb-confirm-no">No</button>
       </div>
     </div>
   </div>
@@ -1294,7 +1271,7 @@
     </div>
     <div class="comment-dialog-actions">
       <button class="btn btn-primary" id="export-options-confirm">Export</button>
-      <button class="btn-cancel" id="export-options-cancel">Cancel</button>
+      <button class="btn btn-secondary" id="export-options-cancel">Cancel</button>
     </div>
   </div>
 </div>
@@ -1310,7 +1287,7 @@
       To add it, right-click the annotation and select <strong>Add to Review</strong>.
     </div>
     <div class="comment-dialog-actions">
-      <button class="btn-cancel" id="queue-not-found-ok">OK</button>
+      <button class="btn btn-secondary" id="queue-not-found-ok">OK</button>
     </div>
   </div>
 </div>

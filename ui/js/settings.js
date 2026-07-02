@@ -1,25 +1,28 @@
 /**
  * settings.js — Mapping Manager
- * Full-page settings view for managing the internal SDTM mapping database.
+ * Full-page view for managing the internal SDTM mapping database.
  */
 
 const Settings = (() => {
   'use strict';
 
   // ── State ──────────────────────────────────────────────────
-  let _entries = [];
-  let _dirty = false;
-  let _searchTerm = '';
+  let _entries    = [];
+  let _dirty      = false;
+  let _showAll    = false;
   let _currentPage = 1;
   let _initialized = false;
-  const PAGE_SIZE = 50;
+  const PAGE_SIZE  = 50;
 
-  // Merge state
-  let _mergeIncoming = [];
-  let _mergeConflicts = [];
-  let _mergeAdded = [];
-  let _mergeUnchanged = 0;
-  let _currentConflictIdx = 0;
+  // Per-column filter values (null = no filter on that column)
+  let _colFilters = {
+    src_dataset:   null,
+    raw_variable:  null,
+    raw_label:     null,
+    sdtm_dataset:  null,
+    sdtm_variable: null,
+    sdtm_label:    null,
+  };
 
   // ── Navigation ─────────────────────────────────────────────
 
@@ -46,6 +49,7 @@ const Settings = (() => {
   }
 
   function _doHide() {
+    _closeColFilter();
     document.getElementById('settings-page').classList.add('hidden');
     document.getElementById('layout').classList.remove('hidden');
   }
@@ -55,12 +59,8 @@ const Settings = (() => {
   async function _loadDatabase() {
     try {
       const res = await window.pywebview.api.load_mapping_db();
-      if (res.ok && res.data && res.data.entries) {
-        _entries = res.data.entries;
-      } else {
-        _entries = [];
-      }
-      _dirty = false;
+      _entries = (res.ok && res.data && res.data.entries) ? res.data.entries : [];
+      _dirty   = false;
     } catch (e) {
       console.error('[settings] load error:', e);
       _entries = [];
@@ -88,43 +88,146 @@ const Settings = (() => {
     }
   }
 
-  // ── Table Rendering ────────────────────────────────────────
+  // ── Column Filters ─────────────────────────────────────────
 
   function _getFiltered() {
-    if (!_searchTerm) return _entries;
-    const q = _searchTerm.toLowerCase();
     return _entries.filter(e =>
-      (e.src_dataset || '').toLowerCase().includes(q) ||
-      (e.raw_variable || '').toLowerCase().includes(q) ||
-      (e.sdtm_dataset || '').toLowerCase().includes(q) ||
-      (e.sdtm_variable || '').toLowerCase().includes(q) ||
-      (e.sdtm_label || '').toLowerCase().includes(q) ||
-      (e.raw_label || '').toLowerCase().includes(q)
+      Object.entries(_colFilters).every(([field, val]) =>
+        !val || (e[field] || '').toUpperCase() === val.toUpperCase()
+      )
     );
   }
+
+  function _hasActiveFilters() {
+    return Object.values(_colFilters).some(Boolean);
+  }
+
+  function _clearAllFilters() {
+    Object.keys(_colFilters).forEach(k => { _colFilters[k] = null; });
+    _currentPage = 1;
+    _renderTable();
+    _updateFilterIcons();
+  }
+
+  function _updateFilterIcons() {
+    Object.keys(_colFilters).forEach(field => {
+      const btn = document.querySelector(`.col-filter-btn[data-field="${field}"]`);
+      if (btn) btn.classList.toggle('col-filter-active', !!_colFilters[field]);
+    });
+  }
+
+  function _openColFilter(field, anchorEl) {
+    _closeColFilter();
+
+    const values = [...new Set(
+      _entries.map(e => (e[field] || '').trim()).filter(Boolean)
+    )].sort();
+
+    const current = _colFilters[field] || null;
+
+    const dropdown = document.createElement('div');
+    dropdown.className = 'col-filter-dropdown';
+    dropdown.id        = 'col-filter-dropdown';
+
+    // "All / Clear" button
+    const allBtn = document.createElement('button');
+    allBtn.className  = 'col-filter-item' + (!current ? ' col-filter-active' : '');
+    allBtn.textContent = current ? '✕  Clear filter' : '— All —';
+    allBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      _colFilters[field] = null;
+      _currentPage = 1;
+      _showAll = false;
+      _renderTable();
+      _updateFilterIcons();
+      _closeColFilter();
+    });
+    dropdown.appendChild(allBtn);
+
+    if (values.length) {
+      const sep = document.createElement('div');
+      sep.className = 'col-filter-sep';
+      dropdown.appendChild(sep);
+    }
+
+    values.forEach(v => {
+      const btn = document.createElement('button');
+      btn.className   = 'col-filter-item' + (current === v ? ' col-filter-active' : '');
+      btn.textContent = v;
+      btn.title       = v;
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        _colFilters[field] = v;
+        _currentPage = 1;
+        _showAll = false;
+        _renderTable();
+        _updateFilterIcons();
+        _closeColFilter();
+      });
+      dropdown.appendChild(btn);
+    });
+
+    // Position: fixed, under the button
+    const rect = anchorEl.getBoundingClientRect();
+    dropdown.style.cssText = `position:fixed;top:${rect.bottom + 2}px;left:${rect.left}px;z-index:9999;`;
+
+    document.body.appendChild(dropdown);
+
+    // Close on outside click
+    setTimeout(() => {
+      document.addEventListener('click', function outsideHandler(e) {
+        if (!dropdown.contains(e.target)) {
+          _closeColFilter();
+          document.removeEventListener('click', outsideHandler);
+        }
+      });
+    }, 0);
+  }
+
+  function _closeColFilter() {
+    const d = document.getElementById('col-filter-dropdown');
+    if (d) d.remove();
+  }
+
+  // ── Table Rendering ────────────────────────────────────────
 
   function _renderTable() {
     const tbody = document.getElementById('mdb-table-body');
     if (!tbody) return;
+
     const filtered = _getFiltered();
-    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-    if (_currentPage > totalPages) _currentPage = totalPages;
-    const start = (_currentPage - 1) * PAGE_SIZE;
-    const page = filtered.slice(start, start + PAGE_SIZE);
+    let page, start;
+
+    if (_showAll) {
+      page  = filtered;
+      start = 0;
+    } else {
+      const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+      if (_currentPage > totalPages) _currentPage = totalPages;
+      start = (_currentPage - 1) * PAGE_SIZE;
+      page  = filtered.slice(start, start + PAGE_SIZE);
+    }
 
     tbody.innerHTML = '';
+
     if (page.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:32px;">No entries found</td></tr>';
+      const msg = _hasActiveFilters()
+        ? 'No entries match the active filters — <span class="mdb-clear-link" id="mdb-clear-filters-link">Clear filters</span>'
+        : 'No entries found';
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:32px;">${msg}</td></tr>`;
+      if (_hasActiveFilters()) {
+        document.getElementById('mdb-clear-filters-link')?.addEventListener('click', _clearAllFilters);
+      }
       _updatePagination(0, 0, 0);
       return;
     }
 
     page.forEach((e, i) => {
-      const globalIdx = start + i;
+      const filteredIdx = start + i;
       const tr = document.createElement('tr');
-      tr.dataset.idx = globalIdx;
+      tr.dataset.idx = filteredIdx;
       tr.innerHTML = `
-        <td class="mdb-cell mdb-cell-num">${globalIdx + 1}</td>
+        <td class="mdb-cell mdb-cell-num">${filteredIdx + 1}</td>
         <td class="mdb-cell mdb-cell-edit" data-field="src_dataset">${_esc(e.src_dataset)}</td>
         <td class="mdb-cell mdb-cell-edit" data-field="raw_variable">${_esc(e.raw_variable)}</td>
         <td class="mdb-cell mdb-cell-edit" data-field="raw_label">${_esc(e.raw_label || '')}</td>
@@ -138,29 +241,37 @@ const Settings = (() => {
       tbody.appendChild(tr);
     });
 
-    _updatePagination(filtered.length, start + 1, Math.min(start + PAGE_SIZE, filtered.length));
+    _updatePagination(filtered.length, start + 1, start + page.length);
   }
 
   function _updatePagination(total, from, to) {
-    const info = document.getElementById('mdb-page-info');
+    const info     = document.getElementById('mdb-page-info');
+    const prevBtn  = document.getElementById('mdb-page-prev');
+    const nextBtn  = document.getElementById('mdb-page-next');
+    const showAllBtn = document.getElementById('mdb-show-all-btn');
+
     if (info) {
-      info.textContent = total === 0
-        ? 'No entries'
-        : `Showing ${from}–${to} of ${total} entries`;
+      info.textContent = total === 0 ? 'No entries' : `Showing ${from}–${to} of ${total}`;
     }
+
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-    const prevBtn = document.getElementById('mdb-page-prev');
-    const nextBtn = document.getElementById('mdb-page-next');
-    if (prevBtn) prevBtn.disabled = _currentPage <= 1;
-    if (nextBtn) nextBtn.disabled = _currentPage >= totalPages;
+    if (prevBtn) prevBtn.disabled = _showAll || _currentPage <= 1;
+    if (nextBtn) nextBtn.disabled = _showAll || _currentPage >= totalPages;
+
+    if (showAllBtn) {
+      if (total <= PAGE_SIZE) {
+        showAllBtn.style.display = 'none';
+      } else {
+        showAllBtn.style.display = '';
+        showAllBtn.textContent = _showAll ? 'Paginate' : `Show All (${total})`;
+      }
+    }
   }
 
   function _updateStats() {
     const el = document.getElementById('mdb-stats');
     if (!el) return;
     const domains = new Set(_entries.map(e => e.src_dataset).filter(Boolean));
-    let lastMod = '—';
-    // Try to read from file if no entries
     el.textContent = `${_entries.length} entries · ${domains.size} domains`;
     if (_dirty) el.textContent += ' · Unsaved changes';
   }
@@ -171,17 +282,17 @@ const Settings = (() => {
     const cell = e.target.closest('.mdb-cell-edit');
     if (!cell || cell.querySelector('input')) return;
 
-    const tr = cell.closest('tr');
-    const idx = parseInt(tr.dataset.idx, 10);
+    const tr    = cell.closest('tr');
+    const idx   = parseInt(tr.dataset.idx, 10);
     const field = cell.dataset.field;
     const entry = _getFilteredEntry(idx);
     if (!entry) return;
 
     const oldVal = entry[field] || '';
-    const input = document.createElement('input');
-    input.type = 'text';
+    const input  = document.createElement('input');
+    input.type      = 'text';
     input.className = 'mdb-inline-input';
-    input.value = oldVal;
+    input.value     = oldVal;
     cell.textContent = '';
     cell.appendChild(input);
     input.focus();
@@ -189,34 +300,30 @@ const Settings = (() => {
 
     function commit() {
       const newVal = input.value.trim();
-      cell.textContent = _esc(newVal);
+      cell.textContent = newVal;
       if (newVal !== oldVal) {
-        entry[field] = (field === 'sdtm_label' || field === 'raw_label')
-          ? newVal
-          : newVal.toUpperCase();
+        entry[field] = (field === 'sdtm_label' || field === 'raw_label') ? newVal : newVal.toUpperCase();
         _dirty = true;
         _updateStats();
       }
     }
 
     input.addEventListener('blur', commit);
-    input.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
+    input.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter')  { ev.preventDefault(); input.blur(); }
       if (ev.key === 'Escape') { input.value = oldVal; input.blur(); }
     });
   }
 
-  function _getFilteredEntry(globalIdx) {
-    const filtered = _getFiltered();
-    const entry = filtered[globalIdx];
-    return entry || null;
+  function _getFilteredEntry(filteredIdx) {
+    return _getFiltered()[filteredIdx] || null;
   }
 
   function _handleDeleteClick(e) {
     const btn = e.target.closest('.mdb-row-del');
     if (!btn) return;
-    const tr = btn.closest('tr');
-    const idx = parseInt(tr.dataset.idx, 10);
+    const tr    = btn.closest('tr');
+    const idx   = parseInt(tr.dataset.idx, 10);
     const entry = _getFilteredEntry(idx);
     if (!entry) return;
 
@@ -241,9 +348,9 @@ const Settings = (() => {
   function _showAddRecord() {
     const d = document.getElementById('mdb-add-dialog');
     if (!d) return;
-    d.classList.remove('hidden');
     ['add-src-ds', 'add-raw-var', 'add-raw-label', 'add-sdtm-ds', 'add-sdtm-var', 'add-sdtm-label']
       .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    d.classList.remove('hidden');
     document.getElementById('add-src-ds')?.focus();
   }
 
@@ -255,41 +362,31 @@ const Settings = (() => {
     const rawLbl  = (document.getElementById('add-raw-label')?.value || '').trim();
     const sdtmLbl = (document.getElementById('add-sdtm-label')?.value || '').trim();
 
-    if (!rawVar || !sdtmVar || !srcDs || !sdtmDs) {
+    if (!srcDs || !rawVar || !sdtmDs || !sdtmVar) {
       _showToast('Source Dataset, Raw Variable, SDTM Dataset, and SDTM Variable are required.', 'warning');
       return;
     }
-
-    const dup = _entries.find(e =>
-      e.src_dataset === srcDs && e.raw_variable === rawVar
-    );
-    if (dup) {
-      _showToast(`Duplicate: ${srcDs}.${rawVar} already exists in the table.`, 'warning');
+    if (_entries.find(e => e.src_dataset === srcDs && e.raw_variable === rawVar)) {
+      _showToast(`Duplicate: ${srcDs}.${rawVar} already exists.`, 'warning');
       return;
     }
 
     _entries.push({
-      id: _uid(),
-      src_dataset: srcDs,
-      raw_variable: rawVar,
-      raw_label: rawLbl,
-      sdtm_dataset: sdtmDs,
-      sdtm_variable: sdtmVar,
-      sdtm_label: sdtmLbl,
-      source: 'manual',
+      id: _uid(), src_dataset: srcDs, raw_variable: rawVar, raw_label: rawLbl,
+      sdtm_dataset: sdtmDs, sdtm_variable: sdtmVar, sdtm_label: sdtmLbl, source: 'manual',
     });
     _dirty = true;
     document.getElementById('mdb-add-dialog')?.classList.add('hidden');
+    _showAll = false;
     _currentPage = Math.ceil(_entries.length / PAGE_SIZE);
     _renderTable();
     _updateStats();
     _showToast('Record added.', 'success');
   }
 
-  // ── Import Wizard ──────────────────────────────────────────
+  // ── Import ─────────────────────────────────────────────────
 
   function _openImportDialog() {
-    // Show dialog immediately; user picks file via Browse button or pastes path
     ['imp-header-row', 'imp-data-start', 'imp-src-ds-col', 'imp-raw-var-col',
      'imp-raw-label-col', 'imp-sdtm-ds-col', 'imp-sdtm-var-col', 'imp-sdtm-label-col']
       .forEach(id => {
@@ -301,16 +398,12 @@ const Settings = (() => {
     document.getElementById('mdb-import-dialog').classList.remove('hidden');
   }
 
-  // _startImport is the toolbar "Import Excel" button — just opens the dialog
   function _startImport() { _openImportDialog(); }
 
   async function _browseExcel() {
     try {
       const res = await window.pywebview.api.select_excel_for_import();
-      if (!res.ok) {
-        _showToast('File picker error: ' + res.error, 'error');
-        return;
-      }
+      if (!res.ok) { _showToast('File picker: ' + res.error, 'error'); return; }
       const pathEl = document.getElementById('import-file-path');
       if (pathEl) pathEl.value = res.path;
     } catch (e) {
@@ -325,10 +418,7 @@ const Settings = (() => {
 
   async function _executeImport() {
     const path = (document.getElementById('import-file-path')?.value || '').trim();
-    if (!path) {
-      _showToast('Please select a file or paste a file path first.', 'warning');
-      return;
-    }
+    if (!path) { _showToast('Please select a file or paste a file path first.', 'warning'); return; }
 
     const srcDs  = _col('imp-src-ds-col');
     const rawVar = _col('imp-raw-var-col');
@@ -356,213 +446,76 @@ const Settings = (() => {
       document.getElementById('mdb-import-dialog').classList.add('hidden');
 
       if (_entries.length === 0) {
+        // Nothing existing — just load
         _entries = res.entries;
         _dirty = true;
+        _currentPage = 1;
         _renderTable();
         _updateStats();
         _showToast(`Imported ${res.count} entries.`, 'success');
       } else {
-        // There's existing data — go to merge flow
-        _startMerge(res.entries);
+        // Existing data — show simple two-option choice
+        _showImportChoice(res.entries);
       }
     } catch (e) {
       _showToast('Import error: ' + e, 'error');
     }
   }
 
-  // ── Merge ──────────────────────────────────────────────────
-
-  function _startMerge(incoming) {
-    _mergeIncoming = incoming;
-    _mergeConflicts = [];
-    _mergeAdded = [];
-    _mergeUnchanged = 0;
-
-    const existingKeys = new Set(
-      _entries.map(e => `${e.src_dataset}||${e.raw_variable}`)
-    );
-    const existingMap = {};
-    _entries.forEach(e => { existingMap[`${e.src_dataset}||${e.raw_variable}`] = e; });
-
-    incoming.forEach(inc => {
+  function _showImportChoice(incoming) {
+    const newOnly = incoming.filter(inc => {
       const key = `${inc.src_dataset}||${inc.raw_variable}`;
-      if (!existingKeys.has(key)) {
-        _mergeAdded.push(inc);
-      } else {
-        const existing = existingMap[key];
-        const changed = existing.sdtm_dataset !== inc.sdtm_dataset ||
-                        existing.sdtm_variable !== inc.sdtm_variable ||
-                        (existing.sdtm_label || '') !== (inc.sdtm_label || '');
-        if (changed) {
-          _mergeConflicts.push({ existing, incoming: inc, resolution: null });
-        } else {
-          _mergeUnchanged++;
-        }
-      }
+      return !_entries.some(e => `${e.src_dataset}||${e.raw_variable}` === key);
     });
+    const skipped = incoming.length - newOnly.length;
 
-    _currentConflictIdx = 0;
-    _renderMergeDialog();
-    document.getElementById('mdb-merge-dialog').classList.remove('hidden');
-  }
-
-  function _renderMergeDialog() {
-    document.getElementById('merge-stat-unchanged').textContent = _mergeUnchanged;
-    document.getElementById('merge-stat-added').textContent = _mergeAdded.length;
-    document.getElementById('merge-stat-conflicts').textContent = _mergeConflicts.length;
-
-    const container = document.getElementById('merge-conflicts-list');
-    container.innerHTML = '';
-
-    if (_mergeConflicts.length === 0) {
-      container.innerHTML = '<div style="color:var(--green);padding:12px;">No conflicts — all clear.</div>';
-      document.getElementById('merge-nav').classList.add('hidden');
-      return;
-    }
-
-    document.getElementById('merge-nav').classList.remove('hidden');
-
-    _mergeConflicts.forEach((c, i) => {
-      const div = document.createElement('div');
-      div.className = 'merge-conflict-item' + (i === _currentConflictIdx ? ' merge-conflict-active' : '');
-      div.id = `merge-conflict-${i}`;
-
-      const resolved = c.resolution !== null;
-      const resClass = resolved ? (c.resolution === 'keep' ? 'merge-resolved-keep' : 'merge-resolved-use') : '';
-
-      div.innerHTML = `
-        <div class="merge-conflict-header">
-          <span class="merge-conflict-key">${_esc(c.existing.src_dataset)}.${_esc(c.existing.raw_variable)}</span>
-          <span class="merge-conflict-num">${i + 1} / ${_mergeConflicts.length}</span>
-        </div>
-        <div class="merge-diff">
-          <div class="merge-diff-row merge-diff-old ${c.resolution === 'use' ? 'merge-dim' : ''}">
-            <span class="merge-diff-label">Current</span>
-            <span class="merge-diff-val">${_esc(c.existing.sdtm_dataset)}.${_esc(c.existing.sdtm_variable)}</span>
-            <span class="merge-diff-sublabel">${_esc(c.existing.sdtm_label || '—')}</span>
-          </div>
-          <div class="merge-diff-row merge-diff-new ${c.resolution === 'keep' ? 'merge-dim' : ''}">
-            <span class="merge-diff-label">Incoming</span>
-            <span class="merge-diff-val">${_esc(c.incoming.sdtm_dataset)}.${_esc(c.incoming.sdtm_variable)}</span>
-            <span class="merge-diff-sublabel">${_esc(c.incoming.sdtm_label || '—')}</span>
-          </div>
-        </div>
-        <div class="merge-conflict-actions">
-          <button class="btn merge-btn-keep ${c.resolution === 'keep' ? 'merge-btn-selected' : ''}" data-cidx="${i}" data-action="keep">Keep Current</button>
-          <button class="btn merge-btn-use ${c.resolution === 'use' ? 'merge-btn-selected' : ''}" data-cidx="${i}" data-action="use">Use Incoming</button>
-        </div>
-      `;
-      container.appendChild(div);
-    });
-
-    _scrollToConflict(_currentConflictIdx);
-    _updateMergeNav();
-  }
-
-  function _scrollToConflict(idx) {
-    const el = document.getElementById(`merge-conflict-${idx}`);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-
-  function _updateMergeNav() {
-    const label = document.getElementById('merge-nav-label');
-    if (label) {
-      label.textContent = `Conflict ${_currentConflictIdx + 1} of ${_mergeConflicts.length}`;
-    }
-  }
-
-  function _nextConflict() {
-    if (_mergeConflicts.length === 0) return;
-    _currentConflictIdx = (_currentConflictIdx + 1) % _mergeConflicts.length;
-    _highlightConflict();
-  }
-
-  function _prevConflict() {
-    if (_mergeConflicts.length === 0) return;
-    _currentConflictIdx = (_currentConflictIdx - 1 + _mergeConflicts.length) % _mergeConflicts.length;
-    _highlightConflict();
-  }
-
-  function _highlightConflict() {
-    document.querySelectorAll('.merge-conflict-item').forEach((el, i) => {
-      el.classList.toggle('merge-conflict-active', i === _currentConflictIdx);
-    });
-    _scrollToConflict(_currentConflictIdx);
-    _updateMergeNav();
-  }
-
-  function _handleMergeAction(e) {
-    const btn = e.target.closest('[data-cidx]');
-    if (!btn) return;
-    const idx = parseInt(btn.dataset.cidx, 10);
-    const action = btn.dataset.action;
-    _mergeConflicts[idx].resolution = action;
-    _renderMergeDialog();
-  }
-
-  function _applyMerge() {
-    const unresolved = _mergeConflicts.filter(c => c.resolution === null);
-    if (unresolved.length > 0) {
-      _showToast(`${unresolved.length} conflict(s) still unresolved. Please resolve all before applying.`, 'warning');
-      _currentConflictIdx = _mergeConflicts.indexOf(unresolved[0]);
-      _highlightConflict();
-      return;
-    }
-
-    // Apply added entries
-    _mergeAdded.forEach(e => {
-      e.id = _uid();
-      e.source = 'merge';
-      _entries.push(e);
-    });
-
-    // Apply conflict resolutions
-    _mergeConflicts.forEach(c => {
-      if (c.resolution === 'use') {
-        c.existing.sdtm_dataset = c.incoming.sdtm_dataset;
-        c.existing.sdtm_variable = c.incoming.sdtm_variable;
-        c.existing.sdtm_label = c.incoming.sdtm_label || '';
-        c.existing.raw_label = c.incoming.raw_label || c.existing.raw_label || '';
-      }
-    });
-
-    _dirty = true;
-    document.getElementById('mdb-merge-dialog').classList.add('hidden');
-    _renderTable();
-    _updateStats();
-    _showToast(`Merge complete: ${_mergeAdded.length} added, ${_mergeConflicts.length} resolved, ${_mergeUnchanged} unchanged.`, 'success');
+    _showConfirm(
+      'Entries Already Exist',
+      `You already have ${_entries.length} entries.\n\n` +
+      `Replace All — wipe the current table and load ${incoming.length} entries from the file.\n\n` +
+      `Add New Only — keep existing entries and append ${newOnly.length} new ones` +
+      (skipped > 0 ? ` (${skipped} duplicates skipped)` : '') + '.',
+      () => {
+        // Replace All
+        _entries = incoming;
+        _dirty = true;
+        _currentPage = 1;
+        _showAll = false;
+        _renderTable();
+        _updateStats();
+        _showToast(`Replaced with ${incoming.length} entries.`, 'success');
+      },
+      () => {
+        // Add New Only
+        newOnly.forEach(e => { e.id = _uid(); e.source = 'import'; _entries.push(e); });
+        _dirty = true;
+        _renderTable();
+        _updateStats();
+        _showToast(`Added ${newOnly.length} new entries${skipped > 0 ? ` (${skipped} duplicates skipped)` : ''}.`, 'success');
+      },
+      'Replace All',
+      'Add New Only'
+    );
   }
 
   // ── New From Scratch ───────────────────────────────────────
 
   function _newFromScratch() {
     if (_entries.length === 0) {
-      _entries = [];
-      _dirty = false;
-      _renderTable();
-      _updateStats();
+      _entries = []; _dirty = false; _renderTable(); _updateStats();
       return;
     }
-
     _showConfirm(
       'New Table from Scratch',
       'This will clear all current entries. Do you want to save the current table first?',
       () => {
-        // Save first, then clear
         _saveMtblThen(() => {
-          _entries = [];
-          _dirty = false;
-          _renderTable();
-          _updateStats();
+          _entries = []; _dirty = false; _renderTable(); _updateStats();
           _showToast('Table cleared. Start fresh.', 'success');
         });
       },
       () => {
-        // Discard and clear
-        _entries = [];
-        _dirty = false;
-        _renderTable();
-        _updateStats();
+        _entries = []; _dirty = false; _renderTable(); _updateStats();
         _showToast('Table cleared. Start fresh.', 'success');
       },
       'Save First',
@@ -571,29 +524,18 @@ const Settings = (() => {
   }
 
   async function _saveMtblThen(callback) {
-    const data = {
-      version: 1,
-      last_modified: new Date().toISOString(),
-      entry_count: _entries.length,
-      entries: _entries,
-    };
+    const data = { version: 1, last_modified: new Date().toISOString(), entry_count: _entries.length, entries: _entries };
     try {
       const res = await window.pywebview.api.save_mapping_file(data);
-      if (res.ok) {
-        _showToast('Saved to: ' + res.path, 'success');
-        if (callback) callback();
-      } else {
-        _showToast('Save cancelled or failed.', 'warning');
-      }
-    } catch (e) {
-      _showToast('Save error: ' + e, 'error');
-    }
+      if (res.ok) { _showToast('Saved to: ' + res.path, 'success'); if (callback) callback(); }
+      else _showToast('Save cancelled or failed.', 'warning');
+    } catch (e) { _showToast('Save error: ' + e, 'error'); }
   }
 
   // ── Export ─────────────────────────────────────────────────
 
   async function _exportExcel() {
-    if (_entries.length === 0) { _showToast('No entries to export.', 'warning'); return; }
+    if (!_entries.length) { _showToast('No entries to export.', 'warning'); return; }
     try {
       const res = await window.pywebview.api.export_mapping_excel(_entries);
       if (res.ok) _showToast('Exported to: ' + res.path, 'success');
@@ -602,7 +544,7 @@ const Settings = (() => {
   }
 
   async function _exportCSV() {
-    if (_entries.length === 0) { _showToast('No entries to export.', 'warning'); return; }
+    if (!_entries.length) { _showToast('No entries to export.', 'warning'); return; }
     try {
       const res = await window.pywebview.api.export_mapping_csv(_entries);
       if (res.ok) _showToast('Exported to: ' + res.path, 'success');
@@ -611,12 +553,7 @@ const Settings = (() => {
   }
 
   async function _saveMtbl() {
-    const data = {
-      version: 1,
-      last_modified: new Date().toISOString(),
-      entry_count: _entries.length,
-      entries: _entries,
-    };
+    const data = { version: 1, last_modified: new Date().toISOString(), entry_count: _entries.length, entries: _entries };
     try {
       const res = await window.pywebview.api.save_mapping_file(data);
       if (res.ok) _showToast('Saved to: ' + res.path, 'success');
@@ -626,12 +563,8 @@ const Settings = (() => {
 
   async function _loadMtbl() {
     if (_dirty) {
-      _showConfirm(
-        'Unsaved Changes',
-        'You have unsaved changes. Loading a file will discard them. Continue?',
-        () => _doLoadMtbl(),
-        null
-      );
+      _showConfirm('Unsaved Changes', 'You have unsaved changes. Loading will discard them. Continue?',
+        () => _doLoadMtbl(), null);
       return;
     }
     _doLoadMtbl();
@@ -645,6 +578,7 @@ const Settings = (() => {
         _entries = res.data.entries;
         _dirty = true;
         _currentPage = 1;
+        _showAll = false;
         _renderTable();
         _updateStats();
         _showToast(`Loaded ${_entries.length} entries from ${res.path}`, 'success');
@@ -655,29 +589,33 @@ const Settings = (() => {
   // ── Confirm Dialog ─────────────────────────────────────────
 
   function _showConfirm(title, message, onYes, onNo, yesLabel, noLabel) {
-    const d = document.getElementById('mdb-confirm-dialog');
-    document.getElementById('mdb-confirm-title').textContent = title;
-    document.getElementById('mdb-confirm-message').textContent = message;
+    const d      = document.getElementById('mdb-confirm-dialog');
+    const titleEl = document.getElementById('mdb-confirm-title');
+    const msgEl   = document.getElementById('mdb-confirm-message');
+    if (!d || !titleEl || !msgEl) return;
+
+    titleEl.textContent = title;
+    msgEl.textContent   = message;  // white-space:pre-wrap handles newlines
+
     const btnYes = document.getElementById('mdb-confirm-yes');
     const btnNo  = document.getElementById('mdb-confirm-no');
     btnYes.textContent = yesLabel || 'Yes';
-    btnNo.textContent  = noLabel || 'No';
+    btnNo.textContent  = noLabel  || 'No';
+
+    // Show/hide No button — if onNo is null and no label, just hide it
+    btnNo.style.display = (onNo !== null || noLabel) ? '' : 'none';
+
     d.classList.remove('hidden');
 
     function cleanup() {
       d.classList.add('hidden');
+      // Clone to wipe listeners, then re-grab references next call
       btnYes.replaceWith(btnYes.cloneNode(true));
       btnNo.replaceWith(btnNo.cloneNode(true));
     }
 
-    document.getElementById('mdb-confirm-yes').addEventListener('click', () => {
-      cleanup();
-      if (onYes) onYes();
-    });
-    document.getElementById('mdb-confirm-no').addEventListener('click', () => {
-      cleanup();
-      if (onNo) onNo();
-    });
+    document.getElementById('mdb-confirm-yes').addEventListener('click', () => { cleanup(); if (onYes) onYes(); });
+    document.getElementById('mdb-confirm-no').addEventListener('click',  () => { cleanup(); if (onNo)  onNo();  });
   }
 
   // ── Helpers ────────────────────────────────────────────────
@@ -688,16 +626,11 @@ const Settings = (() => {
     return d.innerHTML;
   }
 
-  function _uid() {
-    return Math.random().toString(36).substring(2, 10);
-  }
+  function _uid() { return Math.random().toString(36).substring(2, 10); }
 
   function _showToast(msg, type) {
-    if (typeof showToast === 'function') {
-      showToast(msg, type);
-    } else {
-      console.log(`[settings] ${type}: ${msg}`);
-    }
+    if (typeof showToast === 'function') showToast(msg, type);
+    else console.log(`[settings] ${type}: ${msg}`);
   }
 
   // ── Bindings ───────────────────────────────────────────────
@@ -706,21 +639,8 @@ const Settings = (() => {
     if (_initialized) return;
     _initialized = true;
 
-    // Back to editor
     document.getElementById('mdb-back-btn')?.addEventListener('click', hide);
-
-    // Save
     document.getElementById('mdb-save-btn')?.addEventListener('click', _saveDatabase);
-
-    // Search
-    const search = document.getElementById('mdb-search');
-    if (search) {
-      search.addEventListener('input', () => {
-        _searchTerm = search.value.trim();
-        _currentPage = 1;
-        _renderTable();
-      });
-    }
 
     // Pagination
     document.getElementById('mdb-page-prev')?.addEventListener('click', () => {
@@ -730,15 +650,27 @@ const Settings = (() => {
       _currentPage++;
       _renderTable();
     });
+    document.getElementById('mdb-show-all-btn')?.addEventListener('click', () => {
+      _showAll = !_showAll;
+      _renderTable();
+    });
 
     // Table click delegation
     const tbody = document.getElementById('mdb-table-body');
     if (tbody) {
-      tbody.addEventListener('click', (e) => {
+      tbody.addEventListener('click', e => {
         if (e.target.closest('.mdb-row-del')) { _handleDeleteClick(e); return; }
         _handleCellClick(e);
       });
     }
+
+    // Column filter buttons
+    document.querySelectorAll('.col-filter-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        _openColFilter(btn.dataset.field, btn);
+      });
+    });
 
     // Add record
     document.getElementById('mdb-add-btn')?.addEventListener('click', _showAddRecord);
@@ -755,15 +687,6 @@ const Settings = (() => {
     document.getElementById('import-cancel-btn')?.addEventListener('click', () => {
       document.getElementById('mdb-import-dialog')?.classList.add('hidden');
     });
-
-    // Merge dialog
-    document.getElementById('merge-apply-btn')?.addEventListener('click', _applyMerge);
-    document.getElementById('merge-cancel-btn')?.addEventListener('click', () => {
-      document.getElementById('mdb-merge-dialog')?.classList.add('hidden');
-    });
-    document.getElementById('merge-next-btn')?.addEventListener('click', _nextConflict);
-    document.getElementById('merge-prev-btn')?.addEventListener('click', _prevConflict);
-    document.getElementById('merge-conflicts-list')?.addEventListener('click', _handleMergeAction);
 
     // New from scratch
     document.getElementById('mdb-new-btn')?.addEventListener('click', _newFromScratch);
