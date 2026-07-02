@@ -228,7 +228,7 @@ const Sidebar = (() => {
 
       if (dropZone) dropZone.classList.remove('hidden');
       if (fileLoaded) fileLoaded.classList.add('hidden');
-      if (sessionInput) sessionInput.value = '';
+      if (sessionInput) { sessionInput.value = ''; sessionInput.readOnly = false; }
       if (navSession) navSession.textContent = 'No session';
       if (fileNameLabel) fileNameLabel.textContent = '—';
       if (filePagesLabel) filePagesLabel.textContent = '— pages';
@@ -1040,8 +1040,10 @@ async function _handleZoomChange(direction) {
     const annotationId = String(rec.annotation_id || '');
     const hasComment = !!(rec.comment && String(rec.comment).trim());
 
+    const isUserCreatedRow = String(annotationId).startsWith('user_');
     let statusCls = 'unmapped';
-    if (statusUpper === 'USER_CORRECTED') statusCls = 'resolved';
+    if (statusUpper === 'USER_CORRECTED' && isActive && isUserCreatedRow) statusCls = 'review';
+    else if (statusUpper === 'USER_CORRECTED') statusCls = 'resolved';
     else if (statusUpper === 'NEEDS_REVIEW') statusCls = 'review';
     else if (statusUpper === 'NOT_SUBMITTED') statusCls = isActive ? 'notsubmitted' : 'resolved';
 
@@ -1049,6 +1051,7 @@ async function _handleZoomChange(direction) {
     if (statusUpper === 'UNMAPPED') statusIcon = '<span style="color:#DC3545">&#9888;</span>';
     else if (statusUpper === 'NEEDS_REVIEW') statusIcon = '<span style="color:#FFC107">&#9210;</span>';
     else if (statusUpper === 'NOT_SUBMITTED' && isActive) statusIcon = '<span style="color:#6B7280">&#9210;</span>';
+    else if (statusUpper === 'USER_CORRECTED' && isActive && isUserCreatedRow) statusIcon = '<span style="color:#FFC107">&#9998;</span>';
     else if (statusUpper === 'USER_CORRECTED') statusIcon = '<span style="color:#00E676">&#10003;</span>';
     else if (statusUpper === 'NOT_SUBMITTED') statusIcon = '<span style="color:#888">&ndash;</span>';
 
@@ -1087,7 +1090,7 @@ async function _handleZoomChange(direction) {
     row.dataset.isDataset = rec.is_dataset_review ? 'true' : '';
 
     const commentBadgeHtml = (isActive && hasComment)
-      ? `<span class="qr-comment-badge">Comment</span>`
+      ? `<button class="qr-comment-btn" title="View comment">&#x1F4AC;</button>`
       : '';
     const commentBtnHtml = (hasComment && !isActive)
       ? `<button class="qr-comment-btn" title="View comment">&#x1F4AC;</button>`
@@ -1111,7 +1114,7 @@ async function _handleZoomChange(direction) {
       </div>
     `;
 
-    if (hasComment && !isActive) {
+    if (hasComment) {
       const commentBtn = row.querySelector('.qr-comment-btn');
       if (commentBtn) {
         commentBtn.addEventListener('click', (e) => {

@@ -2105,7 +2105,24 @@ function _persistDatasetChipVisualState(rec, box) {
     labelSpan.style.textOverflow = 'clip';
     labelSpan.style.pointerEvents = 'none';
     labelSpan.style.paddingBottom = "3px";
-    box.appendChild(labelSpan);""
+    box.appendChild(labelSpan);
+
+    // Comment callout icon
+    const hasComment = !!(rec.comment && String(rec.comment).trim());
+    if (hasComment) {
+      const commentIcon = document.createElement('span');
+      commentIcon.className = 'ann-comment-icon';
+      commentIcon.textContent = '💬';
+      commentIcon.title = 'View comment';
+      commentIcon.style.cssText = 'position:absolute;top:-6px;right:-6px;font-size:12px;cursor:pointer;pointer-events:all;z-index:12;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));';
+      commentIcon.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (typeof Sidebar !== 'undefined' && Sidebar.openCommentForAnnotation) {
+          Sidebar.openCommentForAnnotation(rec);
+        }
+      });
+      box.appendChild(commentIcon);
+    }
 
     const resizeHandle = document.createElement('div');
     resizeHandle.className = 'ann-resize-handle';

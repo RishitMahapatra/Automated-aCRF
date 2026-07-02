@@ -332,6 +332,13 @@ async function _restoreStateIfAny() {
     if (Store.pageCount > 0) {
       Store.pipelineRan = true;
 
+      const btnRun = document.getElementById('btn-run');
+      if (btnRun) {
+        btnRun.disabled = true;
+        btnRun.innerHTML = '<span class="btn-icon">✓</span> Pipeline Complete';
+        btnRun.title = 'Restart session to run again';
+      }
+
       if (typeof Sidebar !== 'undefined' && Sidebar.refreshStats) {
         await Sidebar.refreshStats();
       }
@@ -952,6 +959,18 @@ async function _doOpenSession() {
     if (typeof Sidebar !== 'undefined' && Sidebar.refreshUnmappedQueue) {
       await Sidebar.refreshUnmappedQueue();
     }
+
+    // Disable Run Pipeline — this is a loaded session, not a fresh PDF
+    const btnRun = document.getElementById('btn-run');
+    if (btnRun) {
+      btnRun.disabled = true;
+      btnRun.innerHTML = '<span class="btn-icon">✓</span> Pipeline Complete';
+      btnRun.title = 'Restart session to run again';
+    }
+
+    // Lock session input so the imported ID is preserved
+    const sessionInput2 = document.getElementById('session-input');
+    if (sessionInput2) sessionInput2.readOnly = true;
 
     _clearDirty();
     showToast('Session loaded: ' + (res.pdf_name || Store.sessionId), 'success');

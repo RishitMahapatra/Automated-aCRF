@@ -49,17 +49,24 @@ const EditPanel = (() => {
 
       Store.setSelectedAnnotation(rec);
 
+      const isUserCorrected = String(rec.status || '').toUpperCase() === 'USER_CORRECTED';
+      const isUserCreatedAnn = typeof Canvas !== 'undefined' && Canvas.isUserCreated && Canvas.isUserCreated(annotationId);
+      const hideSuggestions = isUserCorrected || isUserCreatedAnn;
+
       _showActivePanel();
       _populateRecord(rec);
       _clearManualFields();
-      _setSuggestionsVisible(true);
+      _setSuggestionsVisible(!hideSuggestions);
+      if (hideSuggestions) _clearSuggestions();
       _showVariableField(true);
       _setManualLabelsForVariableMode();
       _updatePrimaryActionLabels();
       _setManualOverrideEnabled(true);
       _setActionButtonsEnabled(true);
 
-      await _loadSuggestions(annotationId);
+      if (!hideSuggestions) {
+        await _loadSuggestions(annotationId);
+      }
 
       if (typeof Canvas !== 'undefined' && Canvas.highlightSelected) {
         Canvas.highlightSelected();
@@ -1099,14 +1106,19 @@ await _refreshAfterUpdate({
         _clearManualFields();
       }
 
-      _setSuggestionsVisible(true);
+      const freshStatus = String(freshRecord.status || '').toUpperCase();
+      const freshIsUserCreated = typeof Canvas !== 'undefined' && Canvas.isUserCreated && Canvas.isUserCreated(selectedId);
+      const hideSug = freshStatus === 'USER_CORRECTED' || freshIsUserCreated;
+
+      _setSuggestionsVisible(!hideSug);
+      if (hideSug) _clearSuggestions();
       _showVariableField(true);
       _setManualLabelsForVariableMode();
       _updatePrimaryActionLabels();
       _setManualOverrideEnabled(true);
       _setActionButtonsEnabled(true);
 
-      if (reloadSuggestions) {
+      if (reloadSuggestions && !hideSug) {
         await _loadSuggestions(selectedId);
       }
 
