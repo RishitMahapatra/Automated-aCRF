@@ -250,6 +250,13 @@ def open_session(acrf_path: str | Path) -> dict:
         session_dir = get_session_dir(session_id)
         components_dir = get_components_dir(session_id)
 
+        existing_ann = get_annotation_json_path(session_id)
+        if existing_ann.exists():
+            session_id = f"{session_id}_{uuid.uuid4().hex[:6]}"
+            meta["session_id"] = session_id
+            session_dir = get_session_dir(session_id)
+            components_dir = get_components_dir(session_id)
+
         if "source.pdf" in names:
             pdf_dest = session_dir / "source.pdf"
             pdf_dest.write_bytes(zf.read("source.pdf"))

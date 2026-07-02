@@ -9,6 +9,11 @@ const Settings = (() => {
   // ── State ──────────────────────────────────────────────────
   let _entries    = [];
   let _dirty      = false;
+
+  function _setDirty() {
+    _dirty = true;
+    if (typeof window._markSessionDirty === 'function') window._markSessionDirty();
+  }
   let _showAll    = false;
   let _currentPage = 1;
   let _initialized = false;
@@ -349,7 +354,7 @@ const Settings = (() => {
       cell.textContent = newVal;
       if (newVal !== oldVal) {
         entry[field] = (field === 'sdtm_label' || field === 'raw_label') ? newVal : newVal.toUpperCase();
-        _dirty = true;
+        _setDirty();
         _updateStats();
       }
     }
@@ -380,7 +385,7 @@ const Settings = (() => {
         const realIdx = _entries.indexOf(entry);
         if (realIdx !== -1) {
           _entries.splice(realIdx, 1);
-          _dirty = true;
+          _setDirty();
           _renderTable();
           _updateStats();
         }
@@ -421,7 +426,7 @@ const Settings = (() => {
       id: _uid(), src_dataset: srcDs, raw_variable: rawVar, raw_label: rawLbl,
       sdtm_dataset: sdtmDs, sdtm_variable: sdtmVar, sdtm_label: sdtmLbl, source: 'manual',
     });
-    _dirty = true;
+    _setDirty();
     document.getElementById('mdb-add-dialog')?.classList.add('hidden');
     _showAll = false;
     _currentPage = Math.ceil(_entries.length / PAGE_SIZE);
@@ -494,7 +499,7 @@ const Settings = (() => {
       if (_entries.length === 0) {
         // Nothing existing — just load
         _entries = res.entries;
-        _dirty = true;
+        _setDirty();
         _currentPage = 1;
         _renderTable();
         _updateStats();
@@ -517,7 +522,7 @@ const Settings = (() => {
 
     _importChoiceCallbacks.addNew = () => {
       newOnly.forEach(e => { e.id = _uid(); e.source = 'import'; _entries.push(e); });
-      _dirty = true;
+      _setDirty();
       _renderTable();
       _updateStats();
       _showToast(`Added ${newOnly.length} new entries${skipped > 0 ? ` (${skipped} skipped)` : ''}.`, 'success');
@@ -530,7 +535,7 @@ const Settings = (() => {
         'Replace All',
         () => {
           _entries = incoming;
-          _dirty = true;
+          _setDirty();
           _currentPage = 1;
           _showAll = false;
           _renderTable();
@@ -672,7 +677,7 @@ const Settings = (() => {
       if (!res.ok) return;
       if (res.data && res.data.entries) {
         _entries = res.data.entries;
-        _dirty = true;
+        _setDirty();
         _currentPage = 1;
         _showAll = false;
         _renderTable();
@@ -825,5 +830,7 @@ const Settings = (() => {
     document.getElementById('mdb-load-mtbl')?.addEventListener('click', _loadMtbl);
   }
 
-  return { init, show, hide };
+  function isDirty() { return _dirty; }
+
+  return { init, show, hide, isDirty };
 })();

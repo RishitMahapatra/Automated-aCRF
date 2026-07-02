@@ -24,7 +24,7 @@ function _clearDirty() {
 
 window._markSessionDirty  = _markDirty;
 window._clearSessionDirty = _clearDirty;
-window._isSessionDirty    = () => _dirty;
+window._isSessionDirty    = () => _dirty || (typeof Settings !== 'undefined' && Settings.isDirty && Settings.isDirty());
 
 const EDIT_PANEL_MIN_WIDTH = 200;
 const EDIT_PANEL_MAX_WIDTH = 560;
@@ -797,32 +797,48 @@ function _bindCloseConfirmDialog() {
   const overlay = document.getElementById('close-confirm-overlay');
   if (!overlay) return;
 
-  document.getElementById('close-save-yes')?.addEventListener('click', async () => {
-    // If there's no session to save, just close (nothing to lose)
+  const btnYes = document.getElementById('close-save-yes');
+  const btnSkip = document.getElementById('close-save-skip');
+  const btnCancel = document.getElementById('close-save-cancel');
+  const allBtns = [btnYes, btnSkip, btnCancel].filter(Boolean);
+
+  function _disableAll() { allBtns.forEach(b => b.disabled = true); }
+  function _enableAll()  { allBtns.forEach(b => b.disabled = false); }
+
+  btnYes?.addEventListener('click', async () => {
     if (!Store.pdfLoaded || !Store.sessionId) {
       overlay.classList.add('hidden');
       _clearDirty();
       await window.pywebview?.api?.confirm_close?.();
       return;
     }
-    overlay.classList.add('hidden');
-    const saved = await _doSaveSession();
-    if (saved === false) {
-      // User cancelled the file picker — re-show so they can choose Discard or try again
-      overlay.classList.remove('hidden');
-      return;
+    _disableAll();
+    try {
+      overlay.classList.add('hidden');
+      const saved = await _doSaveSession();
+      if (saved === false) {
+        overlay.classList.remove('hidden');
+        return;
+      }
+      _clearDirty();
+      await window.pywebview?.api?.confirm_close?.();
+    } finally {
+      _enableAll();
     }
-    _clearDirty();
-    await window.pywebview?.api?.confirm_close?.();
   });
 
-  document.getElementById('close-save-skip')?.addEventListener('click', async () => {
-    overlay.classList.add('hidden');
-    _clearDirty();
-    await window.pywebview?.api?.confirm_close?.();
+  btnSkip?.addEventListener('click', async () => {
+    _disableAll();
+    try {
+      overlay.classList.add('hidden');
+      _clearDirty();
+      await window.pywebview?.api?.confirm_close?.();
+    } finally {
+      _enableAll();
+    }
   });
 
-  document.getElementById('close-save-cancel')?.addEventListener('click', () => {
+  btnCancel?.addEventListener('click', () => {
     overlay.classList.add('hidden');
   });
 }

@@ -10,6 +10,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 import shutil
 import traceback
 import uuid
@@ -28,6 +29,12 @@ from bridge import annotation_bridge
 from bridge import editor_state_bridge
 from bridge import session_bridge
 from bridge.export_bridge import ExportBridge
+
+
+def _sanitize_session_id(raw: str) -> str:
+    s = re.sub(r'[^A-Za-z0-9_\-.]', '_', raw.strip())
+    s = re.sub(r'_+', '_', s).strip('_')
+    return s or 'session'
 
 
 class Api:
@@ -110,7 +117,7 @@ class Api:
                 path = Path(result[0])
                 if path.exists() and path.suffix.lower() == ".pdf":
                     self._pdf_path = path
-                    base = path.stem.strip().replace(" ", "_")
+                    base = _sanitize_session_id(path.stem)
                     suffix = uuid.uuid4().hex[:8]
                     self._session_id = f"{base}_{suffix}"
                     self._export.set_pdf(path)
@@ -139,7 +146,7 @@ class Api:
     # ==========================================================================
 
     def set_session_id(self, session_id):
-        self._session_id = str(session_id or "").strip().replace(" ", "_")
+        self._session_id = _sanitize_session_id(str(session_id or ""))
         return {"ok": True, "session_id": self._session_id}
 
     def get_state(self):
@@ -243,15 +250,6 @@ class Api:
                 int(page_number),
             )
             return {"ok": True, "records": records}
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
-
-    def get_annotation(self, annotation_id):
-        try:
-            rec = annotation_bridge.get_annotation(self._session_id, annotation_id)
-            if rec:
-                return {"ok": True, "record": rec}
-            return {"ok": False, "error": "Not found"}
         except Exception as e:
             return {"ok": False, "error": str(e)}
 

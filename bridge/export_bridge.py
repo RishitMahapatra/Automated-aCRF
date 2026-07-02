@@ -12,13 +12,22 @@ class ExportBridge:
     def __init__(self):
         self._pdf_path: Path | None = None
         self._page_count: int = 0
+        self._doc: fitz.Document | None = None
 
     def set_pdf(self, pdf_path: Path):
+        if self._doc:
+            try:
+                self._doc.close()
+            except Exception:
+                pass
+            self._doc = None
+
         self._pdf_path = Path(pdf_path)
         try:
-            with fitz.open(self._pdf_path) as doc:
-                self._page_count = len(doc)
+            self._doc = fitz.open(self._pdf_path)
+            self._page_count = len(self._doc)
         except Exception:
+            self._doc = None
             self._page_count = 0
 
     def get_page_count(self):
@@ -26,33 +35,32 @@ class ExportBridge:
 
     def render_page_base64(self, page_number: int, dpi: int = 150):
         try:
-            if not self._pdf_path:
+            if not self._pdf_path or not self._doc:
                 return {"ok": False, "error": "No PDF loaded"}
 
-            with fitz.open(self._pdf_path) as doc:
-                if page_number < 1 or page_number > len(doc):
-                    return {"ok": False, "error": "Invalid page number"}
+            if page_number < 1 or page_number > self._page_count:
+                return {"ok": False, "error": "Invalid page number"}
 
-                page = doc[page_number - 1]
-                scale = dpi / 72.0
-                matrix = fitz.Matrix(scale, scale)
-                pix = page.get_pixmap(matrix=matrix, alpha=False)
+            page = self._doc[page_number - 1]
+            scale = dpi / 72.0
+            matrix = fitz.Matrix(scale, scale)
+            pix = page.get_pixmap(matrix=matrix, alpha=False)
 
-                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                buf = io.BytesIO()
-                img.save(buf, format="PNG")
-                b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
 
-                rect = page.rect
-                return {
-                    "ok": True,
-                    "page_number": page_number,
-                    "image": f"data:image/png;base64,{b64}",
-                    "page_width_pts": rect.width,
-                    "page_height_pts": rect.height,
-                    "width": pix.width,
-                    "height": pix.height,
-                }
+            rect = page.rect
+            return {
+                "ok": True,
+                "page_number": page_number,
+                "image": f"data:image/png;base64,{b64}",
+                "page_width_pts": rect.width,
+                "page_height_pts": rect.height,
+                "width": pix.width,
+                "height": pix.height,
+            }
 
         except Exception as e:
             return {"ok": False, "error": str(e)}

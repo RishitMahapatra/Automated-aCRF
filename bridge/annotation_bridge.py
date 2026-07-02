@@ -35,8 +35,20 @@ def _save_records(session_id: str, records: list[dict]) -> None:
     json_path = get_annotation_json_path(session_id)
     json_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(json_path, "w", encoding="utf-8") as f:
+    tmp_path = json_path.with_suffix(".tmp")
+    bak_path = json_path.with_suffix(".bak")
+
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(records, f, indent=2, ensure_ascii=False)
+        f.flush()
+
+    if json_path.exists():
+        try:
+            json_path.replace(bak_path)
+        except OSError:
+            pass
+
+    tmp_path.replace(json_path)
 
 
 def _normalise_record(rec: dict) -> dict:
@@ -252,10 +264,19 @@ def get_stats(session_id: str) -> dict:
 # SUGGESTIONS
 # =============================================================================
 
+_cached_engine = None
+
+def _get_engine():
+    global _cached_engine
+    if _cached_engine is None:
+        from editor.confidence_engine import ConfidenceEngine
+        from config import EXCEL_PATH
+        _cached_engine = ConfidenceEngine()
+        _cached_engine.build_from_excel(EXCEL_PATH)
+    return _cached_engine
+
+
 def get_suggestions(session_id: str, annotation_id: str) -> list[dict]:
-    """
-    Get TF-IDF suggestions for a single annotation.
-    """
     import re
 
     rec = get_annotation(session_id, annotation_id)
@@ -267,11 +288,7 @@ def get_suggestions(session_id: str, annotation_id: str) -> list[dict]:
         return []
 
     try:
-        from editor.confidence_engine import ConfidenceEngine
-        from config import EXCEL_PATH
-
-        engine = ConfidenceEngine()
-        engine.build_from_excel(EXCEL_PATH)
+        engine = _get_engine()
 
         form_code = str(rec.get("form_code") or "").strip().upper()
         domain_hint = re.sub(r"\d+$", "", form_code)

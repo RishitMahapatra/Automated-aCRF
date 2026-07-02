@@ -65,13 +65,15 @@ def run_full_pipeline(pdf_path: str | Path, session_id: str) -> dict:
 
         # Step 2 — Annotate PDF
         annotator_ok = True
+        annotator_error = ""
         try:
             run_annotator(pdf_path=pdf_path, session_id=session_id)
         except Exception as e:
             annotator_ok = False
+            annotator_error = str(e)
             print(f"[pipeline_bridge] Annotator warning: {e}")
 
-        return {
+        result_dict = {
             "ok": True,
             "resolved": resolved,
             "unresolved": unresolved,
@@ -80,6 +82,9 @@ def run_full_pipeline(pdf_path: str | Path, session_id: str) -> dict:
             "annotator_ok": annotator_ok,
             "json_path": str(json_path),
         }
+        if not annotator_ok:
+            result_dict["warning"] = f"Annotator failed: {annotator_error}"
+        return result_dict
 
     except Exception as e:
         return {
@@ -89,25 +94,30 @@ def run_full_pipeline(pdf_path: str | Path, session_id: str) -> dict:
         }
 
 
+_cached_engine = None
+
+def _get_engine():
+    global _cached_engine
+    if _cached_engine is None:
+        from editor.confidence_engine import ConfidenceEngine
+        from config import EXCEL_PATH
+        _cached_engine = ConfidenceEngine()
+        _cached_engine.build_from_excel(EXCEL_PATH)
+    return _cached_engine
+
+
 def get_suggestions(
     raw_variable: str,
     domain_hint: str | None = None,
     top_n: int = 4,
     min_score: float = 0.10,
 ) -> list[dict]:
-    """
-    Return TF-IDF suggestions for a raw variable.
-    """
     raw_variable = (raw_variable or "").strip()
     if not raw_variable:
         return []
 
     try:
-        from editor.confidence_engine import ConfidenceEngine
-        from config import EXCEL_PATH
-
-        engine = ConfidenceEngine()
-        engine.build_from_excel(EXCEL_PATH)
+        engine = _get_engine()
 
         candidates = engine.get_candidates(
             raw_variable=raw_variable,

@@ -56,6 +56,7 @@ const Store = {
     this.pdfLoaded = false;
     this.pdfName = "";
     this.pdfPath = "";
+    this.zoomPct = 50;
 
     this.pipelineRan = false;
     this.pageCount = 0;

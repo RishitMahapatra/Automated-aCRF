@@ -271,8 +271,24 @@ const Sidebar = (() => {
 
   function _resetUiToInitialState() {
     Store.resetSession();
+
+    const dropZone = document.getElementById('drop-zone');
+    const fileLoaded = document.getElementById('file-loaded');
+    const sessionInput = document.getElementById('session-input');
+    const navSession = document.getElementById('nav-session');
+    const fileNameLabel = document.getElementById('file-name-label');
+    const filePagesLabel = document.getElementById('file-pages-label');
     const pageDisplaySticky = document.getElementById('page-display-sticky');
     const navPageCount = document.getElementById('nav-page-count');
+    const toolbarFormCode = document.getElementById('toolbar-form-code');
+    const toolbarDpi = document.getElementById('toolbar-dpi');
+    const toolbarZoom = document.getElementById('toolbar-zoom');
+    const navPageType = document.getElementById('nav-page-type');
+    const pdfImg = document.getElementById('pdf-img');
+    const annotationLayer = document.getElementById('annotation-layer');
+    const tableBanner = document.getElementById('table-banner');
+    const pageButtonsGrid = document.getElementById('page-buttons-grid');
+    const commentsBox = document.getElementById('analysis-comments');
 
     if (dropZone) dropZone.classList.remove('hidden');
     if (fileLoaded) fileLoaded.classList.add('hidden');
@@ -283,7 +299,6 @@ const Sidebar = (() => {
     if (fileNameLabel) fileNameLabel.textContent = '—';
     if (filePagesLabel) filePagesLabel.textContent = '— pages';
 
-    
     if (pageDisplaySticky) pageDisplaySticky.textContent = '— / —';
     if (navPageCount) navPageCount.textContent = '— / —';
 
@@ -302,21 +317,10 @@ const Sidebar = (() => {
       pdfImg.src = '';
     }
 
-    if (annotationLayer) {
-      annotationLayer.innerHTML = '';
-    }
-
-    if (tableBanner) {
-      tableBanner.classList.add('hidden');
-    }
-
-    if (pageButtonsGrid) {
-      pageButtonsGrid.innerHTML = '';
-    }
-
-    if (commentsBox) {
-      commentsBox.value = '';
-    }
+    if (annotationLayer) annotationLayer.innerHTML = '';
+    if (tableBanner) tableBanner.classList.add('hidden');
+    if (pageButtonsGrid) pageButtonsGrid.innerHTML = '';
+    if (commentsBox) commentsBox.value = '';
 
     _resetPipelineSteps();
     _resetStatsDisplay();
