@@ -1501,8 +1501,37 @@ async function _handleZoomChange(direction) {
       return;
     }
 
-    // NEEDS_REVIEW or UNMAPPED: change status to USER_CORRECTED
     const isUserCreatedRec = annotationId.startsWith('user_');
+    const userHasMapping = !!(rec.sdtm_dataset && rec.sdtm_variable);
+
+    if (statusUpper === 'UNMAPPED' && !userHasMapping) {
+      if (typeof Canvas !== 'undefined' && Canvas.pushUndoAction) {
+        Canvas.pushUndoAction({
+          type: 'status-change',
+          id: annotationId,
+          beforeStatus: rec.status || '',
+          beforeDataset: rec.sdtm_dataset || '',
+          beforeVariable: rec.sdtm_variable || '',
+          beforeLabel: rec.sdtm_label || '',
+          afterStatus: 'REMOVED',
+          afterDataset: '',
+          afterVariable: '',
+          afterLabel: '',
+          isUserCreated: isUserCreatedRec,
+        });
+      }
+      if (isUserCreatedRec) {
+        if (typeof Canvas !== 'undefined' && Canvas.updateUserAnnotation) {
+          Canvas.updateUserAnnotation(annotationId, { status: 'REMOVED', sdtm_dataset: '', sdtm_variable: '', sdtm_label: '' });
+        }
+      } else {
+        await window.pywebview.api.update_annotation(annotationId, 'REMOVED', '', '', '');
+      }
+      await _refreshAll();
+      return;
+    }
+
+    // NEEDS_REVIEW or user-mapped UNMAPPED: confirm as USER_CORRECTED
     const dataset = rec.sdtm_dataset || rec.best_sdtm_dataset || '';
     const variable = rec.sdtm_variable || rec.best_sdtm_variable || '';
     const label = rec.sdtm_label || '';
