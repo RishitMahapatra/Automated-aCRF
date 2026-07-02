@@ -19,9 +19,10 @@ from pathlib import Path
 import openpyxl
 import webview
 
-from config import ROOT_DIR, OUTPUTS_DIR, EXCEL_PATH, get_session_output_dir
+from config import ROOT_DIR, OUTPUTS_DIR, EXCEL_PATH, get_session_output_dir, get_annotation_json_path
 
 MAPPING_DB_PATH = ROOT_DIR / "assets" / "mapping_database.json"
+_LAST_SESSION_PATH = OUTPUTS_DIR / ".last_session.json"
 from bridge.pipeline_bridge import PipelineBridge, run_full_pipeline
 from bridge import annotation_bridge
 from bridge import editor_state_bridge
@@ -40,6 +41,55 @@ class Api:
         self._pipeline = PipelineBridge()
         self._export = ExportBridge()
         self._is_dirty: bool = False  # mirrored from JS; read by on_closing without evaluate_js
+        self._restore_last_session()
+
+    # ==========================================================================
+    # LAST-SESSION PERSISTENCE
+    # ==========================================================================
+
+    def _restore_last_session(self):
+        try:
+            if not _LAST_SESSION_PATH.exists():
+                return
+            data = json.loads(_LAST_SESSION_PATH.read_text(encoding="utf-8"))
+            pdf_path = Path(data.get("pdf_path", ""))
+            session_id = data.get("session_id", "")
+            acrf_path = data.get("acrf_path")
+            if not pdf_path.exists() or not session_id:
+                return
+            ann_path = get_annotation_json_path(session_id)
+            if not ann_path.exists():
+                return
+            self._pdf_path = pdf_path
+            self._session_id = session_id
+            self._acrf_path = Path(acrf_path) if acrf_path else None
+            self._export.set_pdf(pdf_path)
+            print(f"[api] Restored last session: {session_id}")
+        except Exception as e:
+            print(f"[api] Could not restore last session: {e}")
+
+    def _save_last_session(self):
+        try:
+            if not self._pdf_path or not self._session_id:
+                return
+            OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+            data = {
+                "pdf_path": str(self._pdf_path),
+                "session_id": self._session_id,
+                "acrf_path": str(self._acrf_path) if self._acrf_path else None,
+            }
+            _LAST_SESSION_PATH.write_text(
+                json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+        except Exception as e:
+            print(f"[api] Could not save last session: {e}")
+
+    def _clear_last_session(self):
+        try:
+            if _LAST_SESSION_PATH.exists():
+                _LAST_SESSION_PATH.unlink()
+        except Exception:
+            pass
 
     # ==========================================================================
     # FILE UPLOAD
@@ -64,6 +114,7 @@ class Api:
                     suffix = uuid.uuid4().hex[:8]
                     self._session_id = f"{base}_{suffix}"
                     self._export.set_pdf(path)
+                    self._save_last_session()
 
                     return {
                         "ok": True,
@@ -112,6 +163,7 @@ class Api:
             self._acrf_path = None
             self._is_dirty = False
             self._export = ExportBridge()
+            self._clear_last_session()
             return {"ok": True}
         except Exception as e:
             return {"ok": False, "error": str(e)}
@@ -146,6 +198,7 @@ class Api:
 
             if result.get("ok"):
                 self._export.set_pdf(self._pdf_path)
+                self._save_last_session()
 
             return result
 
@@ -553,6 +606,7 @@ class Api:
 
             if result.get("ok"):
                 self._acrf_path = out_path
+                self._save_last_session()
 
             return result
 
@@ -639,6 +693,7 @@ class Api:
             self._pdf_path = Path(load_result["pdf_path"])
             self._acrf_path = acrf_path
             self._export.set_pdf(self._pdf_path)
+            self._save_last_session()
 
             return load_result
 

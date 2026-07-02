@@ -339,8 +339,15 @@ async function _restoreStateIfAny() {
         btnRun.title = 'Restart session to run again';
       }
 
+      const sessionInputRestore = document.getElementById('session-input');
+      if (sessionInputRestore) sessionInputRestore.readOnly = true;
+
       if (typeof Sidebar !== 'undefined' && Sidebar.refreshStats) {
         await Sidebar.refreshStats();
+      }
+
+      if (typeof Sidebar !== 'undefined' && Sidebar.refreshUnmappedQueue) {
+        await Sidebar.refreshUnmappedQueue();
       }
 
       if (typeof Canvas !== 'undefined' && Canvas.loadPage) {
