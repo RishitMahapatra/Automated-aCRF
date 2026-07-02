@@ -4847,15 +4847,41 @@ body.theme-light .nav-mapdb-btn {
 .col-filter-btn.col-filter-active { color: var(--violet); }
 
 .col-filter-dropdown {
-  min-width: 140px;
-  max-width: 240px;
-  max-height: 280px;
-  overflow-y: auto;
+  min-width: 180px;
+  max-width: 260px;
+  max-height: 320px;
+  display: flex;
+  flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: 0 8px 24px rgba(0,0,0,0.35);
   padding: 4px 0;
+}
+
+.col-filter-search {
+  margin: 4px 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--bright);
+  font: 12px var(--font-ui);
+  outline: none;
+}
+.col-filter-search:focus { border-color: var(--violet); }
+.col-filter-search::placeholder { color: var(--muted); }
+
+.col-filter-list {
+  overflow-y: auto;
+  max-height: 220px;
+}
+
+.col-filter-no-match {
+  padding: 10px 12px;
+  color: var(--muted);
+  font: 12px var(--font-ui);
+  text-align: center;
 }
 
 .col-filter-item {

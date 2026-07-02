@@ -131,7 +131,7 @@ const Settings = (() => {
   function _openColFilter(field, anchorEl) {
     _closeColFilter();
 
-    const values = [...new Set(
+    const allValues = [...new Set(
       _entries.map(e => (e[field] || '').trim()).filter(Boolean)
     )].sort();
 
@@ -140,6 +140,18 @@ const Settings = (() => {
     const dropdown = document.createElement('div');
     dropdown.className = 'col-filter-dropdown';
     dropdown.id        = 'col-filter-dropdown';
+
+    // Search box
+    const searchInput = document.createElement('input');
+    searchInput.type        = 'text';
+    searchInput.className   = 'col-filter-search';
+    searchInput.placeholder = 'Search…';
+    searchInput.addEventListener('click', e => e.stopPropagation());
+    dropdown.appendChild(searchInput);
+
+    const sep1 = document.createElement('div');
+    sep1.className = 'col-filter-sep';
+    dropdown.appendChild(sep1);
 
     // "All / Clear" button
     const allBtn = document.createElement('button');
@@ -156,34 +168,56 @@ const Settings = (() => {
     });
     dropdown.appendChild(allBtn);
 
-    if (values.length) {
-      const sep = document.createElement('div');
-      sep.className = 'col-filter-sep';
-      dropdown.appendChild(sep);
+    // Value list container
+    const listWrap = document.createElement('div');
+    listWrap.className = 'col-filter-list';
+    dropdown.appendChild(listWrap);
+
+    function renderValues(filter) {
+      listWrap.innerHTML = '';
+      const q = (filter || '').toUpperCase();
+      const filtered = q ? allValues.filter(v => v.toUpperCase().includes(q)) : allValues;
+
+      if (filtered.length && allValues.length) {
+        const sep = document.createElement('div');
+        sep.className = 'col-filter-sep';
+        listWrap.appendChild(sep);
+      }
+
+      filtered.forEach(v => {
+        const btn = document.createElement('button');
+        btn.className   = 'col-filter-item' + (current === v ? ' col-filter-active' : '');
+        btn.textContent = v;
+        btn.title       = v;
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          _colFilters[field] = v;
+          _currentPage = 1;
+          _showAll = false;
+          _renderTable();
+          _updateFilterIcons();
+          _closeColFilter();
+        });
+        listWrap.appendChild(btn);
+      });
+
+      if (filtered.length === 0) {
+        const noMatch = document.createElement('div');
+        noMatch.className = 'col-filter-no-match';
+        noMatch.textContent = 'No matches';
+        listWrap.appendChild(noMatch);
+      }
     }
 
-    values.forEach(v => {
-      const btn = document.createElement('button');
-      btn.className   = 'col-filter-item' + (current === v ? ' col-filter-active' : '');
-      btn.textContent = v;
-      btn.title       = v;
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        _colFilters[field] = v;
-        _currentPage = 1;
-        _showAll = false;
-        _renderTable();
-        _updateFilterIcons();
-        _closeColFilter();
-      });
-      dropdown.appendChild(btn);
-    });
+    renderValues('');
+    searchInput.addEventListener('input', () => renderValues(searchInput.value.trim()));
 
     // Position: fixed, under the button
     const rect = anchorEl.getBoundingClientRect();
     dropdown.style.cssText = `position:fixed;top:${rect.bottom + 2}px;left:${rect.left}px;z-index:9999;`;
 
     document.body.appendChild(dropdown);
+    setTimeout(() => searchInput.focus(), 30);
 
     // Close on outside click
     setTimeout(() => {
@@ -743,7 +777,6 @@ const Settings = (() => {
 
     // Import
     document.getElementById('mdb-import-btn')?.addEventListener('click', _startImport);
-    document.getElementById('mdb-merge-btn')?.addEventListener('click', _startImport);
     document.getElementById('import-browse-btn')?.addEventListener('click', _browseExcel);
     document.getElementById('import-execute-btn')?.addEventListener('click', _executeImport);
     document.getElementById('import-cancel-btn')?.addEventListener('click', () => {
