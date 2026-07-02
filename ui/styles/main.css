@@ -4991,15 +4991,10 @@ body.theme-light .nav-export-btn:hover {
   gap: 8px;
   margin-bottom: 16px;
 }
-.import-label {
-  font: 600 12px var(--font-ui);
-  color: var(--muted);
-}
-.import-file-path {
-  font: 12px var(--font-mono);
-  color: var(--blue);
-  overflow: hidden;
-  text-overflow: ellipsis;
+.import-path-input {
+  flex: 1;
+  font: 12px var(--font-mono) !important;
+  min-width: 0;
 }
 
 .import-config-grid {

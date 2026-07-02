@@ -288,45 +288,67 @@ const Settings = (() => {
 
   // ── Import Wizard ──────────────────────────────────────────
 
-  async function _startImport() {
+  function _openImportDialog() {
+    // Show dialog immediately; user picks file via Browse button or pastes path
+    ['imp-header-row', 'imp-data-start', 'imp-src-ds-col', 'imp-raw-var-col',
+     'imp-raw-label-col', 'imp-sdtm-ds-col', 'imp-sdtm-var-col', 'imp-sdtm-label-col']
+      .forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = el.dataset.default || '';
+      });
+    const pathEl = document.getElementById('import-file-path');
+    if (pathEl) pathEl.value = '';
+    document.getElementById('mdb-import-dialog').classList.remove('hidden');
+  }
+
+  // _startImport is the toolbar "Import Excel" button — just opens the dialog
+  function _startImport() { _openImportDialog(); }
+
+  async function _browseExcel() {
     try {
       const res = await window.pywebview.api.select_excel_for_import();
-      if (!res.ok) return;
-      document.getElementById('import-file-path').textContent = res.path;
-      document.getElementById('import-file-path').dataset.path = res.path;
-      document.getElementById('mdb-import-dialog').classList.remove('hidden');
-      // Reset config fields
-      ['imp-header-row', 'imp-data-start', 'imp-src-ds-col', 'imp-raw-var-col',
-       'imp-raw-label-col', 'imp-sdtm-ds-col', 'imp-sdtm-var-col', 'imp-sdtm-label-col']
-        .forEach(id => {
-          const el = document.getElementById(id);
-          if (el) el.value = el.dataset.default || '';
-        });
+      if (!res.ok) {
+        _showToast('File picker error: ' + res.error, 'error');
+        return;
+      }
+      const pathEl = document.getElementById('import-file-path');
+      if (pathEl) pathEl.value = res.path;
     } catch (e) {
-      _showToast('Error selecting file: ' + e, 'error');
+      _showToast('File picker error: ' + e, 'error');
     }
   }
 
+  function _col(id) {
+    const el = document.getElementById(id);
+    return el ? el.value.trim() : '';
+  }
+
   async function _executeImport() {
-    const path = document.getElementById('import-file-path')?.dataset.path;
-    if (!path) return;
+    const path = (document.getElementById('import-file-path')?.value || '').trim();
+    if (!path) {
+      _showToast('Please select a file or paste a file path first.', 'warning');
+      return;
+    }
 
-    const config = {
-      header_row:       parseInt(document.getElementById('imp-header-row')?.value || '1', 10),
-      data_start_row:   parseInt(document.getElementById('imp-data-start')?.value || '2', 10),
-      src_dataset_col:  parseInt(document.getElementById('imp-src-ds-col')?.value || '0', 10),
-      raw_variable_col: parseInt(document.getElementById('imp-raw-var-col')?.value || '0', 10),
-      raw_label_col:    parseInt(document.getElementById('imp-raw-label-col')?.value || '0', 10),
-      sdtm_dataset_col: parseInt(document.getElementById('imp-sdtm-ds-col')?.value || '0', 10),
-      sdtm_variable_col:parseInt(document.getElementById('imp-sdtm-var-col')?.value || '0', 10),
-      sdtm_label_col:   parseInt(document.getElementById('imp-sdtm-label-col')?.value || '0', 10),
-    };
-
-    if (!config.src_dataset_col || !config.raw_variable_col ||
-        !config.sdtm_dataset_col || !config.sdtm_variable_col) {
+    const srcDs  = _col('imp-src-ds-col');
+    const rawVar = _col('imp-raw-var-col');
+    const sdtmDs = _col('imp-sdtm-ds-col');
+    const sdtmV  = _col('imp-sdtm-var-col');
+    if (!srcDs || !rawVar || !sdtmDs || !sdtmV) {
       _showToast('Source Dataset, Raw Variable, SDTM Dataset, and SDTM Variable columns are required.', 'warning');
       return;
     }
+
+    const config = {
+      header_row:        parseInt(document.getElementById('imp-header-row')?.value || '1', 10),
+      data_start_row:    parseInt(document.getElementById('imp-data-start')?.value || '2', 10),
+      src_dataset_col:   srcDs,
+      raw_variable_col:  rawVar,
+      raw_label_col:     _col('imp-raw-label-col'),
+      sdtm_dataset_col:  sdtmDs,
+      sdtm_variable_col: sdtmV,
+      sdtm_label_col:    _col('imp-sdtm-label-col'),
+    };
 
     try {
       const res = await window.pywebview.api.import_excel_mapping(path, config);
@@ -727,13 +749,14 @@ const Settings = (() => {
 
     // Import
     document.getElementById('mdb-import-btn')?.addEventListener('click', _startImport);
+    document.getElementById('mdb-merge-btn')?.addEventListener('click', _startImport);
+    document.getElementById('import-browse-btn')?.addEventListener('click', _browseExcel);
     document.getElementById('import-execute-btn')?.addEventListener('click', _executeImport);
     document.getElementById('import-cancel-btn')?.addEventListener('click', () => {
       document.getElementById('mdb-import-dialog')?.classList.add('hidden');
     });
 
     // Merge dialog
-    document.getElementById('mdb-merge-btn')?.addEventListener('click', _startImport);
     document.getElementById('merge-apply-btn')?.addEventListener('click', _applyMerge);
     document.getElementById('merge-cancel-btn')?.addEventListener('click', () => {
       document.getElementById('mdb-merge-dialog')?.classList.add('hidden');

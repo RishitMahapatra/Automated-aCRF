@@ -995,58 +995,59 @@
       </div>
       <div class="import-body">
         <div class="import-file-row">
-          <span class="import-label">File:</span>
-          <span class="import-file-path mono" id="import-file-path">—</span>
+          <button class="sett-btn sett-btn-sm" id="import-browse-btn">Browse…</button>
+          <input type="text" class="import-input import-path-input" id="import-file-path"
+                 placeholder="Paste full file path or click Browse… (tip: if OneDrive, sync file locally first)">
         </div>
 
         <div class="import-config-grid">
           <div class="import-field">
             <label class="import-field-label">Header row number
-              <span class="import-hint">Which row has column titles (e.g., 2)</span>
+              <span class="import-hint">Row that has column titles (e.g. 2)</span>
             </label>
             <input type="number" class="import-input" id="imp-header-row" value="2" min="1" data-default="2">
           </div>
           <div class="import-field">
             <label class="import-field-label">Data starts from row
-              <span class="import-hint">First row with actual data (e.g., 3)</span>
+              <span class="import-hint">First row with actual data (e.g. 3)</span>
             </label>
             <input type="number" class="import-input" id="imp-data-start" value="3" min="1" data-default="3">
           </div>
           <div class="import-field">
             <label class="import-field-label">Source Dataset column
-              <span class="import-hint">The domain / form code, e.g. AE, CM, DM</span>
+              <span class="import-hint">Use Excel letter or number — e.g. B or 2</span>
             </label>
-            <input type="number" class="import-input" id="imp-src-ds-col" placeholder="e.g. 2" min="1" data-default="">
+            <input type="text" class="import-input" id="imp-src-ds-col" placeholder="B or 2" data-default="">
           </div>
           <div class="import-field">
             <label class="import-field-label">Raw Variable column
-              <span class="import-hint">The CRF field name, e.g. AETERM, CMTRT</span>
+              <span class="import-hint">Use Excel letter or number — e.g. C or 3</span>
             </label>
-            <input type="number" class="import-input" id="imp-raw-var-col" placeholder="e.g. 3" min="1" data-default="">
+            <input type="text" class="import-input" id="imp-raw-var-col" placeholder="C or 3" data-default="">
           </div>
           <div class="import-field">
             <label class="import-field-label">Raw Label column <span class="import-optional">(optional)</span>
-              <span class="import-hint">Description of the CRF field, e.g. "Adverse Event Term"</span>
+              <span class="import-hint">Leave blank to skip</span>
             </label>
-            <input type="number" class="import-input" id="imp-raw-label-col" placeholder="0 = skip" min="0" data-default="0">
+            <input type="text" class="import-input" id="imp-raw-label-col" placeholder="blank = skip" data-default="">
           </div>
           <div class="import-field">
             <label class="import-field-label">SDTM Dataset column
-              <span class="import-hint">Target SDTM domain, e.g. AE, CM</span>
+              <span class="import-hint">Use Excel letter or number — e.g. I or 9</span>
             </label>
-            <input type="number" class="import-input" id="imp-sdtm-ds-col" placeholder="e.g. 9" min="1" data-default="">
+            <input type="text" class="import-input" id="imp-sdtm-ds-col" placeholder="I or 9" data-default="">
           </div>
           <div class="import-field">
             <label class="import-field-label">SDTM Variable column
-              <span class="import-hint">Target SDTM variable, e.g. AETERM, CMTRT</span>
+              <span class="import-hint">Use Excel letter or number — e.g. J or 10</span>
             </label>
-            <input type="number" class="import-input" id="imp-sdtm-var-col" placeholder="e.g. 10" min="1" data-default="">
+            <input type="text" class="import-input" id="imp-sdtm-var-col" placeholder="J or 10" data-default="">
           </div>
           <div class="import-field">
             <label class="import-field-label">SDTM Label column <span class="import-optional">(optional)</span>
-              <span class="import-hint">SDTM variable label, e.g. "Reported Term"</span>
+              <span class="import-hint">Leave blank to skip</span>
             </label>
-            <input type="number" class="import-input" id="imp-sdtm-label-col" placeholder="0 = skip" min="0" data-default="0">
+            <input type="text" class="import-input" id="imp-sdtm-label-col" placeholder="blank = skip" data-default="">
           </div>
         </div>
 

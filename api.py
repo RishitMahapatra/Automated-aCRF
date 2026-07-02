@@ -725,31 +725,52 @@ class Api:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
+    @staticmethod
+    def _col_to_idx(val):
+        """Convert Excel column letter (A, B, AA) or 1-based number string to 0-based index.
+        Returns -1 for empty/zero/invalid so callers can treat it as 'skip'."""
+        if val is None:
+            return -1
+        s = str(val).strip().upper()
+        if not s or s in ("0", ""):
+            return -1
+        if s.isalpha():
+            try:
+                # openpyxl converts A→1, Z→26, AA→27, etc.
+                return openpyxl.utils.column_index_from_string(s) - 1
+            except Exception:
+                return -1
+        try:
+            n = int(s)
+            return n - 1 if n > 0 else -1
+        except (ValueError, TypeError):
+            return -1
+
     def import_excel_mapping(self, file_path, config):
         """
         Parse an Excel file using the user's column configuration.
-        config = {
-          header_row: int,
-          data_start_row: int,
-          src_dataset_col: int (1-based),
-          raw_variable_col: int (1-based),
-          sdtm_dataset_col: int (1-based),
-          sdtm_variable_col: int (1-based),
-          sdtm_label_col: int (1-based) or 0 for none,
-          raw_label_col: int (1-based) or 0 for none,
-        }
-        Returns list of entry dicts.
+        config columns accept Excel letters (A, B, C) or 1-based numbers.
         """
         try:
-            wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+            path = Path(file_path).expanduser()
+            if not path.exists():
+                return {
+                    "ok": False,
+                    "error": (
+                        f"File not found: {path}\n"
+                        "If the file is on OneDrive, make sure it is fully downloaded "
+                        "(right-click → Always keep on this device) before importing."
+                    ),
+                }
+            wb = openpyxl.load_workbook(str(path), read_only=True, data_only=True)
             ws = wb.active
             entries = []
-            src_ds_idx  = int(config.get("src_dataset_col", 0)) - 1
-            raw_var_idx = int(config.get("raw_variable_col", 0)) - 1
-            sdtm_ds_idx = int(config.get("sdtm_dataset_col", 0)) - 1
-            sdtm_v_idx  = int(config.get("sdtm_variable_col", 0)) - 1
-            sdtm_l_idx  = int(config.get("sdtm_label_col", 0)) - 1
-            raw_l_idx   = int(config.get("raw_label_col", 0)) - 1
+            src_ds_idx  = self._col_to_idx(config.get("src_dataset_col"))
+            raw_var_idx = self._col_to_idx(config.get("raw_variable_col"))
+            sdtm_ds_idx = self._col_to_idx(config.get("sdtm_dataset_col"))
+            sdtm_v_idx  = self._col_to_idx(config.get("sdtm_variable_col"))
+            sdtm_l_idx  = self._col_to_idx(config.get("sdtm_label_col"))
+            raw_l_idx   = self._col_to_idx(config.get("raw_label_col"))
             data_start  = int(config.get("data_start_row", 2))
 
             def _cell(row, idx):
