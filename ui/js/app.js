@@ -752,6 +752,10 @@ function _closeHelpMenu() {
 
 function _bindSettingsButton() {
   document.getElementById('btn-settings')?.addEventListener('click', () => {
+    if (typeof Sidebar !== 'undefined' && Sidebar.isPipelineRunning && Sidebar.isPipelineRunning()) {
+      showToast('Mapping Manager is unavailable while the pipeline is running.', 'warning');
+      return;
+    }
     if (typeof Settings !== 'undefined' && Settings.show) {
       Settings.init();
       Settings.show();
