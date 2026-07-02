@@ -378,6 +378,7 @@
         <span class="dirty-dot hidden" id="dirty-dot" title="Unsaved changes">●</span>
       </div>
       <div class="nav-right">
+        <span class="proto-badge" title="Prototype build — not for production use. Expect rough edges and untested scenarios.">⚠ PROTOTYPE</span>
         <button class="nav-mapdb-btn" id="btn-settings" title="Mapping Database">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
           Mapping DB
@@ -1110,6 +1111,46 @@
       <div class="comment-dialog-actions">
         <button class="btn btn-primary" id="add-record-save">Add</button>
         <button class="btn btn-secondary" id="add-record-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Import Choice Dialog ────────────────────────────────── -->
+  <div id="mdb-import-choice-dialog" class="comment-dialog-overlay hidden">
+    <div class="comment-dialog" style="max-width:440px;">
+      <div class="comment-dialog-header">
+        <span class="comment-dialog-title">Import Options</span>
+        <button class="comment-dialog-close" id="import-choice-close">&times;</button>
+      </div>
+      <div style="padding:16px 20px;">
+        <p id="import-choice-msg" style="color:var(--body);font-size:13px;line-height:1.65;white-space:pre-wrap;margin:0 0 20px;"></p>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <button class="btn btn-primary" id="import-choice-add-new" style="justify-content:center;height:38px;">Add New Only</button>
+          <button class="btn btn-danger" id="import-choice-replace" style="justify-content:center;height:38px;">Replace All…</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Typed Confirm Dialog ──────────────────────────────── -->
+  <div id="mdb-typed-confirm-dialog" class="comment-dialog-overlay hidden">
+    <div class="comment-dialog" style="max-width:420px;">
+      <div class="comment-dialog-header">
+        <span class="comment-dialog-title" id="mdb-typed-title">Confirm Action</span>
+        <button class="comment-dialog-close" id="mdb-typed-close">&times;</button>
+      </div>
+      <div style="padding:16px 20px 12px;">
+        <p id="mdb-typed-message" style="color:var(--body);font-size:13px;line-height:1.6;margin:0 0 16px;"></p>
+        <p style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin:0 0 6px;">Type the phrase below to unlock:</p>
+        <div class="mdb-typed-phrase" id="mdb-typed-phrase">BuG HuNTeR</div>
+        <input type="text" class="import-input" id="mdb-typed-input"
+               placeholder="Type the phrase above…"
+               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+               style="width:100%;margin-top:8px;box-sizing:border-box;">
+      </div>
+      <div class="comment-dialog-actions">
+        <button class="btn btn-danger" id="mdb-typed-confirm-btn" disabled>Confirm</button>
+        <button class="btn btn-secondary" id="mdb-typed-cancel-btn">Cancel</button>
       </div>
     </div>
   </div>

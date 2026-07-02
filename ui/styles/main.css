@@ -4793,6 +4793,26 @@ body.theme-light .nav-mapdb-btn {
   box-shadow: 0 0 12px rgba(101, 43, 218, 0.16);
 }
 
+/* ── btn-danger (destructive / irreversible actions) ─────── */
+
+.btn-danger {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 0 16px rgba(220, 38, 38, 0.28);
+}
+.btn-danger:hover:not(:disabled) {
+  background: #b91c1c;
+  border-color: #b91c1c;
+  box-shadow: 0 0 24px rgba(220, 38, 38, 0.44);
+}
+.btn-danger:disabled {
+  opacity: 0.38;
+  cursor: default;
+  box-shadow: none;
+}
+
 /* ── btn-secondary (cancel / secondary action) ────────────── */
 
 .btn-secondary {
@@ -4867,6 +4887,32 @@ body.theme-light .nav-mapdb-btn {
   cursor: pointer;
   text-decoration: underline;
   font-size: 12px;
+}
+
+.proto-badge {
+  font: 700 9px var(--font-ui);
+  letter-spacing: 0.07em;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.30);
+  border-radius: 3px;
+  padding: 2px 6px;
+  text-transform: uppercase;
+  margin-right: 8px;
+  cursor: default;
+  user-select: none;
+}
+
+.mdb-typed-phrase {
+  font: 700 15px var(--font-mono);
+  color: var(--violet);
+  background: rgba(142, 84, 255, 0.10);
+  border: 1px solid rgba(142, 84, 255, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  letter-spacing: 0.04em;
+  text-align: center;
+  margin-bottom: 4px;
 }
 
 /* ── Toolbar ──────────────────────────────────────────────── */

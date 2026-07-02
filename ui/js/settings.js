@@ -14,6 +14,18 @@ const Settings = (() => {
   let _initialized = false;
   const PAGE_SIZE  = 50;
 
+  // Typed confirm state (shared across all calls, no listener accumulation)
+  let _typedConfirmCallback = null;
+  let _typedInputHandler    = null;
+
+  // Import choice callbacks (wired once in init)
+  let _importChoiceCallbacks = { addNew: null, replaceAll: null };
+
+  const TYPED_PHRASES = [
+    'WiPe iT', 'BuG HuNTeR', 'FLuSh AlL', 'TaBuLa RaSa',
+    'CLeAR AlL', 'ZeRo OuT', 'FrEsH StArT', 'Go BrR', 'YeS DeLeTE',
+  ];
+
   // Per-column filter values (null = no filter on that column)
   let _colFilters = {
     src_dataset:   null,
@@ -469,57 +481,107 @@ const Settings = (() => {
     });
     const skipped = incoming.length - newOnly.length;
 
-    _showConfirm(
-      'Entries Already Exist',
-      `You already have ${_entries.length} entries.\n\n` +
-      `Replace All — wipe the current table and load ${incoming.length} entries from the file.\n\n` +
-      `Add New Only — keep existing entries and append ${newOnly.length} new ones` +
-      (skipped > 0 ? ` (${skipped} duplicates skipped)` : '') + '.',
-      () => {
-        // Replace All
-        _entries = incoming;
-        _dirty = true;
-        _currentPage = 1;
-        _showAll = false;
-        _renderTable();
-        _updateStats();
-        _showToast(`Replaced with ${incoming.length} entries.`, 'success');
-      },
-      () => {
-        // Add New Only
-        newOnly.forEach(e => { e.id = _uid(); e.source = 'import'; _entries.push(e); });
-        _dirty = true;
-        _renderTable();
-        _updateStats();
-        _showToast(`Added ${newOnly.length} new entries${skipped > 0 ? ` (${skipped} duplicates skipped)` : ''}.`, 'success');
-      },
-      'Replace All',
-      'Add New Only'
-    );
+    _importChoiceCallbacks.addNew = () => {
+      newOnly.forEach(e => { e.id = _uid(); e.source = 'import'; _entries.push(e); });
+      _dirty = true;
+      _renderTable();
+      _updateStats();
+      _showToast(`Added ${newOnly.length} new entries${skipped > 0 ? ` (${skipped} skipped)` : ''}.`, 'success');
+    };
+
+    _importChoiceCallbacks.replaceAll = () => {
+      _showTypedConfirm(
+        'Replace All — Are You Sure?',
+        `This will permanently delete all ${_entries.length} current entries and replace them with the ${incoming.length} entries from the imported file. This cannot be undone.`,
+        'Replace All',
+        () => {
+          _entries = incoming;
+          _dirty = true;
+          _currentPage = 1;
+          _showAll = false;
+          _renderTable();
+          _updateStats();
+          _showToast(`Replaced with ${incoming.length} entries.`, 'success');
+        }
+      );
+    };
+
+    const msgEl = document.getElementById('import-choice-msg');
+    if (msgEl) {
+      msgEl.textContent =
+        `You already have ${_entries.length} entries.\n\n` +
+        `Add New Only — keep everything, append ${newOnly.length} new records` +
+        (skipped > 0 ? ` (${skipped} duplicates skipped)` : '') + '.\n\n' +
+        `Replace All — permanently wipe your ${_entries.length} entries and load all ${incoming.length} from the file.`;
+    }
+    document.getElementById('mdb-import-choice-dialog')?.classList.remove('hidden');
+  }
+
+  // ── Typed Confirmation ─────────────────────────────────────
+
+  function _showTypedConfirm(title, message, confirmLabel, onConfirm) {
+    _typedConfirmCallback = onConfirm;
+
+    const phrase = TYPED_PHRASES[Math.floor(Math.random() * TYPED_PHRASES.length)];
+
+    document.getElementById('mdb-typed-title').textContent             = title;
+    document.getElementById('mdb-typed-message').textContent           = message;
+    document.getElementById('mdb-typed-phrase').textContent            = phrase;
+    document.getElementById('mdb-typed-confirm-btn').textContent       = confirmLabel || 'Confirm';
+    document.getElementById('mdb-typed-confirm-btn').disabled          = true;
+
+    const input = document.getElementById('mdb-typed-input');
+    input.value = '';
+
+    // Remove stale input handler before adding new one
+    if (_typedInputHandler) {
+      input.removeEventListener('input', _typedInputHandler);
+    }
+    _typedInputHandler = () => {
+      const btn = document.getElementById('mdb-typed-confirm-btn');
+      if (btn) btn.disabled = (input.value !== phrase);
+    };
+    input.addEventListener('input', _typedInputHandler);
+
+    document.getElementById('mdb-typed-confirm-dialog').classList.remove('hidden');
+    setTimeout(() => input.focus(), 60);
   }
 
   // ── New From Scratch ───────────────────────────────────────
 
+  function _doClearTable() {
+    _entries = []; _dirty = false; _renderTable(); _updateStats();
+    _showToast('Table cleared. Start fresh.', 'success');
+  }
+
   function _newFromScratch() {
-    if (_entries.length === 0) {
-      _entries = []; _dirty = false; _renderTable(); _updateStats();
-      return;
-    }
+    if (_entries.length === 0) { _doClearTable(); return; }
+
     _showConfirm(
       'New Table from Scratch',
-      'This will clear all current entries. Do you want to save the current table first?',
+      `You have ${_entries.length} entries. Save a backup first?`,
       () => {
+        // Save First, then typed-confirm the clear
         _saveMtblThen(() => {
-          _entries = []; _dirty = false; _renderTable(); _updateStats();
-          _showToast('Table cleared. Start fresh.', 'success');
+          _showTypedConfirm(
+            'Clear Table',
+            `Backup saved. Type the phrase to confirm clearing all ${_entries.length} entries.`,
+            'Clear All',
+            _doClearTable
+          );
         });
       },
       () => {
-        _entries = []; _dirty = false; _renderTable(); _updateStats();
-        _showToast('Table cleared. Start fresh.', 'success');
+        // No save — straight to typed confirm
+        _showTypedConfirm(
+          'Clear Without Saving',
+          `Your ${_entries.length} entries will be permanently deleted. No backup will be made.`,
+          'Clear All',
+          _doClearTable
+        );
       },
       'Save First',
-      'Discard'
+      'Clear Without Saving'
     );
   }
 
@@ -690,6 +752,36 @@ const Settings = (() => {
 
     // New from scratch
     document.getElementById('mdb-new-btn')?.addEventListener('click', _newFromScratch);
+
+    // Import choice dialog
+    document.getElementById('import-choice-close')?.addEventListener('click', () => {
+      document.getElementById('mdb-import-choice-dialog')?.classList.add('hidden');
+    });
+    document.getElementById('import-choice-add-new')?.addEventListener('click', () => {
+      document.getElementById('mdb-import-choice-dialog').classList.add('hidden');
+      if (_importChoiceCallbacks.addNew) _importChoiceCallbacks.addNew();
+    });
+    document.getElementById('import-choice-replace')?.addEventListener('click', () => {
+      document.getElementById('mdb-import-choice-dialog').classList.add('hidden');
+      if (_importChoiceCallbacks.replaceAll) _importChoiceCallbacks.replaceAll();
+    });
+
+    // Typed confirm dialog (wired once)
+    document.getElementById('mdb-typed-close')?.addEventListener('click', () => {
+      document.getElementById('mdb-typed-confirm-dialog')?.classList.add('hidden');
+    });
+    document.getElementById('mdb-typed-cancel-btn')?.addEventListener('click', () => {
+      document.getElementById('mdb-typed-confirm-dialog')?.classList.add('hidden');
+    });
+    document.getElementById('mdb-typed-confirm-btn')?.addEventListener('click', () => {
+      const input  = document.getElementById('mdb-typed-input');
+      const phrase = document.getElementById('mdb-typed-phrase')?.textContent;
+      if (!input || input.value !== phrase) return;
+      document.getElementById('mdb-typed-confirm-dialog').classList.add('hidden');
+      const cb = _typedConfirmCallback;
+      _typedConfirmCallback = null;
+      if (cb) cb();
+    });
 
     // Export
     document.getElementById('mdb-export-excel')?.addEventListener('click', _exportExcel);
