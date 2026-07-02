@@ -1170,11 +1170,23 @@ async function _handleZoomChange(direction) {
     document.getElementById('comment-viewer-close')?.addEventListener('click', _closeCommentViewer);
   }
 
-  function _openCommentViewer(rec) {
+  async function _openCommentViewer(rec) {
     const viewer = document.getElementById('comment-viewer');
     const body = document.getElementById('comment-viewer-body');
+    const titleEl = viewer?.querySelector('.comment-viewer-title');
     if (!viewer || !body) return;
-    body.textContent = rec.comment || '';
+    const label = rec.sdtm_variable || rec.best_sdtm_variable || rec.raw_variable || 'Annotation';
+    if (titleEl) titleEl.textContent = `Comment — ${label}`;
+
+    let commentText = rec.comment || '';
+    if (!rec.is_dataset_review && rec.annotation_id) {
+      try {
+        const r = await window.pywebview.api.get_annotation(String(rec.annotation_id));
+        if (r && r.ok && r.record) commentText = r.record.comment || '';
+      } catch (_) { /* use cached */ }
+    }
+
+    body.textContent = commentText;
     viewer.classList.remove('hidden');
     viewer.classList.add('comment-viewer-full');
   }

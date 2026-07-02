@@ -106,7 +106,7 @@ def update_comment(session_id: str, annotation_id: str, comment: str) -> dict:
     if not annotation_id:
         return {"ok": False, "error": "Missing annotation_id"}
 
-    records = _load_records(session_id)
+    records = get_annotations(session_id)
 
     found = False
     for rec in records:
